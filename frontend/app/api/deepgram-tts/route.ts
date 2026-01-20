@@ -20,8 +20,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Call Deepgram Aura TTS API
-    const response = await fetch('https://api.deepgram.com/v1/speak?model=aura-asteria-en', {
+    // Call Deepgram Aura TTS API (male voice)
+    const response = await fetch('https://api.deepgram.com/v1/speak?model=aura-orion-en', {
       method: 'POST',
       headers: {
         'Authorization': `Token ${apiKey}`,

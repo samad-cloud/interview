@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Mic, MicOff, Camera, CameraOff, PhoneOff, Loader2, Volume2 } from 'lucide-react';
+import { Mic, MicOff, Camera, CameraOff, PhoneOff, Loader2, Volume2, Square } from 'lucide-react';
 
 interface VoiceAvatarProps {
   candidateId: string;
@@ -411,6 +411,23 @@ export default function VoiceAvatar({
     }
   };
 
+  // Stop the bot mid-sentence
+  const stopSpeaking = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current = null;
+    }
+    // Also stop browser TTS if it's playing
+    speechSynthesis.cancel();
+    setIsSpeaking(false);
+    setSubtitle('');
+    // Resume listening after stopping
+    if (isMicOn) {
+      startDeepgramListening();
+    }
+  };
+
   // Start the interview
   const startInterview = async () => {
     setCallStatus('connecting');
@@ -724,6 +741,17 @@ Round: ${round}
         >
           {isCameraOn ? <Camera className="w-6 h-6" /> : <CameraOff className="w-6 h-6" />}
         </button>
+
+        {/* Stop Bot (interrupt) */}
+        {isSpeaking && (
+          <button
+            onClick={stopSpeaking}
+            className="w-14 h-14 rounded-full bg-orange-500 hover:bg-orange-600 text-white flex items-center justify-center transition-all animate-pulse"
+            title="Stop Bot"
+          >
+            <Square className="w-6 h-6" />
+          </button>
+        )}
 
         {/* End Call */}
         <button
