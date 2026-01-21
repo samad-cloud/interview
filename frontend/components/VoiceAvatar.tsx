@@ -269,6 +269,8 @@ export default function VoiceAvatar({
 
   // Start Deepgram listening
   const startDeepgramListening = useCallback(async () => {
+    if (isSpeaking) return; // Don't start if still speaking
+    
     try {
       // Get Deepgram API key from our backend
       const response = await fetch('/api/deepgram');
