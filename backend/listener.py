@@ -71,10 +71,11 @@ Please use the link below to complete your interview within 48 hours:
 
 {interview_link}
 
-(Note: The interview takes about 10-15 minutes. Please find a quiet space with a webcam and microphone.)
+(Note: The interview takes about 20-30 minutes. Please find a quiet space with a webcam and microphone.)
 
 Best,
 {company_name} Recruiting
+Tejas Kambli, HR Assistant
 """
 
 REJECTION_EMAIL = """Hi {full_name},
@@ -86,6 +87,7 @@ We will keep your resume on file for future opportunities.
 Best of luck in your job search!
 
 {company_name} Recruiting
+Tejas Kambli, HR Assistant
 """
 
 

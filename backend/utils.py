@@ -142,3 +142,11 @@ def get_gemini_client():
     if not GEMINI_API_KEY:
         raise ValueError("Missing GEMINI_API_KEY environment variable")
     return genai.Client(api_key=GEMINI_API_KEY)
+
+
+if __name__ == "__main__":
+    print("Generating Gmail token...")
+    print("A browser window will open - sign in with your Gmail account.")
+    service = get_gmail_service()
+    print("Success! token.json created in project root.")
+    print("Copy its contents to GOOGLE_TOKEN_JSON in Railway.")
