@@ -550,6 +550,16 @@ Round: ${round}
 
   // ============ RENDER ============
 
+  // Extract job title (first part of job description, before location/details)
+  const extractJobTitle = (jd: string) => {
+    // Take first line or first few words before common delimiters
+    const firstLine = jd.split('\n')[0];
+    const beforeLocation = firstLine.split(/(?:London|Dubai|Remote|UK|US|Europe|,)/i)[0];
+    return beforeLocation.trim() || firstLine.substring(0, 50);
+  };
+
+  const jobTitle = extractJobTitle(jobDescription);
+
   // Idle State - Start Screen
   if (callStatus === 'idle') {
     return (
@@ -558,15 +568,28 @@ Round: ${round}
           <div className="w-32 h-32 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full mx-auto mb-8 flex items-center justify-center">
             <Volume2 className="w-16 h-16 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-white mb-3">
+          <h1 className="text-3xl font-bold text-white mb-4">
             Voice Interview
           </h1>
-          <p className="text-slate-400 mb-2">
-            Hello, <span className="text-cyan-400 font-medium">{candidateName}</span>!
+          <p className="text-xl text-white mb-2">
+            Welcome, <span className="text-cyan-400 font-semibold">{candidateName}</span>! 👋
           </p>
-          <p className="text-slate-500 text-sm mb-8">
-            Position: {jobDescription}
+          <p className="text-slate-400 mb-6">
+            You&apos;re interviewing for <span className="text-white font-medium">{jobTitle}</span> at Printerpix.
           </p>
+          <p className="text-slate-500 text-sm mb-6">
+            This will be a quick 20-30 minute conversation with our AI interviewer.<br />
+            Just relax and be yourself.
+          </p>
+          
+          <div className="bg-slate-900/50 rounded-xl p-4 mb-8 text-left inline-block">
+            <p className="text-slate-400 text-sm font-medium mb-2">Tips:</p>
+            <ul className="text-slate-500 text-sm space-y-1">
+              <li>• Find a quiet spot</li>
+              <li>• Speak clearly</li>
+              <li>• There are no wrong questions!</li>
+            </ul>
+          </div>
           
           {error && (
             <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-6">
@@ -574,16 +597,14 @@ Round: ${round}
             </div>
           )}
 
-          <button
-            onClick={startInterview}
-            className="px-8 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white text-lg font-semibold rounded-xl transition-all transform hover:scale-105 shadow-lg shadow-cyan-500/25"
-          >
-            Start Interview
-          </button>
-          
-          <p className="text-slate-600 text-xs mt-6">
-            Make sure your microphone is working before starting
-          </p>
+          <div>
+            <button
+              onClick={startInterview}
+              className="px-8 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white text-lg font-semibold rounded-xl transition-all transform hover:scale-105 shadow-lg shadow-cyan-500/25"
+            >
+              Start Interview
+            </button>
+          </div>
         </div>
       </div>
     );

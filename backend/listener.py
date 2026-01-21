@@ -39,7 +39,7 @@ except ImportError:
 
 # --- Configuration ---
 COMPANY_NAME = "Printerpix"
-INTERVIEW_BASE_URL = "https://intervieww-fw4n.vercel.app/interview"
+INTERVIEW_BASE_URL = "https://work-one-green.vercel.app/interview"
 LOOP_INTERVAL_SECONDS = 60  # How often to run the pipeline
 
 VISA_CHECK_PROMPT = """The candidate was asked about their visa/work authorization status.
