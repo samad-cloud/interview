@@ -336,15 +336,10 @@ def run_pipeline_cycle():
     except Exception as e:
         log("ERROR", f"Step 3 (Grader) failed: {e}")
     
-    # Step 4: Send outreach (DISABLED - uncomment to enable)
-    # try:
-    #     dubai, invites = run_mailer()
-    #     log("INFO", f"Step 4 (Mailer): {dubai} questionnaires, {invites} invites sent")
-    # except Exception as e:
-    #     log("ERROR", f"Mailer failed: {e}")
-    log("INFO", "Step 4 (Mailer): DISABLED - no emails sent")
+    # Step 4: Send outreach
     try:
-        pass  # Placeholder to keep try block valid
+        dubai, invites = run_mailer()
+        log("INFO", f"Step 4 (Mailer): {dubai} questionnaires, {invites} invites sent")
     except Exception as e:
         log("ERROR", f"Step 4 (Mailer) failed: {e}")
     
