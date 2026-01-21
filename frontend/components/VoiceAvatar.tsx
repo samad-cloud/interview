@@ -753,6 +753,22 @@ Round: ${round}
           {isMicOn ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
         </button>
 
+        {/* Done Speaking Button - shows when listening */}
+        {isListening && transcript && (
+          <button
+            onClick={() => {
+              if (autoSendTimeoutRef.current) {
+                clearTimeout(autoSendTimeoutRef.current);
+              }
+              sendToAI(transcript);
+            }}
+            className="px-6 h-14 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/25"
+            title="Send your response"
+          >
+            Done Speaking
+          </button>
+        )}
+
         {/* Camera Toggle */}
         <button
           onClick={toggleCamera}
