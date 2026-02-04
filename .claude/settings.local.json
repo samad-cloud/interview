@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"C:\\\\Users\\\\Admin3k\\\\Documents\\\\work\" log --oneline -20)",
+      "Bash(npm run build:*)",
+      "Bash(npx next build)",
+      "Bash(npx tsc:*)"
+    ]
+  }
+}

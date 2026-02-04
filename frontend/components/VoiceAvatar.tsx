@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Mic, MicOff, Camera, CameraOff, PhoneOff, Loader2, Volume2, Square } from 'lucide-react';
+import { Mic, MicOff, Camera, CameraOff, PhoneOff, Loader2, Volume2, Square, AlertCircle } from 'lucide-react';
+import { supabase } from '@/lib/supabaseClient';
 
 interface VoiceAvatarProps {
   candidateId: string;
@@ -36,8 +37,14 @@ export default function VoiceAvatar({
 
   // Media state
   const [isMicOn, setIsMicOn] = useState(false);
-  const [isCameraOn, setIsCameraOn] = useState(true);
+  const [isCameraOn, setIsCameraOn] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+
+  // Media check state
+  const [mediaCheckDone, setMediaCheckDone] = useState(false);
+  const [micLevel, setMicLevel] = useState(0);
+  const [cameraError, setCameraError] = useState(false);
+  const [micError, setMicError] = useState(false);
 
   // Deepgram STT state
   const [isListening, setIsListening] = useState(false);
@@ -48,15 +55,36 @@ export default function VoiceAvatar({
 
   // Refs
   const userVideoRef = useRef<HTMLVideoElement>(null);
+  const checkVideoRef = useRef<HTMLVideoElement>(null);
   const userStreamRef = useRef<MediaStream | null>(null);
+  const checkAudioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animFrameRef = useRef<number | null>(null);
   const audioStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const deepgramSocketRef = useRef<WebSocket | null>(null);
-  const autoSendTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const finalTranscriptRef = useRef('');
   const audioRef = useRef<HTMLAudioElement | null>(null);
   
   // Conversation history for transcript
   const conversationHistoryRef = useRef<ConversationEntry[]>([]);
+
+  // Refs to break stale closures in async callbacks
+  const isMicOnRef = useRef(isMicOn);
+  const isSpeakingRef = useRef(isSpeaking);
+  const sendToAIRef = useRef<((text: string) => Promise<void>) | null>(null);
+  const startDeepgramListeningRef = useRef<(() => Promise<void>) | null>(null);
+
+  // Session recording refs
+  const recAudioCtxRef = useRef<AudioContext | null>(null);
+  const recDestinationRef = useRef<MediaStreamAudioDestinationNode | null>(null);
+  const recMicSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const sessionRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const isRecordingRef = useRef(false);
+
+  // Upload progress state
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   // Round 1 (Wayne) - Personality/Drive assessment
   const round1Prompt = `=== YOUR IDENTITY ===
@@ -137,9 +165,102 @@ export default function VoiceAvatar({
     console.log(`[Transcript] ${entry.speaker}: ${entry.text}`);
   }, [candidateName, interviewerName]);
 
+  // Initialize session recording (video + mixed audio)
+  const initSessionRecording = useCallback(() => {
+    try {
+      // Determine best supported MIME type
+      let mimeType = '';
+      if (typeof MediaRecorder === 'undefined') {
+        console.warn('[Recording] MediaRecorder not supported');
+        return;
+      }
+      if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) {
+        mimeType = 'video/webm;codecs=vp8,opus';
+      } else if (MediaRecorder.isTypeSupported('video/webm')) {
+        mimeType = 'video/webm';
+      } else if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+        mimeType = 'audio/webm;codecs=opus';
+      } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+        mimeType = 'audio/webm';
+      } else {
+        console.warn('[Recording] No supported MIME type found');
+        return;
+      }
+
+      // Create audio context for mixing mic + TTS audio
+      const audioCtx = new AudioContext();
+      recAudioCtxRef.current = audioCtx;
+      const destination = audioCtx.createMediaStreamDestination();
+      recDestinationRef.current = destination;
+
+      // Connect candidate mic audio into the mix
+      if (userStreamRef.current) {
+        const audioTracks = userStreamRef.current.getAudioTracks();
+        if (audioTracks.length > 0) {
+          const micOnlyStream = new MediaStream(audioTracks);
+          const micSource = audioCtx.createMediaStreamSource(micOnlyStream);
+          micSource.connect(destination);
+          recMicSourceRef.current = micSource;
+        }
+      }
+
+      // Build combined stream: video track (if available) + mixed audio
+      const combinedTracks: MediaStreamTrack[] = [];
+
+      // Add video track if camera is available
+      const videoTrack = userStreamRef.current?.getVideoTracks()[0];
+      if (videoTrack && !cameraError) {
+        combinedTracks.push(videoTrack);
+      }
+
+      // Add mixed audio track
+      const mixedAudioTrack = destination.stream.getAudioTracks()[0];
+      if (mixedAudioTrack) {
+        combinedTracks.push(mixedAudioTrack);
+      }
+
+      if (combinedTracks.length === 0) {
+        console.warn('[Recording] No tracks available for recording');
+        return;
+      }
+
+      const combinedStream = new MediaStream(combinedTracks);
+
+      // If audio-only, switch to audio MIME type
+      const hasVideo = combinedTracks.some(t => t.kind === 'video');
+      if (!hasVideo && mimeType.startsWith('video/')) {
+        mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+          ? 'audio/webm;codecs=opus'
+          : 'audio/webm';
+      }
+
+      // Create MediaRecorder with conservative bitrates (~50MB for 30 min)
+      const recorderOptions: MediaRecorderOptions = { mimeType };
+      if (hasVideo) {
+        recorderOptions.videoBitsPerSecond = 200_000;
+      }
+      recorderOptions.audioBitsPerSecond = 128_000;
+
+      const recorder = new MediaRecorder(combinedStream, recorderOptions);
+      recordingChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          recordingChunksRef.current.push(e.data);
+        }
+      };
+
+      sessionRecorderRef.current = recorder;
+      console.log(`[Recording] Initialized: ${mimeType}, hasVideo=${hasVideo}`);
+    } catch (err) {
+      console.error('[Recording] Init failed, interview proceeds without recording:', err);
+    }
+  }, [cameraError]);
+
   // Speak text using Deepgram TTS
   const speakText = useCallback(async (text: string) => {
     try {
+      isSpeakingRef.current = true;
       setIsSpeaking(true);
       setSubtitle(text);
 
@@ -166,22 +287,40 @@ export default function VoiceAvatar({
       // Create and play audio
       const audio = new Audio(audioUrl);
       audioRef.current = audio;
-      
+
+      // Route TTS audio into recording mixer (mic + TTS → single track)
+      try {
+        if (recAudioCtxRef.current && recDestinationRef.current) {
+          if (recAudioCtxRef.current.state === 'suspended') {
+            await recAudioCtxRef.current.resume();
+          }
+          // crossOrigin not needed since audioUrl is a blob URL
+          const ttsSource = recAudioCtxRef.current.createMediaElementSource(audio);
+          ttsSource.connect(recDestinationRef.current); // → recording
+          ttsSource.connect(recAudioCtxRef.current.destination); // → speakers
+        }
+      } catch (routeErr) {
+        // Audio still plays normally via default output, just won't be in recording
+        console.warn('[Recording] TTS audio routing failed:', routeErr);
+      }
+
       audio.onended = () => {
+        isSpeakingRef.current = false;
         setIsSpeaking(false);
         URL.revokeObjectURL(audioUrl);
         // Resume listening after speaking
-        if (isMicOn) {
-          startDeepgramListening();
+        if (isMicOnRef.current) {
+          startDeepgramListeningRef.current?.();
         }
       };
 
       audio.onerror = () => {
         console.error('Audio playback error');
+        isSpeakingRef.current = false;
         setIsSpeaking(false);
         URL.revokeObjectURL(audioUrl);
-        if (isMicOn) {
-          startDeepgramListening();
+        if (isMicOnRef.current) {
+          startDeepgramListeningRef.current?.();
         }
       };
 
@@ -192,22 +331,20 @@ export default function VoiceAvatar({
       // Fallback: use browser TTS
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.onend = () => {
+        isSpeakingRef.current = false;
         setIsSpeaking(false);
-        if (isMicOn) {
-          startDeepgramListening();
+        if (isMicOnRef.current) {
+          startDeepgramListeningRef.current?.();
         }
       };
       speechSynthesis.speak(utterance);
     }
-  }, [isMicOn]);
+  }, []);
 
   // Stop Deepgram listening - defined before startDeepgramListening for reference
   const stopDeepgramListening = useCallback(() => {
-    // Clear auto-send timeout
-    if (autoSendTimeoutRef.current) {
-      clearTimeout(autoSendTimeoutRef.current);
-      autoSendTimeoutRef.current = null;
-    }
+    // Reset accumulated transcript
+    finalTranscriptRef.current = '';
 
     // Stop MediaRecorder
     if (mediaRecorderRef.current) {
@@ -238,6 +375,7 @@ export default function VoiceAvatar({
     try {
       console.log('Candidate said:', text);
       addToConversation('candidate', text);
+      finalTranscriptRef.current = '';
       setTranscript('');
       
       // Stop listening while processing
@@ -272,7 +410,7 @@ export default function VoiceAvatar({
 
   // Start Deepgram listening
   const startDeepgramListening = useCallback(async () => {
-    if (isSpeaking) return; // Don't start if still speaking
+    if (isSpeakingRef.current) return; // Don't start if still speaking
     
     try {
       // Get Deepgram API key from our backend
@@ -326,24 +464,24 @@ export default function VoiceAvatar({
       socket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          
+
           if (data.channel?.alternatives?.[0]?.transcript) {
             const newTranscript = data.channel.alternatives[0].transcript;
-            
+
             if (newTranscript.trim()) {
-              setTranscript(newTranscript);
-
-              // If this is a final result, set up auto-send
-              if (data.is_final && newTranscript.trim().length > 0) {
-                // Clear any existing timeout
-                if (autoSendTimeoutRef.current) {
-                  clearTimeout(autoSendTimeoutRef.current);
-                }
-
-                // Auto-send after 1.5 seconds of silence
-                autoSendTimeoutRef.current = setTimeout(() => {
-                  sendToAI(newTranscript);
-                }, 1500);
+              if (data.is_final) {
+                // Append finalized segment to accumulated transcript
+                finalTranscriptRef.current = finalTranscriptRef.current
+                  ? finalTranscriptRef.current + ' ' + newTranscript
+                  : newTranscript;
+                setTranscript(finalTranscriptRef.current);
+              } else {
+                // Show accumulated + current interim
+                setTranscript(
+                  finalTranscriptRef.current
+                    ? finalTranscriptRef.current + ' ' + newTranscript
+                    : newTranscript
+                );
               }
             }
           }
@@ -367,7 +505,27 @@ export default function VoiceAvatar({
       console.error('Failed to start Deepgram:', err);
       setError('Could not access microphone');
     }
-  }, [sendToAI, isSpeaking]);
+  }, []);
+
+  // Attach camera stream to video element once it mounts
+  useEffect(() => {
+    if (isCameraOn && userVideoRef.current && userStreamRef.current) {
+      userVideoRef.current.srcObject = userStreamRef.current;
+    }
+  }, [isCameraOn, callStatus]);
+
+  // Attach camera stream to the check preview video element after render
+  useEffect(() => {
+    if (mediaCheckDone && !cameraError && checkVideoRef.current && userStreamRef.current) {
+      checkVideoRef.current.srcObject = userStreamRef.current;
+    }
+  }, [mediaCheckDone, cameraError]);
+
+  // Keep refs in sync so async callbacks always read current values
+  useEffect(() => { isMicOnRef.current = isMicOn; }, [isMicOn]);
+  useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
+  useEffect(() => { sendToAIRef.current = sendToAI; }, [sendToAI]);
+  useEffect(() => { startDeepgramListeningRef.current = startDeepgramListening; }, [startDeepgramListening]);
 
   // Initialize user camera
   const initUserCamera = async () => {
@@ -377,16 +535,93 @@ export default function VoiceAvatar({
         audio: false,
       });
       userStreamRef.current = stream;
-      
-      if (userVideoRef.current) {
-        userVideoRef.current.srcObject = stream;
-      }
-      
       setIsCameraOn(true);
     } catch (err) {
       console.error('Failed to access camera:', err);
+      setIsCameraOn(false);
       // Camera is optional for voice interview
     }
+  };
+
+  // Stop media check (analyser loop + audio context)
+  const stopMediaCheck = useCallback(() => {
+    if (animFrameRef.current !== null) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+    if (checkAudioContextRef.current) {
+      checkAudioContextRef.current.close().catch(() => {});
+      checkAudioContextRef.current = null;
+    }
+    analyserRef.current = null;
+  }, []);
+
+  // Pre-interview camera + mic check
+  const startMediaCheck = async () => {
+    setCameraError(false);
+    setMicError(false);
+    setError(null);
+
+    let stream: MediaStream | null = null;
+
+    // Try both video + audio first
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    } catch {
+      // If both fail, try audio-only
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+        setCameraError(true);
+      } catch {
+        // Audio also failed
+        setMicError(true);
+        setCameraError(true);
+        setMediaCheckDone(true);
+        return;
+      }
+    }
+
+    // Camera setup
+    const videoTracks = stream.getVideoTracks();
+    if (videoTracks.length > 0) {
+      userStreamRef.current = stream;
+      setIsCameraOn(true);
+    } else {
+      setCameraError(true);
+    }
+
+    // Mic setup — analyser for level metering
+    const audioTracks = stream.getAudioTracks();
+    if (audioTracks.length > 0) {
+      try {
+        const audioCtx = new AudioContext();
+        checkAudioContextRef.current = audioCtx;
+        const source = audioCtx.createMediaStreamSource(stream);
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        analyserRef.current = analyser;
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+        const tick = () => {
+          analyser.getByteFrequencyData(dataArray);
+          const sum = dataArray.reduce((a, b) => a + b, 0);
+          const avg = sum / dataArray.length;
+          // Map 0-128 → 0-100
+          setMicLevel(Math.min(100, Math.round((avg / 128) * 100)));
+          animFrameRef.current = requestAnimationFrame(tick);
+        };
+        animFrameRef.current = requestAnimationFrame(tick);
+      } catch (err) {
+        console.error('AudioContext error:', err);
+        setMicError(true);
+      }
+    } else {
+      setMicError(true);
+    }
+
+    setMediaCheckDone(true);
   };
 
   // Toggle camera
@@ -434,8 +669,21 @@ export default function VoiceAvatar({
     setError(null);
 
     try {
-      // Initialize user camera (optional)
-      await initUserCamera();
+      // Stop the media check analyser loop (camera stream stays alive for reuse)
+      stopMediaCheck();
+
+      // If media check wasn't done (shouldn't happen), init camera as fallback
+      if (!userStreamRef.current) {
+        await initUserCamera();
+      }
+
+      // Initialize and start session recording BEFORE welcome message
+      initSessionRecording();
+      if (sessionRecorderRef.current && sessionRecorderRef.current.state === 'inactive') {
+        sessionRecorderRef.current.start(1000); // 1-second chunks
+        isRecordingRef.current = true;
+        console.log('[Recording] Session recording started');
+      }
 
       // Auto-enable mic so listening starts after welcome message
       setIsMicOn(true);
@@ -494,26 +742,55 @@ Round: ${round}
   const endInterview = async () => {
     setCallStatus('analyzing');
 
-    // Stop all media
+    // Stop Deepgram and any playing audio
     stopDeepgramListening();
-    
-    if (userStreamRef.current) {
-      userStreamRef.current.getTracks().forEach(track => track.stop());
-    }
-
-    // Stop any playing audio
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
     }
 
+    // --- Phase 1: Stop recording and finalize blob ---
+    let recordingBlob: Blob | null = null;
+    if (sessionRecorderRef.current && isRecordingRef.current) {
+      try {
+        recordingBlob = await new Promise<Blob>((resolve) => {
+          const recorder = sessionRecorderRef.current!;
+          recorder.onstop = () => {
+            const mimeType = recorder.mimeType || 'video/webm';
+            const blob = new Blob(recordingChunksRef.current, { type: mimeType });
+            console.log(`[Recording] Finalized: ${(blob.size / 1024 / 1024).toFixed(1)}MB`);
+            resolve(blob);
+          };
+          recorder.stop();
+        });
+      } catch (err) {
+        console.error('[Recording] Failed to stop recorder:', err);
+      }
+      isRecordingRef.current = false;
+      sessionRecorderRef.current = null;
+      recordingChunksRef.current = [];
+    }
+
+    // Close recording audio context
+    if (recAudioCtxRef.current) {
+      recAudioCtxRef.current.close().catch(() => {});
+      recAudioCtxRef.current = null;
+      recDestinationRef.current = null;
+      recMicSourceRef.current = null;
+    }
+
+    // Now stop camera/mic tracks
+    if (userStreamRef.current) {
+      userStreamRef.current.getTracks().forEach(track => track.stop());
+    }
+
+    // --- Phase 2: Save transcript (primary, must succeed) ---
     try {
       const transcriptText = formatTranscript();
       console.log('Final transcript:', transcriptText);
 
-      // Call the appropriate end-interview endpoint
       const endpoint = round === 2 ? '/api/end-interview-round2' : '/api/end-interview';
-      
+
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -529,10 +806,59 @@ Round: ${round}
 
       const result = await response.json();
       console.log('Interview saved:', result);
-
     } catch (err) {
       console.error('Failed to end interview:', err);
       setError('Failed to save interview data');
+    }
+
+    // --- Phase 3: Upload recording (secondary, non-fatal) ---
+    if (recordingBlob && recordingBlob.size > 0) {
+      try {
+        setUploadProgress(0);
+        const timestamp = Date.now();
+        const folder = round === 2 ? 'round2' : 'round1';
+        const ext = recordingBlob.type.startsWith('video/') ? 'webm' : 'webm';
+        const filePath = `${folder}/${candidateId}-${timestamp}.${ext}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('interview-recordings')
+          .upload(filePath, recordingBlob, {
+            contentType: recordingBlob.type,
+            upsert: false,
+          });
+
+        if (uploadError) {
+          throw uploadError;
+        }
+
+        setUploadProgress(100);
+        console.log('[Recording] Uploaded to:', filePath);
+
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('interview-recordings')
+          .getPublicUrl(filePath);
+
+        const publicUrl = urlData?.publicUrl;
+
+        if (publicUrl) {
+          const videoColumn = round === 2 ? 'round_2_video_url' : 'video_url';
+          const { error: dbError } = await supabase
+            .from('candidates')
+            .update({ [videoColumn]: publicUrl })
+            .eq('id', parseInt(candidateId));
+
+          if (dbError) {
+            console.error('[Recording] Failed to save video URL to DB:', dbError);
+          } else {
+            console.log(`[Recording] Saved ${videoColumn}:`, publicUrl);
+          }
+        }
+      } catch (err) {
+        console.error('[Recording] Upload failed (transcript already saved):', err);
+      } finally {
+        setUploadProgress(null);
+      }
     }
 
     setCallStatus('ended');
@@ -542,14 +868,28 @@ Round: ${round}
   useEffect(() => {
     return () => {
       stopDeepgramListening();
+      stopMediaCheck();
       if (userStreamRef.current) {
         userStreamRef.current.getTracks().forEach(track => track.stop());
       }
       if (audioRef.current) {
         audioRef.current.pause();
       }
+      // Cleanup session recording
+      if (sessionRecorderRef.current && sessionRecorderRef.current.state !== 'inactive') {
+        sessionRecorderRef.current.stop();
+      }
+      sessionRecorderRef.current = null;
+      recordingChunksRef.current = [];
+      isRecordingRef.current = false;
+      if (recAudioCtxRef.current) {
+        recAudioCtxRef.current.close().catch(() => {});
+        recAudioCtxRef.current = null;
+      }
+      recDestinationRef.current = null;
+      recMicSourceRef.current = null;
     };
-  }, [stopDeepgramListening]);
+  }, [stopDeepgramListening, stopMediaCheck]);
 
   // ============ RENDER ============
 
@@ -563,14 +903,20 @@ Round: ${round}
 
   const jobTitle = extractJobTitle(jobDescription);
 
+  // Mic level feedback text
+  const micFeedback = micLevel < 10 ? 'Too quiet' : micLevel <= 50 ? 'Good!' : 'Great!';
+  const micFeedbackColor = micLevel < 10 ? 'text-yellow-400' : 'text-emerald-400';
+
   // Idle State - Start Screen
   if (callStatus === 'idle') {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-        <div className="text-center max-w-lg">
-          <div className="w-32 h-32 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full mx-auto mb-8 flex items-center justify-center">
-            <Volume2 className="w-16 h-16 text-white" />
-          </div>
+        <div className="text-center max-w-lg w-full">
+          {!mediaCheckDone && (
+            <div className="w-32 h-32 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full mx-auto mb-8 flex items-center justify-center">
+              <Volume2 className="w-16 h-16 text-white" />
+            </div>
+          )}
           <h1 className="text-3xl font-bold text-white mb-4">
             Voice Interview
           </h1>
@@ -580,11 +926,58 @@ Round: ${round}
           <p className="text-slate-400 mb-6">
             You&apos;re interviewing for <span className="text-white font-medium">{jobTitle}</span> at Printerpix.
           </p>
-          <p className="text-slate-500 text-sm mb-6">
-            This will be a quick 20-30 minute conversation with our AI interviewer.<br />
-            Just relax and be yourself.
-          </p>
-          
+
+          {/* Camera preview + mic level (shown after media check) */}
+          {mediaCheckDone && (
+            <div className="mb-6 space-y-4">
+              {/* Camera preview */}
+              <div className="mx-auto w-64 h-48 rounded-xl overflow-hidden border-2 border-slate-700 bg-slate-900 flex items-center justify-center">
+                {cameraError ? (
+                  <div className="text-center text-slate-500">
+                    <CameraOff className="w-10 h-10 mx-auto mb-2" />
+                    <p className="text-sm">No camera detected</p>
+                  </div>
+                ) : (
+                  <video
+                    ref={checkVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover"
+                  />
+                )}
+              </div>
+
+              {/* Mic level bar */}
+              {micError ? (
+                <div className="flex items-center justify-center gap-2 text-red-400">
+                  <AlertCircle className="w-5 h-5" />
+                  <span className="text-sm font-medium">Microphone required — please allow access and try again</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 max-w-xs mx-auto">
+                  <Mic className="w-5 h-5 text-slate-400 shrink-0" />
+                  <div className="flex-1 h-3 bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full transition-all duration-75"
+                      style={{ width: `${micLevel}%` }}
+                    />
+                  </div>
+                  <span className={`text-sm font-medium w-20 text-right ${micFeedbackColor}`}>
+                    {micFeedback}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {!mediaCheckDone && (
+            <p className="text-slate-500 text-sm mb-6">
+              This will be a quick 20-30 minute conversation with our AI interviewer.<br />
+              Just relax and be yourself.
+            </p>
+          )}
+
           <div className="bg-slate-900/50 rounded-xl p-4 mb-8 text-left inline-block">
             <p className="text-slate-400 text-sm font-medium mb-2">Tips:</p>
             <ul className="text-slate-500 text-sm space-y-1">
@@ -593,20 +986,35 @@ Round: ${round}
               <li>• There are no wrong answers!</li>
             </ul>
           </div>
-          
+
           {error && (
             <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-6">
               <p className="text-red-400">{error}</p>
             </div>
           )}
 
-          <div>
-            <button
-              onClick={startInterview}
-              className="px-8 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white text-lg font-semibold rounded-xl transition-all transform hover:scale-105 shadow-lg shadow-cyan-500/25"
-            >
-              Start Interview
-            </button>
+          <div className="flex flex-col items-center gap-3">
+            {!mediaCheckDone ? (
+              <button
+                onClick={startMediaCheck}
+                className="px-8 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white text-lg font-semibold rounded-xl transition-all transform hover:scale-105 shadow-lg shadow-cyan-500/25"
+              >
+                Check Camera &amp; Mic
+              </button>
+            ) : (
+              <button
+                onClick={startInterview}
+                disabled={micError}
+                className={`px-8 py-4 text-white text-lg font-semibold rounded-xl transition-all transform shadow-lg ${
+                  micError
+                    ? 'bg-slate-700 cursor-not-allowed opacity-50'
+                    : 'bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 hover:scale-105 shadow-cyan-500/25'
+                }`}
+                title={micError ? 'Microphone is required to start the interview' : ''}
+              >
+                Start Interview
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -638,6 +1046,17 @@ Round: ${round}
           <p className="text-slate-400">
             Our AI is reviewing your responses. This usually takes about 10 seconds...
           </p>
+          {uploadProgress !== null && (
+            <div className="mt-6">
+              <div className="h-2 bg-slate-800 rounded-full overflow-hidden max-w-xs mx-auto">
+                <div
+                  className="h-full bg-cyan-500 rounded-full transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+              <p className="text-slate-500 text-sm mt-2">Uploading recording...</p>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -701,20 +1120,21 @@ Round: ${round}
             </p>
           </div>
 
-          {/* User Camera (small, bottom right) */}
-          {isCameraOn && (
-            <div className="absolute bottom-4 right-4 w-32 h-24 rounded-lg overflow-hidden border-2 border-slate-700 shadow-xl">
-              <video
-                ref={userVideoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover"
-              />
-            </div>
-          )}
         </div>
       </div>
+
+      {/* User Camera (fixed, bottom right above subtitle + control bars) */}
+      {isCameraOn && (
+        <div className="fixed bottom-[16rem] right-6 w-36 h-28 rounded-lg overflow-hidden border-2 border-slate-700 shadow-xl z-10">
+          <video
+            ref={userVideoRef}
+            autoPlay
+            playsInline
+            muted
+            className="w-full h-full object-cover"
+          />
+        </div>
+      )}
 
       {/* Subtitle Area */}
       <div className="h-32 bg-slate-900/80 backdrop-blur-sm border-t border-slate-800 flex items-center justify-center px-8">
@@ -753,16 +1173,16 @@ Round: ${round}
           {isMicOn ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
         </button>
 
-        {/* Done Speaking Button - shows when listening */}
-        {isListening && transcript && (
+        {/* Done Speaking Button - always visible when mic is on */}
+        {isMicOn && !isSpeaking && (
           <button
-            onClick={() => {
-              if (autoSendTimeoutRef.current) {
-                clearTimeout(autoSendTimeoutRef.current);
-              }
-              sendToAI(transcript);
-            }}
-            className="px-6 h-14 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/25"
+            onClick={() => sendToAI(transcript)}
+            disabled={!transcript.trim()}
+            className={`px-6 h-14 rounded-full text-white font-semibold flex items-center justify-center gap-2 transition-all ${
+              transcript.trim()
+                ? 'bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-500/25'
+                : 'bg-slate-700 opacity-50 cursor-not-allowed'
+            }`}
             title="Send your response"
           >
             Done Speaking

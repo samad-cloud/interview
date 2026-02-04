@@ -92,6 +92,37 @@ export async function POST(request: Request) {
       ? transcript.join('\n') 
       : transcript;
 
+    // Guard: reject scoring if no candidate responses in transcript
+    const hasCandidateResponses = transcriptText.includes('(Candidate):');
+    if (!hasCandidateResponses) {
+      const { error: updateError } = await supabase
+        .from('candidates')
+        .update({
+          interview_transcript: transcriptText,
+          rating: 0,
+          ai_summary: 'Interview incomplete — no candidate responses recorded.',
+          status: 'INTERVIEW_INCOMPLETE',
+        })
+        .eq('id', candidateId);
+
+      if (updateError) {
+        console.error('Failed to update candidate:', updateError);
+        return NextResponse.json({ error: 'Failed to save interview data' }, { status: 500 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        analysis: {
+          score: 0,
+          decision: 'Reject',
+          top_strength: 'N/A',
+          top_weakness: 'Interview incomplete',
+          red_flag: true,
+          summary: 'Interview incomplete — no candidate responses were recorded.',
+        },
+      });
+    }
+
     // Step 4: The Judge - Gemini Analysis
     const prompt = `You are a strict technical recruiter. Analyze this interview transcript against the Job Description and Resume.
 
