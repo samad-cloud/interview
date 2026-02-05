@@ -86,6 +86,10 @@ export default function VoiceAvatar({
   // Upload progress state
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
+  // Silence detection for "Done Speaking" nudge
+  const [showDoneHint, setShowDoneHint] = useState(false);
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Round 1 (Wayne) - Personality/Drive assessment
   const round1Prompt = `=== YOUR IDENTITY ===
   NAME: Wayne
@@ -377,6 +381,12 @@ export default function VoiceAvatar({
       addToConversation('candidate', text);
       finalTranscriptRef.current = '';
       setTranscript('');
+      // Clear silence nudge
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
+      setShowDoneHint(false);
       
       // Stop listening while processing
       stopDeepgramListening();
@@ -469,12 +479,26 @@ export default function VoiceAvatar({
             const newTranscript = data.channel.alternatives[0].transcript;
 
             if (newTranscript.trim()) {
+              // Clear silence timer — user is speaking
+              if (silenceTimerRef.current) {
+                clearTimeout(silenceTimerRef.current);
+                silenceTimerRef.current = null;
+              }
+              setShowDoneHint(false);
+
               if (data.is_final) {
                 // Append finalized segment to accumulated transcript
                 finalTranscriptRef.current = finalTranscriptRef.current
                   ? finalTranscriptRef.current + ' ' + newTranscript
                   : newTranscript;
                 setTranscript(finalTranscriptRef.current);
+
+                // Start 5s silence timer — if no new speech, nudge user
+                silenceTimerRef.current = setTimeout(() => {
+                  if (finalTranscriptRef.current.trim()) {
+                    setShowDoneHint(true);
+                  }
+                }, 5000);
               } else {
                 // Show accumulated + current interim
                 setTranscript(
@@ -867,6 +891,7 @@ Round: ${round}
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       stopDeepgramListening();
       stopMediaCheck();
       if (userStreamRef.current) {
@@ -985,6 +1010,11 @@ Round: ${round}
               <li>• Speak clearly</li>
               <li>• There are no wrong answers!</li>
             </ul>
+            <div className="mt-3 pt-3 border-t border-slate-800">
+              <p className="text-cyan-400 text-sm font-medium">
+                Important: After finishing each answer, click the <span className="bg-slate-800 px-2 py-0.5 rounded text-white font-semibold">Done Speaking</span> button so the interviewer knows you&apos;re ready for the next question.
+              </p>
+            </div>
           </div>
 
           {error && (
@@ -1081,6 +1111,14 @@ Round: ${round}
           <p className="text-slate-500 text-sm">
             Your responses have been recorded and sent to our team. We&apos;ll be in touch soon!
           </p>
+          <div className="mt-6 pt-4 border-t border-slate-800">
+            <p className="text-slate-500 text-xs">
+              Experienced a technical issue? Contact us at{' '}
+              <a href="mailto:samad.abbas@printerpix.com" className="text-cyan-400 hover:text-cyan-300 underline">
+                samad.abbas@printerpix.com
+              </a>
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -1175,18 +1213,29 @@ Round: ${round}
 
         {/* Done Speaking Button - always visible when mic is on */}
         {isMicOn && !isSpeaking && (
-          <button
-            onClick={() => sendToAI(transcript)}
-            disabled={!transcript.trim()}
-            className={`px-6 h-14 rounded-full text-white font-semibold flex items-center justify-center gap-2 transition-all ${
-              transcript.trim()
-                ? 'bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-500/25'
-                : 'bg-slate-700 opacity-50 cursor-not-allowed'
-            }`}
-            title="Send your response"
-          >
-            Done Speaking
-          </button>
+          <div className="relative">
+            {/* Silence nudge — appears after 5s of no voice */}
+            {showDoneHint && transcript.trim() && (
+              <div className="absolute -top-14 left-1/2 -translate-x-1/2 whitespace-nowrap animate-bounce">
+                <div className="bg-cyan-500 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-lg shadow-cyan-500/30">
+                  Done speaking? Click here!
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-cyan-500" />
+                </div>
+              </div>
+            )}
+            <button
+              onClick={() => sendToAI(transcript)}
+              disabled={!transcript.trim()}
+              className={`px-6 h-14 rounded-full text-white font-semibold flex items-center justify-center gap-2 transition-all ${
+                transcript.trim()
+                  ? 'bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-500/25'
+                  : 'bg-slate-700 opacity-50 cursor-not-allowed'
+              }`}
+              title="Send your response"
+            >
+              Done Speaking
+            </button>
+          </div>
         )}
 
         {/* Camera Toggle */}

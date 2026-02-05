@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { sendInterviewInvite, inviteToRound2 } from '@/app/actions/sendInvite';
-import { Trophy, AlertCircle, Clock, Eye, X, FileText, Brain, Briefcase, Send, ArrowRight, Filter, Zap } from 'lucide-react';
+import { Trophy, AlertCircle, Clock, Eye, X, FileText, Brain, Briefcase, Send, ArrowRight, Filter, Zap, Search, Video } from 'lucide-react';
 import Link from 'next/link';
 
 interface Candidate {
@@ -24,6 +24,8 @@ interface Candidate {
   final_verdict: string | null;
   interview_token: string | null;
   created_at: string | null;
+  video_url: string | null;
+  round_2_video_url: string | null;
 }
 
 interface Job {
@@ -38,6 +40,7 @@ export default function DashboardPage() {
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
   
   // Filters
+  const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [stageFilter, setStageFilter] = useState<string>('all');
   
@@ -56,7 +59,7 @@ export default function DashboardPage() {
         while (hasMore) {
           const { data: batch, error } = await supabase
             .from('candidates')
-            .select('id, full_name, email, rating, round_2_rating, jd_match_score, ai_summary, status, current_stage, interview_transcript, round_2_transcript, resume_text, job_id, final_verdict, interview_token, created_at')
+            .select('id, full_name, email, rating, round_2_rating, jd_match_score, ai_summary, status, current_stage, interview_transcript, round_2_transcript, resume_text, job_id, final_verdict, interview_token, created_at, video_url, round_2_video_url')
             .order('rating', { ascending: false, nullsFirst: false })
             .range(offset, offset + BATCH_SIZE - 1);
 
@@ -112,6 +115,14 @@ export default function DashboardPage() {
 
   // Filter candidates
   const filteredCandidates = candidates.filter(c => {
+    // Search filter
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const nameMatch = c.full_name?.toLowerCase().includes(q);
+      const emailMatch = c.email?.toLowerCase().includes(q);
+      const roleMatch = c.job_title?.toLowerCase().includes(q);
+      if (!nameMatch && !emailMatch && !roleMatch) return false;
+    }
     if (roleFilter !== 'all' && c.job_id !== roleFilter) return false;
     if (stageFilter !== 'all') {
       const stage = c.current_stage || 'round_1';
@@ -257,13 +268,27 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Filters */}
+        {/* Search & Filters */}
         <div className="flex items-center gap-4 mb-6">
+          {/* Search */}
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search by name, email, or role..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 w-72"
+            />
+          </div>
+
+          <div className="w-px h-6 bg-slate-700" />
+
           <div className="flex items-center gap-2">
             <Filter className="w-4 h-4 text-slate-400" />
             <span className="text-slate-400 text-sm">Filters:</span>
           </div>
-          
+
           {/* Role Filter */}
           <select
             value={roleFilter}
@@ -417,6 +442,16 @@ export default function DashboardPage() {
                           <Eye className="w-4 h-4" />
                         </button>
 
+                        {(candidate.video_url || candidate.round_2_video_url) && (
+                          <button
+                            onClick={() => setSelectedCandidate(candidate)}
+                            className="p-2 bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 rounded-lg transition-colors"
+                            title="Has Video Recording"
+                          >
+                            <Video className="w-4 h-4" />
+                          </button>
+                        )}
+
                         {canSendInvite && (
                           <button
                             onClick={() => handleSendInvite(candidate.id)}
@@ -526,6 +561,44 @@ export default function DashboardPage() {
                   </div>
                   <div className="bg-slate-900 rounded-xl p-4">
                     <p className="text-slate-300">{selectedCandidate.ai_summary}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Video Recordings */}
+              {(selectedCandidate.video_url || selectedCandidate.round_2_video_url) && (
+                <div className="mb-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Video className="w-5 h-5 text-purple-400" />
+                    <h3 className="text-lg font-semibold text-white">Interview Recordings</h3>
+                  </div>
+                  <div className="space-y-4">
+                    {selectedCandidate.video_url && (
+                      <div className="bg-slate-900 rounded-xl p-4">
+                        <p className="text-slate-400 text-sm mb-2">Round 1 Recording</p>
+                        <video
+                          src={selectedCandidate.video_url}
+                          controls
+                          className="w-full rounded-lg max-h-80"
+                          preload="metadata"
+                        >
+                          Your browser does not support video playback.
+                        </video>
+                      </div>
+                    )}
+                    {selectedCandidate.round_2_video_url && (
+                      <div className="bg-slate-900 rounded-xl p-4">
+                        <p className="text-slate-400 text-sm mb-2">Round 2 Recording</p>
+                        <video
+                          src={selectedCandidate.round_2_video_url}
+                          controls
+                          className="w-full rounded-lg max-h-80"
+                          preload="metadata"
+                        >
+                          Your browser does not support video playback.
+                        </video>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
