@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { sendInterviewInvite, inviteToRound2 } from '@/app/actions/sendInvite';
-import { Trophy, AlertCircle, Clock, Eye, X, FileText, Brain, Briefcase, Send, ArrowRight, Filter, Zap, Search, Video, LogOut } from 'lucide-react';
+import { Trophy, AlertCircle, Clock, Eye, X, FileText, Brain, Briefcase, Send, ArrowRight, Filter, Zap, Search, Video, LogOut, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -13,7 +13,7 @@ interface Candidate {
   email: string;
   rating: number | null;
   round_2_rating: number | null;
-  jd_match_score: number | null; // CV Score from screener
+  jd_match_score: number | null;
   ai_summary: string | null;
   status: string;
   current_stage: string | null;
@@ -34,20 +34,38 @@ interface Job {
   title: string;
 }
 
+interface Stats {
+  total: number;
+  round1Done: number;
+  round2Done: number;
+  completed: number;
+}
+
+const PAGE_SIZE = 25;
+
 export default function DashboardPage() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobMap, setJobMap] = useState<Map<string, string>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
-  
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [stats, setStats] = useState<Stats>({ total: 0, round1Done: 0, round2Done: 0, completed: 0 });
+
   // Filters
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput] = useState(''); // Immediate input value
+  const [searchQuery, setSearchQuery] = useState(''); // Debounced value for API
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [stageFilter, setStageFilter] = useState<string>('all');
-  
+
   // Action states
   const [sendingInvite, setSendingInvite] = useState<number | null>(null);
   const router = useRouter();
+
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -55,96 +73,157 @@ export default function DashboardPage() {
     router.refresh();
   };
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Fetch candidates in batches of 1000 (Supabase limit workaround)
-        let allCandidates: any[] = [];
-        let hasMore = true;
-        let offset = 0;
-        const BATCH_SIZE = 1000;
+  // Fetch stats (runs once on mount)
+  const fetchStats = useCallback(async () => {
+    try {
+      // Get total count
+      const { count: total } = await supabase
+        .from('candidates')
+        .select('*', { count: 'exact', head: true });
 
-        while (hasMore) {
-          const { data: batch, error } = await supabase
-            .from('candidates')
-            .select('id, full_name, email, rating, round_2_rating, jd_match_score, ai_summary, status, current_stage, interview_transcript, round_2_transcript, resume_text, job_id, final_verdict, interview_token, created_at, video_url, round_2_video_url')
-            .order('rating', { ascending: false, nullsFirst: false })
-            .range(offset, offset + BATCH_SIZE - 1);
+      // Get round 1 done count
+      const { count: round1Done } = await supabase
+        .from('candidates')
+        .select('*', { count: 'exact', head: true })
+        .not('rating', 'is', null)
+        .or('current_stage.is.null,current_stage.eq.round_1');
 
-          if (error) {
-            console.error('Error fetching candidates batch:', error);
-            break;
-          }
+      // Get round 2 count
+      const { count: round2Done } = await supabase
+        .from('candidates')
+        .select('*', { count: 'exact', head: true })
+        .or('current_stage.eq.round_2,current_stage.eq.completed');
 
-          if (batch && batch.length > 0) {
-            allCandidates = [...allCandidates, ...batch];
-            offset += BATCH_SIZE;
-            hasMore = batch.length === BATCH_SIZE;
-          } else {
-            hasMore = false;
-          }
-        }
+      // Get completed count
+      const { count: completed } = await supabase
+        .from('candidates')
+        .select('*', { count: 'exact', head: true })
+        .eq('current_stage', 'completed');
 
-        console.log(`Fetched ${allCandidates.length} total candidates`);
-
-        // Fetch jobs
-        const { data: jobsData, error: jobsError } = await supabase
-          .from('jobs')
-          .select('id, title');
-
-        if (jobsError) {
-          console.error('Error fetching jobs:', jobsError);
-        }
-
-        setJobs(jobsData || []);
-
-        // Create job lookup map
-        const jobMap = new Map<string, string>();
-        jobsData?.forEach(job => {
-          jobMap.set(job.id, job.title);
-        });
-
-        // Merge job titles into candidates
-        const candidatesWithJobs = allCandidates.map(candidate => ({
-          ...candidate,
-          job_title: candidate.job_id ? jobMap.get(candidate.job_id) || 'Unknown Role' : undefined,
-        }));
-
-        setCandidates(candidatesWithJobs);
-      } catch (err) {
-        console.error('Failed to fetch data:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchData();
+      setStats({
+        total: total || 0,
+        round1Done: round1Done || 0,
+        round2Done: round2Done || 0,
+        completed: completed || 0,
+      });
+    } catch (err) {
+      console.error('Failed to fetch stats:', err);
+    }
   }, []);
 
-  // Filter candidates
-  const filteredCandidates = candidates.filter(c => {
-    // Search filter
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      const nameMatch = c.full_name?.toLowerCase().includes(q);
-      const emailMatch = c.email?.toLowerCase().includes(q);
-      const roleMatch = c.job_title?.toLowerCase().includes(q);
-      if (!nameMatch && !emailMatch && !roleMatch) return false;
+  // Fetch jobs (runs once on mount)
+  const fetchJobs = useCallback(async () => {
+    try {
+      const { data: jobsData, error } = await supabase
+        .from('jobs')
+        .select('id, title');
+
+      if (error) {
+        console.error('Error fetching jobs:', error);
+        return;
+      }
+
+      setJobs(jobsData || []);
+
+      const map = new Map<string, string>();
+      jobsData?.forEach(job => {
+        map.set(job.id, job.title);
+      });
+      setJobMap(map);
+    } catch (err) {
+      console.error('Failed to fetch jobs:', err);
     }
-    if (roleFilter !== 'all' && c.job_id !== roleFilter) return false;
-    if (stageFilter !== 'all') {
-      const stage = c.current_stage || 'round_1';
-      // Not Interviewed = no rating yet
-      if (stageFilter === 'not_interviewed' && c.rating !== null) return false;
-      // Round 1 Done = has rating AND still in round_1 stage
-      if (stageFilter === 'round_1' && (c.rating === null || stage !== 'round_1')) return false;
-      // In Round 2
-      if (stageFilter === 'round_2' && stage !== 'round_2') return false;
-      // Completed
-      if (stageFilter === 'completed' && stage !== 'completed') return false;
+  }, []);
+
+  // Fetch candidates with pagination and filters
+  const fetchCandidates = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const from = (currentPage - 1) * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
+      // Build the query
+      let query = supabase
+        .from('candidates')
+        .select('id, full_name, email, rating, round_2_rating, jd_match_score, ai_summary, status, current_stage, interview_transcript, round_2_transcript, resume_text, job_id, final_verdict, interview_token, created_at, video_url, round_2_video_url', { count: 'exact' });
+
+      // Apply filters
+      if (searchQuery) {
+        query = query.or(`full_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
+      }
+
+      if (roleFilter !== 'all') {
+        query = query.eq('job_id', roleFilter);
+      }
+
+      if (stageFilter !== 'all') {
+        switch (stageFilter) {
+          case 'not_interviewed':
+            query = query.is('rating', null);
+            break;
+          case 'round_1':
+            query = query.not('rating', 'is', null).or('current_stage.is.null,current_stage.eq.round_1');
+            break;
+          case 'round_2':
+            query = query.eq('current_stage', 'round_2');
+            break;
+          case 'completed':
+            query = query.eq('current_stage', 'completed');
+            break;
+        }
+      }
+
+      // Apply ordering and pagination
+      const { data, error, count } = await query
+        .order('rating', { ascending: false, nullsFirst: false })
+        .range(from, to);
+
+      if (error) {
+        console.error('Error fetching candidates:', error);
+        return;
+      }
+
+      // Merge job titles
+      const candidatesWithJobs = (data || []).map(candidate => ({
+        ...candidate,
+        job_title: candidate.job_id ? jobMap.get(candidate.job_id) || 'Unknown Role' : undefined,
+      }));
+
+      setCandidates(candidatesWithJobs);
+      setTotalCount(count || 0);
+    } catch (err) {
+      console.error('Failed to fetch candidates:', err);
+    } finally {
+      setIsLoading(false);
     }
-    return true;
-  });
+  }, [currentPage, searchQuery, roleFilter, stageFilter, jobMap]);
+
+  // Initial data fetch
+  useEffect(() => {
+    fetchStats();
+    fetchJobs();
+  }, [fetchStats, fetchJobs]);
+
+  // Fetch candidates when filters/pagination change
+  useEffect(() => {
+    if (jobMap.size > 0 || jobs.length === 0) {
+      fetchCandidates();
+    }
+  }, [fetchCandidates, jobMap, jobs.length]);
+
+  // Debounce search input (300ms delay)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchQuery(searchInput);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, roleFilter, stageFilter]);
 
   // Get stage display
   const getStageDisplay = (candidate: Candidate) => {
@@ -176,7 +255,7 @@ export default function DashboardPage() {
       <div className="flex items-center gap-2">
         <span className="text-xs text-slate-500 w-12">{label}</span>
         <div className="w-16 h-2 bg-slate-700 rounded-full overflow-hidden">
-          <div 
+          <div
             className={`h-full rounded-full ${color}`}
             style={{ width: `${score}%` }}
           />
@@ -193,8 +272,7 @@ export default function DashboardPage() {
     setSendingInvite(candidateId);
     const result = await sendInterviewInvite(candidateId);
     if (result.success) {
-      // Update local state
-      setCandidates(prev => prev.map(c => 
+      setCandidates(prev => prev.map(c =>
         c.id === candidateId ? { ...c, status: 'INVITE_SENT' } : c
       ));
     } else {
@@ -208,7 +286,7 @@ export default function DashboardPage() {
     setSendingInvite(candidateId);
     const result = await inviteToRound2(candidateId);
     if (result.success) {
-      setCandidates(prev => prev.map(c => 
+      setCandidates(prev => prev.map(c =>
         c.id === candidateId ? { ...c, current_stage: 'round_2', status: 'ROUND_2_INVITED' } : c
       ));
     } else {
@@ -217,21 +295,42 @@ export default function DashboardPage() {
     setSendingInvite(null);
   };
 
-  // Stats
-  const stats = {
-    total: candidates.length,
-    round1Done: candidates.filter(c => c.rating !== null && (c.current_stage === 'round_1' || !c.current_stage)).length,
-    round2Done: candidates.filter(c => c.current_stage === 'round_2' || c.current_stage === 'completed').length,
-    completed: candidates.filter(c => c.current_stage === 'completed').length,
+  // Pagination controls
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
-      </div>
-    );
-  }
+  // Generate page numbers to display
+  const getPageNumbers = () => {
+    const pages: (number | string)[] = [];
+    const maxVisible = 5;
+
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      if (currentPage <= 3) {
+        for (let i = 1; i <= 4; i++) pages.push(i);
+        pages.push('...');
+        pages.push(totalPages);
+      } else if (currentPage >= totalPages - 2) {
+        pages.push(1);
+        pages.push('...');
+        for (let i = totalPages - 3; i <= totalPages; i++) pages.push(i);
+      } else {
+        pages.push(1);
+        pages.push('...');
+        for (let i = currentPage - 1; i <= currentPage + 1; i++) pages.push(i);
+        pages.push('...');
+        pages.push(totalPages);
+      }
+    }
+    return pages;
+  };
+
+  const startIndex = (currentPage - 1) * PAGE_SIZE + 1;
+  const endIndex = Math.min(currentPage * PAGE_SIZE, totalCount);
 
   return (
     <div className="min-h-screen bg-slate-900 p-8">
@@ -292,9 +391,9 @@ export default function DashboardPage() {
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Search by name, email, or role..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by name or email..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               className="pl-9 pr-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 w-72"
             />
           </div>
@@ -330,177 +429,244 @@ export default function DashboardPage() {
             <option value="round_2">In Round 2</option>
             <option value="completed">Completed</option>
           </select>
-
-          <span className="text-slate-500 text-sm">
-            Showing {filteredCandidates.length} of {candidates.length}
-          </span>
         </div>
 
         {/* Table */}
         <div className="bg-slate-800 rounded-xl overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-700">
-                <th className="text-left text-slate-400 font-medium p-4">#</th>
-                <th className="text-left text-slate-400 font-medium p-4">Name</th>
-                <th className="text-left text-slate-400 font-medium p-4">Role</th>
-                <th className="text-left text-slate-400 font-medium p-4">Date</th>
-                <th className="text-left text-slate-400 font-medium p-4">CV</th>
-                <th className="text-left text-slate-400 font-medium p-4">Stage</th>
-                <th className="text-left text-slate-400 font-medium p-4">Scores</th>
-                <th className="text-left text-slate-400 font-medium p-4">Verdict</th>
-                <th className="text-left text-slate-400 font-medium p-4">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredCandidates.map((candidate, index) => {
-                const stageDisplay = getStageDisplay(candidate);
-                const canSendInvite = !candidate.rating && candidate.status !== 'INVITE_SENT';
-                const canInviteR2 = candidate.rating !== null && candidate.rating >= 70 && candidate.current_stage !== 'round_2' && candidate.current_stage !== 'completed';
-
-                return (
-                  <tr 
-                    key={candidate.id} 
-                    className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors"
-                  >
-                    {/* Rank */}
-                    <td className="p-4">
-                      <span className="text-slate-500 font-medium">
-                        {index + 1}
-                      </span>
-                    </td>
-
-                    {/* Name */}
-                    <td className="p-4">
-                      <div>
-                        <p className="text-white font-medium">{candidate.full_name}</p>
-                        <p className="text-slate-500 text-sm">{candidate.email}</p>
-                      </div>
-                    </td>
-
-                    {/* Role */}
-                    <td className="p-4">
-                      <span className="text-slate-300 text-sm">
-                        {candidate.job_title || '—'}
-                      </span>
-                    </td>
-
-                    {/* Date Added */}
-                    <td className="p-4">
-                      <span className="text-slate-400 text-sm">
-                        {candidate.created_at 
-                          ? new Date(candidate.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
-                          : '—'}
-                      </span>
-                    </td>
-
-                    {/* CV Score */}
-                    <td className="p-4">
-                      {candidate.jd_match_score !== null ? (
-                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                          candidate.jd_match_score >= 70 ? 'bg-emerald-500/20 text-emerald-400' :
-                          candidate.jd_match_score >= 50 ? 'bg-yellow-500/20 text-yellow-400' :
-                          'bg-red-500/20 text-red-400'
-                        }`}>
-                          {candidate.jd_match_score}
-                        </span>
-                      ) : (
-                        <span className="text-slate-500 text-sm">—</span>
-                      )}
-                    </td>
-
-                    {/* Stage */}
-                    <td className="p-4">
-                      <span className={`px-2 py-1 rounded-full text-xs ${stageDisplay.bg} ${stageDisplay.text}`}>
-                        {stageDisplay.label}
-                      </span>
-                    </td>
-
-                    {/* Scores */}
-                    <td className="p-4">
-                      <div className="space-y-1">
-                        <ScoreBar 
-                          score={candidate.rating} 
-                          label="Hunger" 
-                          color={candidate.rating && candidate.rating >= 70 ? 'bg-emerald-500' : candidate.rating && candidate.rating >= 50 ? 'bg-yellow-500' : 'bg-red-500'}
-                        />
-                        <ScoreBar 
-                          score={candidate.round_2_rating} 
-                          label="Skills" 
-                          color={candidate.round_2_rating && candidate.round_2_rating >= 70 ? 'bg-blue-500' : candidate.round_2_rating && candidate.round_2_rating >= 50 ? 'bg-yellow-500' : 'bg-red-500'}
-                        />
-                      </div>
-                    </td>
-
-                    {/* Verdict */}
-                    <td className="p-4">
-                      {candidate.final_verdict ? (
-                        <span className={`px-2 py-1 rounded-full text-xs ${
-                          candidate.final_verdict.includes('Strong') ? 'bg-emerald-500/20 text-emerald-400' :
-                          candidate.final_verdict === 'Hire' ? 'bg-blue-500/20 text-blue-400' :
-                          candidate.final_verdict.includes('Weak') ? 'bg-yellow-500/20 text-yellow-400' :
-                          'bg-red-500/20 text-red-400'
-                        }`}>
-                          {candidate.final_verdict}
-                        </span>
-                      ) : (
-                        <span className="text-slate-500 text-sm">—</span>
-                      )}
-                    </td>
-
-                    {/* Actions */}
-                    <td className="p-4">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setSelectedCandidate(candidate)}
-                          className="p-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
-                          title="View Details"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-
-                        {(candidate.video_url || candidate.round_2_video_url) && (
-                          <button
-                            onClick={() => setSelectedCandidate(candidate)}
-                            className="p-2 bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 rounded-lg transition-colors"
-                            title="Has Video Recording"
-                          >
-                            <Video className="w-4 h-4" />
-                          </button>
-                        )}
-
-                        {canSendInvite && (
-                          <button
-                            onClick={() => handleSendInvite(candidate.id)}
-                            disabled={sendingInvite === candidate.id}
-                            className="p-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50"
-                            title="Send Interview Invite"
-                          >
-                            <Send className="w-4 h-4" />
-                          </button>
-                        )}
-
-                        {canInviteR2 && (
-                          <button
-                            onClick={() => handleInviteRound2(candidate.id)}
-                            disabled={sendingInvite === candidate.id}
-                            className="p-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors disabled:opacity-50"
-                            title="Invite to Round 2"
-                          >
-                            <ArrowRight className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
+          {isLoading ? (
+            <div className="flex items-center justify-center p-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-emerald-500"></div>
+            </div>
+          ) : (
+            <>
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-slate-700">
+                    <th className="text-left text-slate-400 font-medium p-4">#</th>
+                    <th className="text-left text-slate-400 font-medium p-4">Name</th>
+                    <th className="text-left text-slate-400 font-medium p-4">Role</th>
+                    <th className="text-left text-slate-400 font-medium p-4">Date</th>
+                    <th className="text-left text-slate-400 font-medium p-4">CV</th>
+                    <th className="text-left text-slate-400 font-medium p-4">Stage</th>
+                    <th className="text-left text-slate-400 font-medium p-4">Scores</th>
+                    <th className="text-left text-slate-400 font-medium p-4">Verdict</th>
+                    <th className="text-left text-slate-400 font-medium p-4">Actions</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                  {candidates.map((candidate, index) => {
+                    const stageDisplay = getStageDisplay(candidate);
+                    const canSendInvite = !candidate.rating && candidate.status !== 'INVITE_SENT';
+                    const canInviteR2 = candidate.rating !== null && candidate.rating >= 70 && candidate.current_stage !== 'round_2' && candidate.current_stage !== 'completed';
+                    const rowNumber = startIndex + index;
 
-          {filteredCandidates.length === 0 && (
-            <div className="p-8 text-center text-slate-400">
-              No candidates found matching your filters.
+                    return (
+                      <tr
+                        key={candidate.id}
+                        className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors"
+                      >
+                        {/* Rank */}
+                        <td className="p-4">
+                          <span className="text-slate-500 font-medium">
+                            {rowNumber}
+                          </span>
+                        </td>
+
+                        {/* Name */}
+                        <td className="p-4">
+                          <div>
+                            <p className="text-white font-medium">{candidate.full_name}</p>
+                            <p className="text-slate-500 text-sm">{candidate.email}</p>
+                          </div>
+                        </td>
+
+                        {/* Role */}
+                        <td className="p-4">
+                          <span className="text-slate-300 text-sm">
+                            {candidate.job_title || '—'}
+                          </span>
+                        </td>
+
+                        {/* Date Added */}
+                        <td className="p-4">
+                          <span className="text-slate-400 text-sm">
+                            {candidate.created_at
+                              ? new Date(candidate.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
+                              : '—'}
+                          </span>
+                        </td>
+
+                        {/* CV Score */}
+                        <td className="p-4">
+                          {candidate.jd_match_score !== null ? (
+                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                              candidate.jd_match_score >= 70 ? 'bg-emerald-500/20 text-emerald-400' :
+                              candidate.jd_match_score >= 50 ? 'bg-yellow-500/20 text-yellow-400' :
+                              'bg-red-500/20 text-red-400'
+                            }`}>
+                              {candidate.jd_match_score}
+                            </span>
+                          ) : (
+                            <span className="text-slate-500 text-sm">—</span>
+                          )}
+                        </td>
+
+                        {/* Stage */}
+                        <td className="p-4">
+                          <span className={`px-2 py-1 rounded-full text-xs ${stageDisplay.bg} ${stageDisplay.text}`}>
+                            {stageDisplay.label}
+                          </span>
+                        </td>
+
+                        {/* Scores */}
+                        <td className="p-4">
+                          <div className="space-y-1">
+                            <ScoreBar
+                              score={candidate.rating}
+                              label="Hunger"
+                              color={candidate.rating && candidate.rating >= 70 ? 'bg-emerald-500' : candidate.rating && candidate.rating >= 50 ? 'bg-yellow-500' : 'bg-red-500'}
+                            />
+                            <ScoreBar
+                              score={candidate.round_2_rating}
+                              label="Skills"
+                              color={candidate.round_2_rating && candidate.round_2_rating >= 70 ? 'bg-blue-500' : candidate.round_2_rating && candidate.round_2_rating >= 50 ? 'bg-yellow-500' : 'bg-red-500'}
+                            />
+                          </div>
+                        </td>
+
+                        {/* Verdict */}
+                        <td className="p-4">
+                          {candidate.final_verdict ? (
+                            <span className={`px-2 py-1 rounded-full text-xs ${
+                              candidate.final_verdict.includes('Strong') ? 'bg-emerald-500/20 text-emerald-400' :
+                              candidate.final_verdict === 'Hire' ? 'bg-blue-500/20 text-blue-400' :
+                              candidate.final_verdict.includes('Weak') ? 'bg-yellow-500/20 text-yellow-400' :
+                              'bg-red-500/20 text-red-400'
+                            }`}>
+                              {candidate.final_verdict}
+                            </span>
+                          ) : (
+                            <span className="text-slate-500 text-sm">—</span>
+                          )}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="p-4">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setSelectedCandidate(candidate)}
+                              className="p-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+                              title="View Details"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+
+                            {(candidate.video_url || candidate.round_2_video_url) && (
+                              <button
+                                onClick={() => setSelectedCandidate(candidate)}
+                                className="p-2 bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 rounded-lg transition-colors"
+                                title="Has Video Recording"
+                              >
+                                <Video className="w-4 h-4" />
+                              </button>
+                            )}
+
+                            {canSendInvite && (
+                              <button
+                                onClick={() => handleSendInvite(candidate.id)}
+                                disabled={sendingInvite === candidate.id}
+                                className="p-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50"
+                                title="Send Interview Invite"
+                              >
+                                <Send className="w-4 h-4" />
+                              </button>
+                            )}
+
+                            {canInviteR2 && (
+                              <button
+                                onClick={() => handleInviteRound2(candidate.id)}
+                                disabled={sendingInvite === candidate.id}
+                                className="p-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors disabled:opacity-50"
+                                title="Invite to Round 2"
+                              >
+                                <ArrowRight className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {candidates.length === 0 && (
+                <div className="p-8 text-center text-slate-400">
+                  No candidates found matching your filters.
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Pagination */}
+          {totalCount > 0 && (
+            <div className="flex items-center justify-between p-4 border-t border-slate-700">
+              <p className="text-slate-400 text-sm">
+                Showing {startIndex} - {endIndex} of {totalCount} candidates
+              </p>
+
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => goToPage(1)}
+                  disabled={currentPage === 1}
+                  className="p-2 hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="First page"
+                >
+                  <ChevronsLeft className="w-4 h-4 text-slate-400" />
+                </button>
+                <button
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="p-2 hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Previous page"
+                >
+                  <ChevronLeft className="w-4 h-4 text-slate-400" />
+                </button>
+
+                {getPageNumbers().map((page, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => typeof page === 'number' && goToPage(page)}
+                    disabled={page === '...'}
+                    className={`min-w-[36px] h-9 px-2 rounded-lg transition-colors ${
+                      page === currentPage
+                        ? 'bg-emerald-600 text-white'
+                        : page === '...'
+                        ? 'text-slate-500 cursor-default'
+                        : 'hover:bg-slate-700 text-slate-400'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+
+                <button
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="p-2 hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Next page"
+                >
+                  <ChevronRight className="w-4 h-4 text-slate-400" />
+                </button>
+                <button
+                  onClick={() => goToPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="p-2 hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Last page"
+                >
+                  <ChevronsRight className="w-4 h-4 text-slate-400" />
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -538,7 +704,7 @@ export default function DashboardPage() {
                 <div className="bg-slate-900 rounded-xl p-4">
                   <p className="text-slate-400 text-sm mb-1">Round 1: Hunger</p>
                   <p className={`text-3xl font-bold ${
-                    selectedCandidate.rating && selectedCandidate.rating >= 70 ? 'text-emerald-400' : 
+                    selectedCandidate.rating && selectedCandidate.rating >= 70 ? 'text-emerald-400' :
                     selectedCandidate.rating ? 'text-yellow-400' : 'text-slate-500'
                   }`}>
                     {selectedCandidate.rating !== null ? `${selectedCandidate.rating}/100` : 'Pending'}
@@ -547,7 +713,7 @@ export default function DashboardPage() {
                 <div className="bg-slate-900 rounded-xl p-4">
                   <p className="text-slate-400 text-sm mb-1">Round 2: Skills</p>
                   <p className={`text-3xl font-bold ${
-                    selectedCandidate.round_2_rating && selectedCandidate.round_2_rating >= 70 ? 'text-blue-400' : 
+                    selectedCandidate.round_2_rating && selectedCandidate.round_2_rating >= 70 ? 'text-blue-400' :
                     selectedCandidate.round_2_rating ? 'text-yellow-400' : 'text-slate-500'
                   }`}>
                     {selectedCandidate.round_2_rating !== null ? `${selectedCandidate.round_2_rating}/100` : 'Pending'}
