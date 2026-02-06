@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { sendInterviewInvite, inviteToRound2 } from '@/app/actions/sendInvite';
-import { Trophy, AlertCircle, Clock, Eye, X, FileText, Brain, Briefcase, Send, ArrowRight, Filter, Zap, Search, Video } from 'lucide-react';
+import { Trophy, AlertCircle, Clock, Eye, X, FileText, Brain, Briefcase, Send, ArrowRight, Filter, Zap, Search, Video, LogOut } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 interface Candidate {
   id: number;
@@ -46,6 +47,13 @@ export default function DashboardPage() {
   
   // Action states
   const [sendingInvite, setSendingInvite] = useState<number | null>(null);
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+    router.refresh();
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -239,13 +247,22 @@ export default function DashboardPage() {
               <p className="text-slate-400">2-Round AI Interview Leaderboard</p>
             </div>
           </div>
-          <Link
-            href="/screener"
-            className="flex items-center gap-2 px-4 py-2 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 rounded-lg transition-colors"
-          >
-            <Zap className="w-4 h-4" />
-            Bulk Screener
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/screener"
+              className="flex items-center gap-2 px-4 py-2 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 rounded-lg transition-colors"
+            >
+              <Zap className="w-4 h-4" />
+              Bulk Screener
+            </Link>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-colors"
+              title="Sign out"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Stats Row */}

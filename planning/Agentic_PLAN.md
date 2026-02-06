@@ -45,6 +45,11 @@ The system is divided into three autonomous loops. Unlike a linear pipeline, the
 
 This is the single form HR fills out to launch the entire recruiting machine. Designed for minimal effort, maximum context.
 
+**Post-Launch Editing:** The `Job_Input_Document` remains **editable after launch**. If requirements change (e.g., visa policy shifts, urgency changes, salary budget updates), HR can update them from the dashboard at any time. When requirements change:
+- The system re-evaluates candidates in `REJECTED_PRESCREENING` status against new criteria
+- HR is notified: "X previously rejected candidates now qualify under updated requirements. Review?"
+- All downstream agents (screening, interview, scoring) pick up the new requirements automatically
+
 ---
 
 ### Step 1: Required Inputs (The Essentials)
@@ -397,6 +402,16 @@ For reference, here's the data structure passed to all agents:
 
 **Why One Email?** Outbound candidates are passive — every extra step loses ~30% of them. Embedding screening + interview in one email maximizes conversion.
 
+#### Reputation Engine (Email Deliverability)
+
+Agent 3 includes a built-in **Reputation Engine** to prevent emails from landing in spam:
+
+- **Bounce Rate Monitoring:** Track bounce rate per sending domain. If bounces > 5%, auto-throttle send rate.
+- **Domain Warming:** New sending domains start at 20 emails/day, gradually increasing (20 → 50 → 100 → 200) over 2-4 weeks.
+- **Domain Rotation:** If one domain gets flagged, automatically rotate to a backup domain.
+- **Send Timing:** Optimize send times based on open-rate data (avoid bulk-sending at the same time).
+- **Auto-Throttle:** If deliverability metrics drop (open rate < 10%, bounce rate > 5%), Agent 3 automatically reduces volume and alerts Agent 4.
+
 ---
 
 ### Agent 4: The Acquisition Manager (The Optimization Brain)
@@ -419,6 +434,22 @@ For reference, here's the data structure passed to all agents:
 
 - **Input:** Low volume, but 80% of resumes are passing to the interview stage.
 - **Action:** Do nothing. This is the ideal state. High efficiency.
+
+#### Scenario D: The "Leaky Bucket"
+
+- **Input:** High volume, decent resume scores, but candidates drop off before completing the interview (high start rate, low completion rate).
+- **Decision:** "The interview funnel has too much friction."
+- **Action:** Analyze drop-off points. Suggest: shorter interview, send reminder emails to candidates who started but didn't finish, test different time-of-day outreach. This is a UX/friction problem, not a JD problem.
+
+#### Scenario E: The "Misaligned Compass"
+
+- **Input:** Resume scores are high, interview scores are high, but hiring manager keeps rejecting finalists in Phase 6.
+- **Decision:** "The AI's definition of 'good' doesn't match the human's."
+- **Action:** Triggers a recalibration workflow. Agent 4 analyzes the **rejection reasons** (free-text) provided by the human (see Phase 6) and identifies patterns. If 3+ rejections cite similar themes (e.g., "arrogant," "no humility," "bad culture fit"), Agent 4:
+  1. Updates the `Role_Strategy_Document` with learned red flags from human feedback
+  2. Tells Agent 9 (interviewer) to add probe questions targeting the identified gap (e.g., humility, collaboration)
+  3. Tells Agent 10 (adjudicator) to upweight the relevant signals in scoring
+  4. Optionally triggers Agent 2 to adjust the JD to better attract the right personality type
 
 ---
 
@@ -607,6 +638,8 @@ The questionnaire adapts based on `Job_Input_Document`:
 ## Phase 5: The Investigator (The "Intentional" Interview)
 
 > Here is where the "Heavy Research" focus shines. Every question has a purpose.
+
+**AI Consent Notice:** When a candidate opens their interview link, the first screen displays a brief consent notice: *"This interview is conducted by an AI assistant. Your responses will be recorded and reviewed by our hiring team. By proceeding, you consent to this process."* The candidate must acknowledge before the interview begins.
 
 ### Agent 7: The Interview Architect (The "Director")
 
@@ -821,6 +854,27 @@ The system maintains a **Question Bank** that evolves:
 
 ---
 
+#### Cold-Start Strategy (Before 90-Day Outcome Data)
+
+The Question Optimizer needs hire outcome data to calculate correlations, but early in the system's life there are zero hires. Agent 8 uses **proxy signals** to start learning immediately:
+
+| Proxy Signal | What It Measures | Available From Day 1 |
+|---|---|---|
+| **Probe Frequency** | How often the interviewer had to push for specifics (more probes = weaker answers) | ✅ Yes |
+| **Score Variance** | High resume score + low interview score = potential BS | ✅ Yes |
+| **Resume-vs-Interview Correlation** | Do claimed skills hold up under questioning? | ✅ Yes |
+| **Human Advance Rate** | Which candidates do humans actually advance in Phase 6? | ✅ After first finalists |
+| **Answer Specificity Score** | Concrete numbers/examples vs. vague/generic answers | ✅ Yes |
+| **Follow-up Trigger Rate** | How many "give me a specific example" follow-ups were needed | ✅ Yes |
+
+**Progression:**
+1. **Week 1-4 (Cold Start):** Use proxy signals only. Weight questions by answer quality patterns.
+2. **Month 2-3 (Warm Start):** Incorporate human advance/reject data from Phase 6 as early signal.
+3. **Month 4+ (Full Loop):** 90-day hire outcomes become available. Switch to full correlation analysis.
+4. **Ongoing:** Blend proxy signals (fast feedback) with outcome data (accurate but slow) using weighted average that shifts toward outcomes over time.
+
+---
+
 ### Agent 9: The Voice Interrogator (Gemini 2.0 + Deepgram)
 
 **Action:** Conducts the interview using the personalized script from Agent 7.
@@ -830,10 +884,11 @@ The system maintains a **Question Bank** that evolves:
 1. **Follows the Script Priority:** Asks Priority 1 questions first, adapts based on time
 2. **Listens for Pass/Fail Signals:** Uses the answer key from Agent 7 to score in real-time
 3. **Triggers Follow-ups:** If candidate gives vague answer, pushes for specifics
-4. **Real-time Fact Checking:** If the candidate says "I increased revenue by 200%," the agent (equipped with search tools) quickly verifies if that company was actually public/successful during that time. If data conflicts, it asks:
-
-> "That's interesting, because public reports show a downturn that year. Can you clarify?"
-
+4. **Behavioral Probing (Not Real-time Fact Checking):** Instead of trying to verify claims in real-time (unreliable for most candidates), the agent uses **behavioral probing techniques** to surface inconsistencies:
+   - **Depth Drilling:** "Walk me through the exact steps you took" — liars struggle with specifics
+   - **Timeline Pressure:** "What month was that? Who was your manager?" — fabricated stories have fuzzy timelines
+   - **Reversal Questions:** "What would you do differently if you did it again?" — people who didn't do it can't critique it
+   - **Claim Flagging:** Suspicious claims (e.g., "increased revenue 200%") are flagged for Agent 10 to include in the "Claims to Verify" section of the dossier, so humans can fact-check during their interview
 5. **Adaptive Probing:** If a red flag answer is concerning, spends more time there before moving on
 
 ---
@@ -847,6 +902,31 @@ The system maintains a **Question Bank** that evolves:
 - **Input:** Candidate had a great Resume Score (90) but failed the Technical Interview (Score 20).
 - **Diagnosis:** "Paper Tiger." The resume keywords were right, but the skill was fake.
 - **Action:** It updates the Forensic Analyst (Agent 5) rules: "Downgrade the weight of [specific certification] because it is not correlating with success."
+
+**Claims to Verify (Dossier Section)**
+
+Agent 10 compiles a **"Claims to Verify"** section for every candidate dossier sent to Phase 6. This includes any claims flagged by Agent 9 during the interview that couldn't be verified through behavioral probing alone:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  🔍 CLAIMS TO VERIFY (for human interviewer)                       │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  1. "Increased revenue by 200% at previous startup"                │
+│     → AI Assessment: Could not verify. Candidate gave specific     │
+│       steps but no external data available. ASK FOR PROOF.         │
+│                                                                     │
+│  2. "Led a team of 5 engineers"                                    │
+│     → AI Assessment: Timeline suggests 4-month internship.         │
+│       Candidate clarified "led a sprint team" — plausible but      │
+│       worth confirming with reference.                              │
+│                                                                     │
+│  3. "Built a tool used by 500+ daily active users"                 │
+│     → AI Assessment: Candidate provided specific metrics and       │
+│       technical details. Likely accurate. LOW PRIORITY to verify.  │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
 **New: Question Feedback**
 
@@ -1070,4 +1150,80 @@ Once human decides to hire:
 |-----------|---------|--------|------|
 | **The "Noise" Loop** | High Volume, Low Resume Scores | Rewrite JD to be harder/stricter | Reduce HR workload |
 | **The "Reach" Loop** | Low Volume, High Resume Scores | Increase Outbound email limits; Broaden ad spend | Scale what works |
-| **The "Liar" Loop** | High Resume Score, Low Interview Score | Tighten Resume Screening prompt; flag specific keywords as "suspect" | Catch fakes earlier |
+| **The "Liar" Loop** | High Resume Score, Low Interview Score (5+ candidates showing this pattern) | **Step 1:** Check if interview questions are effective (Agent 8 reviews question quality). **Step 2:** If questions are fine, THEN tighten Resume Screening prompt and flag specific keywords as "suspect" | Catch fakes earlier — but first verify it's not a question problem |
+
+---
+
+## Post-Round 2 Engagement (Candidate Communication)
+
+> Candidates who complete Round 2 are waiting for a human decision. Don't leave them in the dark.
+
+After a candidate completes their Round 2 interview, the system sends **timer-based status update emails** while the hiring manager reviews dossiers:
+
+| Trigger | Email Sent | Purpose |
+|---|---|---|
+| **Interview completed** | Immediate confirmation: "Thank you for completing your interview. Our team will review your results shortly." | Acknowledgment |
+| **48 hours, no human action** | "Your interview is being reviewed by our hiring team. We'll be in touch within the next few days." | Prevent anxiety |
+| **7 days, no human action** | "We're still reviewing candidates for this role. You remain under consideration. We'll update you by [date]." | Maintain engagement |
+| **14 days, no human action** | Internal alert to hiring manager: "7 candidates awaiting review for 14+ days. Please review." | Nudge the human |
+| **Human makes decision** | Appropriate email (advance to human interview / rejection / hold) | Resolution |
+
+**Key Rules:**
+- Emails are professional and honest — never "ghost" a candidate
+- If the role is filled, ALL remaining candidates get notified within 24 hours
+- Rejection emails include: brief reason (generic), encouragement, and opt-in to future roles
+
+---
+
+## Recommended Build Order
+
+> Phased implementation plan to get value quickly while building toward the full system.
+
+### Phase A: Foundation (Weeks 1-3)
+*Get the core pipeline working end-to-end with a single job.*
+
+1. **Phase 0: Kickoff Form** — Build the `Job_Input_Document` input UI
+2. **Agent 5: Forensic Screener** — Resume parsing + scoring (already partially built)
+3. **Agent 6: Gatekeeper** — Pre-screening questionnaire flow
+4. **Agent 9: Voice Interviewer** — AI interview (already built as Round 1 "Wayne")
+5. **Agent 10: Adjudicator** — Post-interview scoring + dossier generation
+6. **Phase 6: Dashboard** — Finalist queue + human decision actions (already partially built)
+
+**Milestone:** A candidate can apply → get screened → interview with AI → appear on dashboard for human decision.
+
+### Phase B: Intelligence Layer (Weeks 4-6)
+*Add the research and personalization that makes interviews smart.*
+
+7. **Agent 1: Domain Architect** — Market research + Role Strategy Document
+8. **Agent 2: Copywriter** — JD generation from research
+9. **Agent 7: Interview Architect** — Personalized question generation (4 sources)
+10. **Post-Round 2 Engagement** — Timer-based candidate communication emails
+
+**Milestone:** Interviews are now personalized per candidate. JDs are auto-generated. Candidates get status updates.
+
+### Phase C: Acquisition Engine (Weeks 7-10)
+*Add outbound sourcing and pipeline optimization.*
+
+11. **Agent 3: Outbound Hunter** — Resume database search + personalized outreach + Reputation Engine
+12. **Agent 4: Acquisition Manager** — Pipeline monitoring + Scenarios A-E
+13. **Phase 6 Feedback Loop** — Human rejection reasons → AI learning (Scenario E)
+
+**Milestone:** System actively hunts candidates instead of just waiting for applications.
+
+### Phase D: Learning & Optimization (Weeks 11-14)
+*Close the feedback loops that make the system get smarter over time.*
+
+14. **Agent 8: Question Optimizer** — Cold-start proxy signals → full correlation analysis
+15. **Smart Loops** — Noise Loop, Reach Loop, Liar Loop (with quality-first check)
+16. **90-Day Outcome Tracking** — Connect hire outcomes back to interview signals
+
+**Milestone:** The system continuously improves its own accuracy based on real outcomes.
+
+### Dependencies
+```
+Phase 0 → Agent 1 → Agent 2 → Agent 3
+Phase 0 → Agent 5 → Agent 6 → Agent 9 → Agent 10 → Phase 6
+Agent 7 depends on Agent 1 (research) + Agent 5 (resume data)
+Agent 8 depends on Agent 10 (interview data) + Phase 6 (human decisions)
+Agent 4 depends on Agent 3 + Agent 5 + Agent 9 (pipeline metrics)
+```
