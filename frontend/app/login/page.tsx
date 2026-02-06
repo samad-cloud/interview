@@ -3,7 +3,8 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase-browser';
-import { Lock, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
+import Image from 'next/image';
 
 function LoginForm() {
   const [email, setEmail] = useState('');
@@ -108,9 +109,13 @@ export default function LoginPage() {
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-emerald-500/20 rounded-2xl mx-auto mb-4 flex items-center justify-center">
-            <Lock className="w-8 h-8 text-emerald-500" />
-          </div>
+          <Image
+            src="/logo.jfif"
+            alt="Printerpix"
+            width={64}
+            height={64}
+            className="rounded-2xl mx-auto mb-4"
+          />
           <h1 className="text-2xl font-bold text-white">Recruiter Login</h1>
           <p className="text-slate-400 text-sm mt-1">Sign in to access the dashboard</p>
         </div>

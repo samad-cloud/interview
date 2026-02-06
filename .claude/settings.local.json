@@ -7,7 +7,11 @@
       "Bash(npx tsc:*)",
       "mcp__context7__resolve-library-id",
       "mcp__context7__query-docs",
-      "Bash(yarn add:*)"
+      "Bash(yarn add:*)",
+      "Bash(npx shadcn@latest init:*)",
+      "Bash(npx shadcn@latest add button input select textarea card dialog table badge tabs form label -y)",
+      "Bash(npm install:*)",
+      "WebFetch(domain:ai-sdk.dev)"
     ]
   }
 }

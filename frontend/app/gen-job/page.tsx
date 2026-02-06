@@ -2,38 +2,148 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { createClient } from '@supabase/supabase-js';
+import Image from 'next/image';
+import { supabase } from '@/lib/supabaseClient';
 import { generateJobDescription } from '../actions/generateJob';
+import {
+  ArrowLeft,
+  Briefcase,
+  DollarSign,
+  GraduationCap,
+  Sparkles,
+  Target,
+  AlertTriangle,
+  FileText,
+  Loader2,
+  CheckCircle,
+  Plus,
+  X
+} from 'lucide-react';
 
-// Initialize Supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+// shadcn components
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
+// Skill tag input component
+function SkillInput({
+  skills,
+  setSkills,
+  placeholder
+}: {
+  skills: string[],
+  setSkills: (skills: string[]) => void,
+  placeholder: string
+}) {
+  const [input, setInput] = useState('');
+
+  const addSkill = () => {
+    const trimmed = input.trim();
+    if (trimmed && !skills.includes(trimmed)) {
+      setSkills([...skills, trimmed]);
+      setInput('');
+    }
+  };
+
+  const removeSkill = (skill: string) => {
+    setSkills(skills.filter(s => s !== skill));
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addSkill();
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex gap-2 mb-2">
+        <Input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          className="flex-1"
+        />
+        <Button type="button" variant="secondary" size="icon" onClick={addSkill}>
+          <Plus className="w-4 h-4" />
+        </Button>
+      </div>
+      {skills.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {skills.map(skill => (
+            <Badge
+              key={skill}
+              variant="secondary"
+              className="bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
+            >
+              {skill}
+              <button
+                type="button"
+                onClick={() => removeSkill(skill)}
+                className="ml-1 hover:text-emerald-200"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function GenJobPage() {
-  // Required fields
+  // Step 1: Core Details
   const [title, setTitle] = useState('');
-  const [salary, setSalary] = useState('');
-  const [location, setLocation] = useState('');
-  
-  // Optional fields
-  const [experienceLevel, setExperienceLevel] = useState('');
-  const [keySkills, setKeySkills] = useState('');
-  const [employmentType, setEmploymentType] = useState('');
-  const [mustHave, setMustHave] = useState('');
-  const [niceToHave, setNiceToHave] = useState('');
-  const [companyPerks, setCompanyPerks] = useState('');
-  
-  // UI state
+  const [department, setDepartment] = useState('');
+  const [location, setLocation] = useState('Dubai');
+  const [workArrangement, setWorkArrangement] = useState('onsite');
+  const [urgency, setUrgency] = useState('30_days');
+
+  // Step 2: Compensation
+  const [salaryMin, setSalaryMin] = useState('');
+  const [salaryMax, setSalaryMax] = useState('');
+  const [salaryCurrency, setSalaryCurrency] = useState('AED');
+  const [salaryPeriod, setSalaryPeriod] = useState('monthly');
+  const [visaSponsorship, setVisaSponsorship] = useState(true);
+
+  // Step 3: Requirements
+  const [educationRequired, setEducationRequired] = useState('bachelors');
+  const [experienceMin, setExperienceMin] = useState('0');
+  const [experienceMax, setExperienceMax] = useState('2');
+  const [skillsMustHave, setSkillsMustHave] = useState<string[]>([]);
+  const [skillsNiceToHave, setSkillsNiceToHave] = useState<string[]>([]);
+
+  // Step 4: AI Context
+  const [projectContext, setProjectContext] = useState('');
+  const [idealCandidate, setIdealCandidate] = useState('');
+  const [redFlags, setRedFlags] = useState('');
+
+  // Step 5: Generated Description
   const [description, setDescription] = useState('');
+
+  // UI State
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [activeStep, setActiveStep] = useState(1);
 
   const handleGenerate = async () => {
-    if (!title || !salary || !location) {
-      setMessage({ type: 'error', text: 'Please fill in Job Title, Salary, and Location' });
+    if (!title || !location) {
+      setMessage({ type: 'error', text: 'Please fill in Job Title and Location' });
       return;
     }
 
@@ -41,18 +151,23 @@ export default function GenJobPage() {
     setMessage(null);
 
     try {
+      const salaryText = salaryMin && salaryMax
+        ? `${salaryCurrency} ${salaryMin} - ${salaryMax} ${salaryPeriod}`
+        : '';
+
       const result = await generateJobDescription({
         title,
-        salary,
+        salary: salaryText,
         location,
-        experienceLevel: experienceLevel || undefined,
-        keySkills: keySkills || undefined,
-        employmentType: employmentType || undefined,
-        mustHave: mustHave || undefined,
-        niceToHave: niceToHave || undefined,
-        companyPerks: companyPerks || undefined,
+        experienceLevel: `${experienceMin}-${experienceMax} years`,
+        keySkills: skillsMustHave.join(', '),
+        employmentType: 'Full-time',
+        mustHave: skillsMustHave.join(', '),
+        niceToHave: skillsNiceToHave.join(', '),
+        companyPerks: visaSponsorship ? 'Visa sponsorship available' : '',
       });
       setDescription(result);
+      setActiveStep(5);
     } catch (error) {
       console.error('Generation failed:', error);
       setMessage({ type: 'error', text: 'Failed to generate description. Try again.' });
@@ -72,29 +187,35 @@ export default function GenJobPage() {
 
     try {
       const { error } = await supabase.from('jobs').insert({
-        title: title,
-        description: description,
+        title,
+        description,
         is_active: true,
+        location,
+        work_arrangement: workArrangement,
+        department: department || null,
+        urgency,
+        salary_min: salaryMin ? parseInt(salaryMin) : null,
+        salary_max: salaryMax ? parseInt(salaryMax) : null,
+        salary_currency: salaryCurrency,
+        salary_period: salaryPeriod,
+        visa_sponsorship: visaSponsorship,
+        education_required: educationRequired,
+        experience_min: parseInt(experienceMin) || 0,
+        experience_max: experienceMax ? parseInt(experienceMax) : null,
+        skills_must_have: skillsMustHave.length > 0 ? skillsMustHave : null,
+        skills_nice_to_have: skillsNiceToHave.length > 0 ? skillsNiceToHave : null,
+        ideal_candidate: idealCandidate || null,
+        red_flags: redFlags || null,
+        project_context: projectContext || null,
       });
 
       if (error) throw error;
 
-      setMessage({ type: 'success', text: 'Job posted successfully!' });
-      
-      // Clear form after 2 seconds
+      setMessage({ type: 'success', text: 'Job posted successfully! Redirecting...' });
+
       setTimeout(() => {
-        setTitle('');
-        setSalary('');
-        setLocation('');
-        setExperienceLevel('');
-        setKeySkills('');
-        setEmploymentType('');
-        setMustHave('');
-        setNiceToHave('');
-        setCompanyPerks('');
-        setDescription('');
-        setMessage(null);
-      }, 2000);
+        window.location.href = '/dashboard';
+      }, 1500);
 
     } catch (error) {
       console.error('Publish failed:', error);
@@ -104,258 +225,525 @@ export default function GenJobPage() {
     }
   };
 
+  const steps = [
+    { num: 1, label: 'Core Details', icon: Briefcase },
+    { num: 2, label: 'Compensation', icon: DollarSign },
+    { num: 3, label: 'Requirements', icon: GraduationCap },
+    { num: 4, label: 'AI Context', icon: Target },
+    { num: 5, label: 'Review', icon: FileText },
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 p-6">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="max-w-7xl mx-auto mb-8">
-        <Link 
-          href="/dashboard" 
-          className="inline-flex items-center text-slate-400 hover:text-white transition-colors"
-        >
-          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Back to Dashboard
-        </Link>
-        
-        <h1 className="text-3xl font-bold mt-4 text-white">
-          AI Job Generator
-        </h1>
-        <p className="text-slate-400 mt-2">
-          Create professional job descriptions with AI assistance
-        </p>
+      <div className="border-b">
+        <div className="max-w-5xl mx-auto px-6 py-4">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" asChild>
+              <Link href="/dashboard">
+                <ArrowLeft className="w-5 h-5" />
+              </Link>
+            </Button>
+            <Image
+              src="/logo.jfif"
+              alt="Printerpix"
+              width={40}
+              height={40}
+              className="rounded-lg"
+            />
+            <div>
+              <h1 className="text-2xl font-bold">Create Job</h1>
+              <p className="text-muted-foreground text-sm">Configure the Job Input Document for AI recruiting</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Progress Steps */}
+      <div className="border-b bg-muted/30">
+        <div className="max-w-5xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            {steps.map((step) => (
+              <Button
+                key={step.num}
+                variant={activeStep === step.num ? 'secondary' : 'ghost'}
+                onClick={() => setActiveStep(step.num)}
+                className={activeStep === step.num ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30' : ''}
+              >
+                <step.icon className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">{step.label}</span>
+                <span className="sm:hidden">{step.num}</span>
+              </Button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Message Toast */}
       {message && (
-        <div className={`max-w-7xl mx-auto mb-6 p-4 rounded-lg ${
-          message.type === 'success' 
-            ? 'bg-green-900/50 border border-green-700 text-green-300' 
-            : 'bg-red-900/50 border border-red-700 text-red-300'
-        }`}>
-          {message.text}
+        <div className="max-w-5xl mx-auto px-6 mt-6">
+          <div className={`p-4 rounded-lg flex items-center gap-3 ${
+            message.type === 'success'
+              ? 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-400'
+              : 'bg-destructive/20 border border-destructive/30 text-destructive'
+          }`}>
+            {message.type === 'success' ? <CheckCircle className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
+            {message.text}
+          </div>
         </div>
       )}
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left Column - Inputs */}
-        <div className="space-y-6">
-          {/* Required Fields Card */}
-          <div className="bg-slate-900 rounded-xl p-6 border border-slate-800">
-            <h2 className="text-lg font-semibold mb-5 flex items-center text-white">
-              <span className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center mr-3 text-sm">1</span>
-              Core Details
-              <span className="text-red-400 text-sm ml-2">*required</span>
-            </h2>
+      {/* Form Content */}
+      <div className="max-w-5xl mx-auto px-6 py-8">
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">
-                  Job Title
-                </label>
-                <input
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g., Senior Software Engineer"
-                  className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-slate-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+        {/* Step 1: Core Details */}
+        {activeStep === 1 && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center">
+                  <Briefcase className="w-5 h-5 text-emerald-400" />
+                </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-2">
-                    Salary Range
-                  </label>
-                  <input
-                    type="text"
-                    value={salary}
-                    onChange={(e) => setSalary(e.target.value)}
-                    placeholder="e.g., AED 25,000/month"
-                    className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-slate-500"
+                  <CardTitle>Core Details</CardTitle>
+                  <CardDescription>Basic job information</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="md:col-span-2 space-y-2">
+                  <Label htmlFor="title">
+                    Job Title <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="title"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="e.g., AI Engineer (Entry Level)"
                   />
                 </div>
 
+                <div className="space-y-2">
+                  <Label htmlFor="department">Department</Label>
+                  <Input
+                    id="department"
+                    value={department}
+                    onChange={(e) => setDepartment(e.target.value)}
+                    placeholder="e.g., Growth & AI Team"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Location <span className="text-destructive">*</span></Label>
+                  <Select value={location} onValueChange={setLocation}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Dubai">Dubai</SelectItem>
+                      <SelectItem value="London">London</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Work Arrangement</Label>
+                  <Select value={workArrangement} onValueChange={setWorkArrangement}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="onsite">On-site</SelectItem>
+                      <SelectItem value="hybrid">Hybrid</SelectItem>
+                      <SelectItem value="remote">Remote</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Hiring Urgency</Label>
+                  <Select value={urgency} onValueChange={setUrgency}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="asap">ASAP</SelectItem>
+                      <SelectItem value="30_days">Within 30 days</SelectItem>
+                      <SelectItem value="60_days">Within 60 days</SelectItem>
+                      <SelectItem value="90_days">Within 90 days</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-4">
+                <Button onClick={() => setActiveStep(2)}>
+                  Next: Compensation →
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Step 2: Compensation */}
+        {activeStep === 2 && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center">
+                  <DollarSign className="w-5 h-5 text-emerald-400" />
+                </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-2">
-                    Location
+                  <CardTitle>Compensation & Benefits</CardTitle>
+                  <CardDescription>Salary range and visa sponsorship</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="space-y-2">
+                  <Label>Currency</Label>
+                  <Select value={salaryCurrency} onValueChange={setSalaryCurrency}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="AED">AED</SelectItem>
+                      <SelectItem value="USD">USD</SelectItem>
+                      <SelectItem value="GBP">GBP</SelectItem>
+                      <SelectItem value="EUR">EUR</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="salaryMin">Minimum</Label>
+                  <Input
+                    id="salaryMin"
+                    type="number"
+                    value={salaryMin}
+                    onChange={(e) => setSalaryMin(e.target.value)}
+                    placeholder="5000"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="salaryMax">Maximum</Label>
+                  <Input
+                    id="salaryMax"
+                    type="number"
+                    value={salaryMax}
+                    onChange={(e) => setSalaryMax(e.target.value)}
+                    placeholder="10000"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Period</Label>
+                  <Select value={salaryPeriod} onValueChange={setSalaryPeriod}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="yearly">Yearly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <Card className="bg-muted/50">
+                <CardContent className="pt-4">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={visaSponsorship}
+                      onChange={(e) => setVisaSponsorship(e.target.checked)}
+                      className="w-5 h-5 rounded border-input bg-background text-emerald-500 focus:ring-emerald-500"
+                    />
+                    <div>
+                      <span className="font-medium">Visa Sponsorship Available</span>
+                      <p className="text-muted-foreground text-sm">Check if company can sponsor work visas for this role</p>
+                    </div>
                   </label>
-                  <input
-                    type="text"
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
-                    placeholder="e.g., Dubai, UAE"
-                    className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-slate-500"
+                </CardContent>
+              </Card>
+
+              <div className="flex justify-between pt-4">
+                <Button variant="outline" onClick={() => setActiveStep(1)}>
+                  ← Back
+                </Button>
+                <Button onClick={() => setActiveStep(3)}>
+                  Next: Requirements →
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Step 3: Requirements */}
+        {activeStep === 3 && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center">
+                  <GraduationCap className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <CardTitle>Requirements</CardTitle>
+                  <CardDescription>Education, experience, and skills</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-2">
+                  <Label>Education Required</Label>
+                  <Select value={educationRequired} onValueChange={setEducationRequired}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      <SelectItem value="bachelors">Bachelor's Degree</SelectItem>
+                      <SelectItem value="masters">Master's Degree</SelectItem>
+                      <SelectItem value="phd">PhD</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="expMin">Min Experience (years)</Label>
+                  <Input
+                    id="expMin"
+                    type="number"
+                    value={experienceMin}
+                    onChange={(e) => setExperienceMin(e.target.value)}
+                    min="0"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="expMax">Max Experience (years)</Label>
+                  <Input
+                    id="expMax"
+                    type="number"
+                    value={experienceMax}
+                    onChange={(e) => setExperienceMax(e.target.value)}
+                    min="0"
                   />
                 </div>
               </div>
-            </div>
-          </div>
 
-          {/* Optional Fields Card */}
-          <div className="bg-slate-900 rounded-xl p-6 border border-slate-800">
-            <h2 className="text-lg font-semibold mb-5 flex items-center text-white">
-              <span className="w-7 h-7 bg-slate-600 rounded-lg flex items-center justify-center mr-3 text-sm">2</span>
-              Additional Context
-              <span className="text-slate-500 text-sm ml-2">(optional)</span>
-            </h2>
+              <div className="space-y-2">
+                <Label>Must-Have Skills</Label>
+                <SkillInput
+                  skills={skillsMustHave}
+                  setSkills={setSkillsMustHave}
+                  placeholder="Type a skill and press Enter (e.g., Python)"
+                />
+              </div>
 
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-2">
-                    Experience Level
-                  </label>
-                  <select
-                    value={experienceLevel}
-                    onChange={(e) => setExperienceLevel(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
-                  >
-                    <option value="">Select level...</option>
-                    <option value="Entry Level / Junior">Entry Level / Junior</option>
-                    <option value="Mid Level">Mid Level</option>
-                    <option value="Senior">Senior</option>
-                    <option value="Lead / Principal">Lead / Principal</option>
-                    <option value="Manager">Manager</option>
-                    <option value="Director">Director</option>
-                  </select>
+              <div className="space-y-2">
+                <Label>Nice-to-Have Skills</Label>
+                <SkillInput
+                  skills={skillsNiceToHave}
+                  setSkills={setSkillsNiceToHave}
+                  placeholder="Type a skill and press Enter (e.g., Docker)"
+                />
+              </div>
+
+              <div className="flex justify-between pt-4">
+                <Button variant="outline" onClick={() => setActiveStep(2)}>
+                  ← Back
+                </Button>
+                <Button onClick={() => setActiveStep(4)}>
+                  Next: AI Context →
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Step 4: AI Context */}
+        {activeStep === 4 && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center">
+                  <Target className="w-5 h-5 text-emerald-400" />
                 </div>
-
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-2">
-                    Employment Type
-                  </label>
-                  <select
-                    value={employmentType}
-                    onChange={(e) => setEmploymentType(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
-                  >
-                    <option value="">Select type...</option>
-                    <option value="Full-time">Full-time</option>
-                    <option value="Part-time">Part-time</option>
-                    <option value="Contract">Contract</option>
-                    <option value="Freelance">Freelance</option>
-                    <option value="Internship">Internship</option>
-                  </select>
+                  <CardTitle>AI Context</CardTitle>
+                  <CardDescription>Help the AI understand what you're looking for</CardDescription>
                 </div>
               </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <Card className="bg-muted/50 border-yellow-500/20">
+                <CardContent className="pt-4">
+                  <p className="text-sm">
+                    <Sparkles className="w-4 h-4 inline mr-2 text-yellow-400" />
+                    These fields help the AI personalize interview questions and better evaluate candidates.
+                  </p>
+                </CardContent>
+              </Card>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">
-                  Key Skills
-                </label>
-                <input
-                  type="text"
-                  value={keySkills}
-                  onChange={(e) => setKeySkills(e.target.value)}
-                  placeholder="e.g., Python, AWS, SQL, React"
-                  className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-slate-500"
+              <div className="space-y-2">
+                <Label htmlFor="projectContext">Project Context</Label>
+                <p className="text-muted-foreground text-sm">
+                  What will this person actually work on? Be specific.
+                </p>
+                <Textarea
+                  id="projectContext"
+                  value={projectContext}
+                  onChange={(e) => setProjectContext(e.target.value)}
+                  rows={4}
+                  placeholder="e.g., Building internal dashboards and agentic AI systems to 100x performance across marketing channels..."
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">
-                  Must-Have Requirements
-                </label>
-                <textarea
-                  value={mustHave}
-                  onChange={(e) => setMustHave(e.target.value)}
-                  placeholder="e.g., 5+ years experience, degree in CS, etc."
-                  rows={2}
-                  className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-slate-500 resize-none"
+              <div className="space-y-2">
+                <Label htmlFor="idealCandidate">Ideal Candidate Profile</Label>
+                <p className="text-muted-foreground text-sm">
+                  Describe the perfect hire in your own words.
+                </p>
+                <Textarea
+                  id="idealCandidate"
+                  value={idealCandidate}
+                  onChange={(e) => setIdealCandidate(e.target.value)}
+                  rows={4}
+                  placeholder="e.g., A hungry recent graduate who has SHIPPED something real — an internship project, a side project with users..."
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">
-                  Nice-to-Have
-                </label>
-                <textarea
-                  value={niceToHave}
-                  onChange={(e) => setNiceToHave(e.target.value)}
-                  placeholder="e.g., Experience with Kubernetes, startup background"
-                  rows={2}
-                  className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-slate-500 resize-none"
+              <div className="space-y-2">
+                <Label htmlFor="redFlags">
+                  <AlertTriangle className="w-4 h-4 inline mr-1 text-destructive" />
+                  Red Flags to Watch For
+                </Label>
+                <p className="text-muted-foreground text-sm">
+                  What should automatically disqualify a candidate?
+                </p>
+                <Textarea
+                  id="redFlags"
+                  value={redFlags}
+                  onChange={(e) => setRedFlags(e.target.value)}
+                  rows={3}
+                  placeholder="e.g., Pure academics with ZERO business experience. If their resume only shows coursework and GPA..."
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-400 mb-2">
-                  Company Perks
-                </label>
-                <input
-                  type="text"
-                  value={companyPerks}
-                  onChange={(e) => setCompanyPerks(e.target.value)}
-                  placeholder="e.g., Remote work, equity, unlimited PTO, health insurance"
-                  className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-slate-500"
+              <div className="flex justify-between pt-4">
+                <Button variant="outline" onClick={() => setActiveStep(3)}>
+                  ← Back
+                </Button>
+                <Button
+                  onClick={handleGenerate}
+                  disabled={isGenerating}
+                  className="bg-blue-600 hover:bg-blue-500"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      Generate Job Description
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Step 5: Review & Publish */}
+        {activeStep === 5 && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center">
+                  <FileText className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <CardTitle>Review & Publish</CardTitle>
+                  <CardDescription>Review the generated description and publish</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Summary Card */}
+              <Card className="bg-muted/50">
+                <CardContent className="pt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Title</p>
+                    <p className="font-medium">{title || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Location</p>
+                    <p className="font-medium">{location} ({workArrangement})</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Salary</p>
+                    <p className="font-medium">
+                      {salaryMin && salaryMax ? `${salaryCurrency} ${salaryMin}-${salaryMax}` : '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Visa</p>
+                    <p className={`font-medium ${visaSponsorship ? 'text-emerald-400' : ''}`}>
+                      {visaSponsorship ? 'Sponsorship Available' : 'Not Available'}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Generated Description */}
+              <div className="space-y-2">
+                <Label htmlFor="description">
+                  Generated Job Description
+                  <span className="text-muted-foreground font-normal ml-2">(editable)</span>
+                </Label>
+                <Textarea
+                  id="description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={16}
+                  placeholder="Click 'Generate Job Description' in the previous step to create the JD..."
+                  className="font-mono text-sm"
                 />
               </div>
-            </div>
-          </div>
 
-          {/* Generate Button */}
-          <button
-            onClick={handleGenerate}
-            disabled={isGenerating}
-            className="w-full py-3 px-6 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 rounded-lg font-semibold transition-all duration-200 flex items-center justify-center"
-          >
-            {isGenerating ? (
-              <>
-                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                Generating...
-              </>
-            ) : (
-              <>Generate Description</>
-            )}
-          </button>
-        </div>
+              <div className="flex justify-between pt-4">
+                <Button variant="outline" onClick={() => setActiveStep(4)}>
+                  ← Back to Edit
+                </Button>
+                <Button
+                  onClick={handlePublish}
+                  disabled={isPublishing || !description}
+                  className="bg-emerald-600 hover:bg-emerald-500"
+                >
+                  {isPublishing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      Publishing...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      Publish Job
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-        {/* Right Column - Preview & Save */}
-        <div className="bg-slate-900 rounded-xl p-6 border border-slate-800 h-fit lg:sticky lg:top-6">
-          <h2 className="text-lg font-semibold mb-5 flex items-center text-white">
-            <span className="w-7 h-7 bg-green-600 rounded-lg flex items-center justify-center mr-3 text-sm">3</span>
-            Preview & Publish
-          </h2>
-
-          <div className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-slate-400 mb-2">
-                Generated Description
-                <span className="text-slate-500 font-normal ml-2">(editable)</span>
-              </label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="AI-generated job description will appear here. You can edit it before publishing."
-                rows={20}
-                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-white placeholder-slate-500 resize-none font-mono text-sm"
-              />
-            </div>
-
-            <button
-              onClick={handlePublish}
-              disabled={isPublishing || !description}
-              className="w-full py-3 px-6 bg-green-600 hover:bg-green-500 disabled:bg-slate-600 rounded-lg font-semibold transition-all duration-200 flex items-center justify-center"
-            >
-              {isPublishing ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  Publishing...
-                </>
-              ) : (
-                <>Publish Job</>
-              )}
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );

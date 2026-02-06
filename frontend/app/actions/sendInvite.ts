@@ -2,9 +2,10 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { google } from 'googleapis';
+import { generateDossier } from './generateDossier';
 
-const INTERVIEW_BASE_URL = 'https://intervieww-fw4n.vercel.app/interview';
-const ROUND2_BASE_URL = 'https://intervieww-fw4n.vercel.app/round2';
+const INTERVIEW_BASE_URL = 'https://printerpix-recruitment.vercel.app/interview';
+const ROUND2_BASE_URL = 'https://printerpix-recruitment.vercel.app/round2';
 const COMPANY_NAME = 'Printerpix';
 
 interface SendInviteResult {
@@ -214,6 +215,15 @@ export async function inviteToRound2(candidateId: number): Promise<SendInviteRes
     }
 
     const round2Link = `${ROUND2_BASE_URL}/${candidate.interview_token}`;
+
+    // Generate dossier with probe questions from Round 1 transcript
+    console.log(`[Round 2 Invite] Generating dossier for candidate ${candidateId}...`);
+    const dossierResult = await generateDossier(String(candidateId));
+    if (!dossierResult.success) {
+      console.warn(`[Round 2 Invite] Dossier generation failed: ${dossierResult.error} - proceeding without dossier`);
+    } else {
+      console.log(`[Round 2 Invite] Generated ${dossierResult.dossier?.length || 0} probe questions`);
+    }
 
     // Send email via Gmail API
     const gmail = getGmailService();

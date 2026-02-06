@@ -1,11 +1,28 @@
 'use server';
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateObject } from 'ai';
+import { z } from 'zod';
+import { gemini } from '@/lib/ai';
 import { createClient } from '@supabase/supabase-js';
+
+// Schema for probe questions dossier
+const DossierSchema = z.object({
+  probeQuestions: z.array(z.object({
+    question: z.string().describe('A deep technical probe question'),
+    targetClaim: z.string().describe('The specific claim or project from Round 1 this question probes'),
+    probeType: z.enum(['implementation_details', 'tradeoffs', 'scale_metrics', 'debugging', 'architecture']),
+  })).min(3).max(5),
+  candidateStrengths: z.array(z.string()).describe('Key strengths identified from Round 1'),
+  areasToProbe: z.array(z.string()).describe('Areas that need deeper verification in Round 2'),
+  overallAssessment: z.string().describe('Brief assessment of Round 1 performance'),
+});
+
+export type Dossier = z.infer<typeof DossierSchema>;
 
 interface DossierResult {
   success: boolean;
   dossier?: string[];
+  fullDossier?: Dossier;
   error?: string;
 }
 
@@ -41,40 +58,33 @@ export async function generateDossier(candidateId: string): Promise<DossierResul
         .select('description, title')
         .eq('id', candidate.job_id)
         .single();
-      
+
       if (job) {
         jobDesc = `${job.title}: ${job.description || ''}`;
       }
     }
 
     const transcript = candidate.interview_transcript;
-    
+
     if (!transcript) {
       console.error('No transcript found for candidate');
       return { success: false, error: 'No interview transcript found' };
     }
 
-    // Initialize Gemini
-    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-    if (!apiKey) {
-      return { success: false, error: 'AI service not configured' };
-    }
-
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-
-    // Generate the dossier
-    const prompt = `You are a Senior Technical Architect preparing for a technical interview.
+    // Generate the dossier using AI SDK with structured output
+    const prompt = `You are a Senior Technical Architect preparing for a Round 2 technical interview.
 
 CANDIDATE'S ROUND 1 INTERVIEW TRANSCRIPT:
-${transcript.substring(0, 4000)}
+${transcript.substring(0, 6000)}
 
 JOB DESCRIPTION:
-${jobDesc.substring(0, 1000) || 'Software Engineering Role'}
+${jobDesc.substring(0, 1500) || 'Software Engineering Role'}
 
 YOUR TASK:
-Analyze the transcript and identify 3 specific technical claims, projects, or accomplishments the candidate mentioned.
-For EACH claim, write one "Probe Question" that tests their DEEP technical understanding.
+Analyze the Round 1 transcript thoroughly and prepare a dossier for Round 2.
+
+1. Identify 3-5 specific technical claims, projects, or accomplishments the candidate mentioned
+2. For EACH claim, create a "Probe Question" that tests their DEEP technical understanding
 
 RULES FOR PROBE QUESTIONS:
 - Ask for specific implementation details (e.g., "How exactly did you handle race conditions?")
@@ -82,40 +92,26 @@ RULES FOR PROBE QUESTIONS:
 - Ask about scale and metrics (e.g., "How many requests per second? What was the latency?")
 - Do NOT accept buzzwords - these questions should expose if they actually built it vs. just talked about it
 
-OUTPUT FORMAT:
-Return ONLY a valid JSON array of exactly 3 question strings. No markdown, no explanation.
-Example: ["Question 1 here?", "Question 2 here?", "Question 3 here?"]`;
+Also identify:
+- Key strengths demonstrated in Round 1
+- Areas that need deeper verification
+- Overall assessment of their Round 1 performance`;
 
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text().trim();
+    const { object: fullDossier } = await generateObject({
+      model: gemini,
+      schema: DossierSchema,
+      prompt,
+    });
 
-    // Clean up response
-    let cleanedResponse = responseText;
-    if (cleanedResponse.startsWith('```')) {
-      cleanedResponse = cleanedResponse.replace(/```json?\n?/g, '').replace(/```$/g, '').trim();
-    }
+    // Extract just the question strings for backward compatibility
+    const dossier = fullDossier.probeQuestions.map(q => q.question);
 
-    let dossier: string[];
-    try {
-      dossier = JSON.parse(cleanedResponse);
-      if (!Array.isArray(dossier) || dossier.length === 0) {
-        throw new Error('Invalid dossier format');
-      }
-    } catch (parseError) {
-      console.error('Failed to parse dossier:', cleanedResponse);
-      // Fallback questions
-      dossier = [
-        "Walk me through a technical challenge you mentioned. What was your specific role in solving it?",
-        "You mentioned working with certain technologies. Can you explain the architecture decisions you made?",
-        "Tell me about a time you had to debug a complex issue. What was your systematic approach?"
-      ];
-    }
-
-    // Update the candidate record
+    // Update the candidate record with both formats
     const { error: updateError } = await supabase
       .from('candidates')
       .update({
         round_1_dossier: dossier,
+        round_1_full_dossier: fullDossier,
         current_stage: 'round_2',
       })
       .eq('id', candidateId);
@@ -126,14 +122,11 @@ Example: ["Question 1 here?", "Question 2 here?", "Question 3 here?"]`;
     }
 
     console.log(`[Dossier] Generated ${dossier.length} probe questions for candidate ${candidateId}`);
-    
-    return { success: true, dossier };
+
+    return { success: true, dossier, fullDossier };
 
   } catch (error) {
     console.error('Generate dossier error:', error);
     return { success: false, error: 'Failed to generate dossier' };
   }
 }
-
-
-

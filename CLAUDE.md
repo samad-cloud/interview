@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Voice-Only AI Recruiter — an end-to-end AI-powered recruiting platform. Candidates apply via email, get auto-screened by AI (Gemini), and complete voice interviews with AI interviewers using Deepgram for speech and Gemini for conversation.
+Voice-Only AI Recruiter — an end-to-end AI-powered recruiting platform for Printerpix. Candidates apply via email, get auto-screened by AI (Gemini), and complete voice interviews with two AI interviewers (Wayne for personality, Atlas for technical) using Deepgram for speech and Gemini for conversation.
 
 ## Commands
 
@@ -26,52 +26,119 @@ python read/ingest.py                    # Run email ingestion only
 cd backend && python utils.py            # Generate Gmail OAuth token
 ```
 
+### Database Migrations
+```bash
+# Pending migrations in migrations/ — run manually against Supabase SQL editor
+```
+
 ### Deployment
 - **Frontend**: Vercel, root directory set to `frontend/`
-- **Backend**: Railway, start command defined in `railway.json` → `cd backend && python listener.py`
+- **Backend**: Railway (`railway.json`) — NIXPACKS builder, restart on failure, runs `cd backend && python listener.py`
 
 ## Architecture
 
-Two independently deployed services sharing a Supabase PostgreSQL database:
+Two independently deployed services sharing a Supabase PostgreSQL database.
 
 ### Frontend (Vercel) — Next.js 16 / React 19 / TypeScript / Tailwind CSS 4
-- **Pages**: `/dashboard` (HR management), `/interview/[token]` (Round 1 — "Wayne"), `/round2/[token]` (Round 2 — "Atlas"), `/gen-job` (job creation), `/screener` (CV screening)
-- **API Routes** (`app/api/`): `chat/` (Gemini proxy), `deepgram/` (STT key), `deepgram-tts/` (TTS), `end-interview/` and `end-interview-round2/` (finalization + scoring)
-- **Server Actions** (`actions/`): `sendInvite.ts`, `bulkScreen.ts`, `generateJob.ts`, `generateFinalVerdict.ts`, `generateDossier.ts`
-- **Key component**: `components/VoiceAvatar.tsx` — the main interview UI (~820 LOC) handling Deepgram WebSocket STT, Gemini chat, and TTS playback
+
+**UI Stack**: shadcn/ui (New York style), Lucide icons, dark mode enabled globally. Components in `components/ui/`, utility in `lib/utils.ts`. Config in `components.json`.
+
+**Pages**:
+| Route | Auth | Purpose |
+|-------|------|---------|
+| `/dashboard` | Protected | HR management — candidate list, scoring, invites |
+| `/gen-job` | Protected | AI job description generator |
+| `/screener` | Protected | CV bulk screening |
+| `/interview/[token]` | Public | Round 1 voice interview (Wayne) |
+| `/round2/[token]` | Public | Round 2 technical interview (Atlas) |
+| `/login` | Public | Email/password auth via Supabase |
+
+**Auth**: Middleware (`middleware.ts`) protects `/dashboard`, `/screener`, `/gen-job` via Supabase SSR cookies. Redirects to `/login?redirect=[pathname]`.
+
+**API Routes** (`app/api/`):
+- `chat/` — Gemini chat proxy. Payload: `{ message, systemPrompt, history[] }`. Uses direct Google SDK (`gemini-2.0-flash`), NOT the AI Gateway.
+- `deepgram/` — Returns STT API key
+- `deepgram-tts/` — Returns TTS API key
+- `end-interview/` — Finalizes Round 1, scores transcript, stores result
+- `end-interview-round2/` — Finalizes Round 2
+
+**Server Actions** (`app/actions/`) — All use `'use server'` directive:
+- `generateJob.ts` — Job description via `generateText()`
+- `generateQuestions.ts` — Structured question generation via `generateObject()` + Zod schema
+- `generateDossier.ts` — Round 1 transcript analysis → Round 2 probe questions via `generateObject()` + Zod
+- `generateFinalVerdict.ts` — Hiring verdict via `generateObject()` + Zod schema
+- `sendInvite.ts` — Gmail OAuth2 email dispatch. Calls `generateDossier()` before Round 2 invite.
+- `bulkScreen.ts` — Batch CV screening
+
+**Key component**: `components/VoiceAvatar.tsx` (~820 LOC) — Main interview UI handling Deepgram WebSocket STT, Gemini chat, and TTS playback. Conversation history maintained in React refs.
+
+### AI SDK Configuration
+
+**Two separate AI integrations exist — do not confuse them:**
+
+1. **Vercel AI Gateway** (`lib/ai.ts`) — Used by server actions
+   - `gemini` → `google/gemini-2.5-flash` (fast, simple tasks)
+   - `geminiPro` → `google/gemini-3-pro-preview` (complex reasoning)
+   - Requires `AI_GATEWAY_API_KEY`
+   - Uses `generateText()` and `generateObject()` from `ai` package
+
+2. **Direct Google SDK** (`app/api/chat/route.ts`) — Used by real-time interview chat
+   - Uses `@google/generative-ai` directly for streaming responses
+   - Requires `GEMINI_API_KEY`
+   - Necessary for low-latency voice interview loop (agents/tool loops add too much latency)
+
+**Pattern**: Use AI Gateway for background/async tasks (scoring, dossier, questions). Use direct SDK for real-time voice streaming where latency matters.
 
 ### Backend (Railway) — Python 3.11+
-- **`listener.py`**: Main orchestrator running a continuous 60-second loop that calls the pipeline stages in order
-- **`read/ingest.py`**: Fetches unread emails from Gmail "Applications" label, extracts resume attachments (PDF/DOCX), parses with Gemini, stores candidates in Supabase
-- **`grader.py`**: Scores ungraded candidates against job descriptions using Gemini JSON mode (score ≥ 70 passes)
-- **`mailer.py`**: Sends questionnaire emails (Dubai roles for visa check) or interview invite emails with unique token links
-- **`utils.py`**: Shared initialization for Gmail API (OAuth2), Gemini client, and Supabase client
+
+- **`listener.py`**: Main orchestrator — continuous 60-second loop calling pipeline stages. Includes **Visa Gatekeeper** for Dubai roles (SMS-style questionnaire before interview invite, validates visa types via Gemini JSON mode).
+- **`read/ingest.py`**: Gmail "Applications" label → resume extraction (PDF/DOCX) → Gemini parsing → Supabase
+- **`grader.py`**: Scores candidates against job descriptions (Gemini JSON mode, score ≥ 70 passes)
+- **`mailer.py`**: Sends questionnaire or interview invite emails with token links
+- **`utils.py`**: Shared Gmail OAuth2, Gemini client, Supabase client initialization
 
 ### Pipeline Flow
 ```
-Email arrives → ingest.py parses resume → grader.py scores (Gemini) → mailer.py sends invite
-→ Candidate opens /interview/[token] → Voice interview (Deepgram STT + Gemini + Deepgram TTS)
-→ /api/end-interview scores & stores transcript → HR reviews on /dashboard
-→ Optional Round 2 invite → /round2/[token] → same voice pipeline
+Email → ingest.py (parse resume) → grader.py (score ≥70?) → mailer.py (send invite)
+  → /interview/[token] (Wayne: personality) → /api/end-interview (score + transcript)
+  → HR dashboard review → inviteToRound2() triggers generateDossier()
+  → /round2/[token] (Atlas: technical, uses probe questions from dossier)
+  → /api/end-interview-round2 → generateFinalVerdict() → HR final review
 ```
 
 ### Candidate Status Progression
 `NEW_APPLICATION` → `GRADED` (or `CV_REJECTED`) → `INVITE_SENT` → `INTERVIEW_STARTED` → `COMPLETED`
 
 ### Database (Supabase)
-Two tables: `jobs` (id, title, description) and `candidates` (tracking all candidate state — scores, transcripts, tokens, status, metadata JSONB). The `interview_token` UUID field generates secure, unguessable interview links.
+
+Two tables: `jobs` and `candidates`. The `candidates` table tracks all state — scores, transcripts, tokens, status, metadata JSONB, `round_1_dossier` (probe questions array), `round_1_full_dossier` (structured analysis). The `interview_token` UUID field generates secure interview links. Pending migration in `migrations/001_enhance_jobs_table.sql` adds 30+ fields to jobs (salary ranges, visa sponsorship, skills arrays, etc).
+
+### Supabase Client Architecture
+- `lib/supabase-browser.ts` — `createBrowserClient` (SSR-safe, for client components)
+- `lib/supabaseClient.ts` — Direct `createClient` (simpler, for quick operations)
+- `lib/supabase-server.ts` — Server-side client (for middleware/server actions)
 
 ## Environment Variables
 
 ### Frontend (`frontend/.env.local`)
-`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `DEEPGRAM_API_KEY`, `GEMINI_API_KEY`
+- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Supabase connection
+- `DEEPGRAM_API_KEY` — Speech-to-text and TTS
+- `GEMINI_API_KEY` — Direct Google SDK (real-time chat routes)
+- `AI_GATEWAY_API_KEY` — Vercel AI Gateway (server actions)
 
 ### Backend (`backend/.env`)
-`SUPABASE_URL`, `SUPABASE_KEY`, `GEMINI_API_KEY`, `GOOGLE_CREDENTIALS_JSON` (full credentials.json as string), `GOOGLE_TOKEN_JSON` (full token.json as string)
+- `SUPABASE_URL`, `SUPABASE_KEY`
+- `GEMINI_API_KEY`
+- `GOOGLE_CREDENTIALS_JSON` (full credentials.json as string)
+- `GOOGLE_TOKEN_JSON` (full token.json as string)
 
 ## Key Patterns
 
-- **Gemini JSON mode**: Used in grader.py and ingest.py with regex fallback parsing when JSON response is malformed
-- **Gmail OAuth2**: Production mode reads credentials from env vars (JSON strings); local dev uses `credentials.json`/`token.json` files. Token refresh is handled automatically.
-- **Voice interview pipeline**: Deepgram WebSocket for real-time STT → Gemini chat API with system prompts defining interviewer personality → Deepgram Aura TTS for spoken responses. Conversation history maintained in React refs.
-- **Interview security**: UUID tokens for links, status-gated retake prevention, `created_at` field prevents emailing legacy candidates
+- **Dual AI SDK approach**: Vercel AI Gateway (`lib/ai.ts`) for async server actions with structured outputs. Direct Google SDK for real-time voice interview chat where latency is critical.
+- **Structured AI outputs**: Server actions use `generateObject()` with Zod schemas for type-safe responses (questions, dossiers, verdicts). Schemas are defined inline in each action file.
+- **Gemini JSON mode (backend)**: Used in grader.py and ingest.py with regex fallback parsing when JSON response is malformed.
+- **Gmail OAuth2**: Production reads credentials from env vars (JSON strings); local dev uses files. Token refresh is automatic.
+- **Voice interview pipeline**: Deepgram WebSocket for real-time STT → Gemini chat API with system prompts defining interviewer personality → Deepgram Aura TTS for spoken responses.
+- **Interview security**: UUID tokens for links, status-gated retake prevention, `created_at` field prevents emailing legacy candidates.
+- **Dossier pipeline**: When HR invites to Round 2, `sendInvite.ts` auto-calls `generateDossier()` which analyzes Round 1 transcript and generates probe questions. Atlas reads these from `round_1_dossier` column.
+- **Database migration rule**: When adding code that references new columns, tables, or schema changes, ALWAYS create a numbered migration file in `migrations/` (e.g., `002_description.sql`) and inform the user to apply it via Supabase SQL editor. Never assume schema changes exist without verifying.

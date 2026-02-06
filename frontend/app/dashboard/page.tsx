@@ -1,11 +1,60 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { sendInterviewInvite, inviteToRound2 } from '@/app/actions/sendInvite';
-import { Trophy, AlertCircle, Clock, Eye, X, FileText, Brain, Briefcase, Send, ArrowRight, Filter, Zap, Search, Video, LogOut, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import {
+  Trophy,
+  Clock,
+  Eye,
+  FileText,
+  Brain,
+  Briefcase,
+  Send,
+  ArrowRight,
+  Filter,
+  Zap,
+  Search,
+  Video,
+  LogOut,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Plus,
+  Loader2
+} from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+
+// shadcn components
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 
 interface Candidate {
   id: number;
@@ -56,8 +105,8 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<Stats>({ total: 0, round1Done: 0, round2Done: 0, completed: 0 });
 
   // Filters
-  const [searchInput, setSearchInput] = useState(''); // Immediate input value
-  const [searchQuery, setSearchQuery] = useState(''); // Debounced value for API
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [stageFilter, setStageFilter] = useState<string>('all');
 
@@ -76,25 +125,21 @@ export default function DashboardPage() {
   // Fetch stats (runs once on mount)
   const fetchStats = useCallback(async () => {
     try {
-      // Get total count
       const { count: total } = await supabase
         .from('candidates')
         .select('*', { count: 'exact', head: true });
 
-      // Get round 1 done count
       const { count: round1Done } = await supabase
         .from('candidates')
         .select('*', { count: 'exact', head: true })
         .not('rating', 'is', null)
         .or('current_stage.is.null,current_stage.eq.round_1');
 
-      // Get round 2 count
       const { count: round2Done } = await supabase
         .from('candidates')
         .select('*', { count: 'exact', head: true })
         .or('current_stage.eq.round_2,current_stage.eq.completed');
 
-      // Get completed count
       const { count: completed } = await supabase
         .from('candidates')
         .select('*', { count: 'exact', head: true })
@@ -142,12 +187,10 @@ export default function DashboardPage() {
       const from = (currentPage - 1) * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
 
-      // Build the query
       let query = supabase
         .from('candidates')
         .select('id, full_name, email, rating, round_2_rating, jd_match_score, ai_summary, status, current_stage, interview_transcript, round_2_transcript, resume_text, job_id, final_verdict, interview_token, created_at, video_url, round_2_video_url', { count: 'exact' });
 
-      // Apply filters
       if (searchQuery) {
         query = query.or(`full_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
       }
@@ -173,7 +216,6 @@ export default function DashboardPage() {
         }
       }
 
-      // Apply ordering and pagination
       const { data, error, count } = await query
         .order('rating', { ascending: false, nullsFirst: false })
         .range(from, to);
@@ -183,7 +225,6 @@ export default function DashboardPage() {
         return;
       }
 
-      // Merge job titles
       const candidatesWithJobs = (data || []).map(candidate => ({
         ...candidate,
         job_title: candidate.job_id ? jobMap.get(candidate.job_id) || 'Unknown Role' : undefined,
@@ -198,63 +239,56 @@ export default function DashboardPage() {
     }
   }, [currentPage, searchQuery, roleFilter, stageFilter, jobMap]);
 
-  // Initial data fetch
   useEffect(() => {
     fetchStats();
     fetchJobs();
   }, [fetchStats, fetchJobs]);
 
-  // Fetch candidates when filters/pagination change
   useEffect(() => {
     if (jobMap.size > 0 || jobs.length === 0) {
       fetchCandidates();
     }
   }, [fetchCandidates, jobMap, jobs.length]);
 
-  // Debounce search input (300ms delay)
   useEffect(() => {
     const timer = setTimeout(() => {
       setSearchQuery(searchInput);
     }, 300);
-
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, roleFilter, stageFilter]);
 
-  // Get stage display
   const getStageDisplay = (candidate: Candidate) => {
     const stage = candidate.current_stage || 'round_1';
     if (stage === 'completed') {
-      return { label: 'Completed', bg: 'bg-emerald-500/20', text: 'text-emerald-400' };
+      return { label: 'Completed', variant: 'default' as const, className: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' };
     }
     if (stage === 'round_2') {
-      return { label: 'Round 2', bg: 'bg-blue-500/20', text: 'text-blue-400' };
+      return { label: 'Round 2', variant: 'default' as const, className: 'bg-blue-500/20 text-blue-400 border-blue-500/30' };
     }
     if (candidate.rating !== null) {
-      return { label: 'R1 Done', bg: 'bg-yellow-500/20', text: 'text-yellow-400' };
+      return { label: 'R1 Done', variant: 'default' as const, className: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' };
     }
-    return { label: 'Pending', bg: 'bg-slate-700', text: 'text-slate-400' };
+    return { label: 'Pending', variant: 'secondary' as const, className: '' };
   };
 
-  // Score bar component
   const ScoreBar = ({ score, label, color }: { score: number | null, label: string, color: string }) => {
     if (score === null) {
       return (
         <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-500 w-12">{label}</span>
-          <div className="w-16 h-2 bg-slate-700 rounded-full" />
-          <span className="text-xs text-slate-500">—</span>
+          <span className="text-xs text-muted-foreground w-12">{label}</span>
+          <div className="w-16 h-2 bg-muted rounded-full" />
+          <span className="text-xs text-muted-foreground">—</span>
         </div>
       );
     }
     return (
       <div className="flex items-center gap-2">
-        <span className="text-xs text-slate-500 w-12">{label}</span>
-        <div className="w-16 h-2 bg-slate-700 rounded-full overflow-hidden">
+        <span className="text-xs text-muted-foreground w-12">{label}</span>
+        <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
           <div
             className={`h-full rounded-full ${color}`}
             style={{ width: `${score}%` }}
@@ -267,7 +301,6 @@ export default function DashboardPage() {
     );
   };
 
-  // Handle send invite
   const handleSendInvite = async (candidateId: number) => {
     setSendingInvite(candidateId);
     const result = await sendInterviewInvite(candidateId);
@@ -281,7 +314,6 @@ export default function DashboardPage() {
     setSendingInvite(null);
   };
 
-  // Handle invite to round 2
   const handleInviteRound2 = async (candidateId: number) => {
     setSendingInvite(candidateId);
     const result = await inviteToRound2(candidateId);
@@ -295,14 +327,12 @@ export default function DashboardPage() {
     setSendingInvite(null);
   };
 
-  // Pagination controls
   const goToPage = (page: number) => {
     if (page >= 1 && page <= totalPages) {
       setCurrentPage(page);
     }
   };
 
-  // Generate page numbers to display
   const getPageNumbers = () => {
     const pages: (number | string)[] = [];
     const maxVisible = 5;
@@ -333,398 +363,395 @@ export default function DashboardPage() {
   const endIndex = Math.min(currentPage * PAGE_SIZE, totalCount);
 
   return (
-    <div className="min-h-screen bg-slate-900 p-8">
+    <div className="min-h-screen bg-background p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-emerald-500/20 rounded-xl">
-              <Trophy className="w-8 h-8 text-emerald-500" />
-            </div>
+            <Image
+              src="/logo.jfif"
+              alt="Printerpix"
+              width={48}
+              height={48}
+              className="rounded-xl"
+            />
             <div>
-              <h1 className="text-3xl font-bold text-white">Talent Pipeline</h1>
-              <p className="text-slate-400">2-Round AI Interview Leaderboard</p>
+              <h1 className="text-3xl font-bold">Talent Pipeline</h1>
+              <p className="text-muted-foreground">2-Round AI Interview Leaderboard</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Link
-              href="/screener"
-              className="flex items-center gap-2 px-4 py-2 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 rounded-lg transition-colors"
-            >
-              <Zap className="w-4 h-4" />
-              Bulk Screener
-            </Link>
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-colors"
-              title="Sign out"
-            >
+            <Button asChild>
+              <Link href="/gen-job">
+                <Plus className="w-4 h-4 mr-2" />
+                Create Job
+              </Link>
+            </Button>
+            <Button variant="outline" asChild className="bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 border-yellow-500/30">
+              <Link href="/screener">
+                <Zap className="w-4 h-4 mr-2" />
+                Bulk Screener
+              </Link>
+            </Button>
+            <Button variant="ghost" size="icon" onClick={handleLogout} title="Sign out">
               <LogOut className="w-4 h-4" />
-            </button>
+            </Button>
           </div>
         </div>
 
         {/* Stats Row */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-slate-800 rounded-xl p-4">
-            <p className="text-slate-400 text-sm">Total Candidates</p>
-            <p className="text-2xl font-bold text-white">{stats.total}</p>
-          </div>
-          <div className="bg-slate-800 rounded-xl p-4">
-            <p className="text-slate-400 text-sm">Round 1 Complete</p>
-            <p className="text-2xl font-bold text-yellow-400">{stats.round1Done}</p>
-          </div>
-          <div className="bg-slate-800 rounded-xl p-4">
-            <p className="text-slate-400 text-sm">In Round 2</p>
-            <p className="text-2xl font-bold text-blue-400">{stats.round2Done}</p>
-          </div>
-          <div className="bg-slate-800 rounded-xl p-4">
-            <p className="text-slate-400 text-sm">Fully Completed</p>
-            <p className="text-2xl font-bold text-emerald-400">{stats.completed}</p>
-          </div>
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-muted-foreground text-sm">Total Candidates</p>
+              <p className="text-2xl font-bold">{stats.total}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-muted-foreground text-sm">Round 1 Complete</p>
+              <p className="text-2xl font-bold text-yellow-400">{stats.round1Done}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-muted-foreground text-sm">In Round 2</p>
+              <p className="text-2xl font-bold text-blue-400">{stats.round2Done}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-muted-foreground text-sm">Fully Completed</p>
+              <p className="text-2xl font-bold text-emerald-400">{stats.completed}</p>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Search & Filters */}
         <div className="flex items-center gap-4 mb-6">
-          {/* Search */}
           <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
+            <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+            <Input
               type="text"
               placeholder="Search by name or email..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              className="pl-9 pr-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 w-72"
+              className="pl-9 w-72"
             />
           </div>
 
-          <div className="w-px h-6 bg-slate-700" />
+          <div className="w-px h-6 bg-border" />
 
           <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-slate-400" />
-            <span className="text-slate-400 text-sm">Filters:</span>
+            <Filter className="w-4 h-4 text-muted-foreground" />
+            <span className="text-muted-foreground text-sm">Filters:</span>
           </div>
 
-          {/* Role Filter */}
-          <select
-            value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          >
-            <option value="all">All Roles</option>
-            {jobs.map(job => (
-              <option key={job.id} value={job.id}>{job.title}</option>
-            ))}
-          </select>
+          <Select value={roleFilter} onValueChange={setRoleFilter}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="All Roles" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Roles</SelectItem>
+              {jobs.map(job => (
+                <SelectItem key={job.id} value={job.id}>{job.title}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-          {/* Stage Filter */}
-          <select
-            value={stageFilter}
-            onChange={(e) => setStageFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          >
-            <option value="all">All Stages</option>
-            <option value="not_interviewed">Not Interviewed</option>
-            <option value="round_1">Round 1 Done</option>
-            <option value="round_2">In Round 2</option>
-            <option value="completed">Completed</option>
-          </select>
+          <Select value={stageFilter} onValueChange={setStageFilter}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="All Stages" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Stages</SelectItem>
+              <SelectItem value="not_interviewed">Not Interviewed</SelectItem>
+              <SelectItem value="round_1">Round 1 Done</SelectItem>
+              <SelectItem value="round_2">In Round 2</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Table */}
-        <div className="bg-slate-800 rounded-xl overflow-hidden">
-          {isLoading ? (
-            <div className="flex items-center justify-center p-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-emerald-500"></div>
-            </div>
-          ) : (
-            <>
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-slate-700">
-                    <th className="text-left text-slate-400 font-medium p-4">#</th>
-                    <th className="text-left text-slate-400 font-medium p-4">Name</th>
-                    <th className="text-left text-slate-400 font-medium p-4">Role</th>
-                    <th className="text-left text-slate-400 font-medium p-4">Date</th>
-                    <th className="text-left text-slate-400 font-medium p-4">CV</th>
-                    <th className="text-left text-slate-400 font-medium p-4">Stage</th>
-                    <th className="text-left text-slate-400 font-medium p-4">Scores</th>
-                    <th className="text-left text-slate-400 font-medium p-4">Verdict</th>
-                    <th className="text-left text-slate-400 font-medium p-4">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {candidates.map((candidate, index) => {
-                    const stageDisplay = getStageDisplay(candidate);
-                    const canSendInvite = !candidate.rating && candidate.status !== 'INVITE_SENT';
-                    const canInviteR2 = candidate.rating !== null && candidate.rating >= 70 && candidate.current_stage !== 'round_2' && candidate.current_stage !== 'completed';
-                    const rowNumber = startIndex + index;
+        <Card>
+          <CardContent className="p-0">
+            {isLoading ? (
+              <div className="flex items-center justify-center p-12">
+                <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+              </div>
+            ) : (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12">#</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>CV</TableHead>
+                      <TableHead>Stage</TableHead>
+                      <TableHead>Scores</TableHead>
+                      <TableHead>Verdict</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {candidates.map((candidate, index) => {
+                      const stageDisplay = getStageDisplay(candidate);
+                      const canSendInvite = !candidate.rating && candidate.status !== 'INVITE_SENT';
+                      const canInviteR2 = candidate.rating !== null && candidate.rating >= 70 && candidate.current_stage !== 'round_2' && candidate.current_stage !== 'completed';
+                      const rowNumber = startIndex + index;
 
-                    return (
-                      <tr
-                        key={candidate.id}
-                        className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors"
-                      >
-                        {/* Rank */}
-                        <td className="p-4">
-                          <span className="text-slate-500 font-medium">
+                      return (
+                        <TableRow key={candidate.id}>
+                          <TableCell className="text-muted-foreground font-medium">
                             {rowNumber}
-                          </span>
-                        </td>
+                          </TableCell>
 
-                        {/* Name */}
-                        <td className="p-4">
-                          <div>
-                            <p className="text-white font-medium">{candidate.full_name}</p>
-                            <p className="text-slate-500 text-sm">{candidate.email}</p>
-                          </div>
-                        </td>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{candidate.full_name}</p>
+                              <p className="text-muted-foreground text-sm">{candidate.email}</p>
+                            </div>
+                          </TableCell>
 
-                        {/* Role */}
-                        <td className="p-4">
-                          <span className="text-slate-300 text-sm">
+                          <TableCell className="text-sm">
                             {candidate.job_title || '—'}
-                          </span>
-                        </td>
+                          </TableCell>
 
-                        {/* Date Added */}
-                        <td className="p-4">
-                          <span className="text-slate-400 text-sm">
+                          <TableCell className="text-muted-foreground text-sm">
                             {candidate.created_at
                               ? new Date(candidate.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
                               : '—'}
-                          </span>
-                        </td>
+                          </TableCell>
 
-                        {/* CV Score */}
-                        <td className="p-4">
-                          {candidate.jd_match_score !== null ? (
-                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                              candidate.jd_match_score >= 70 ? 'bg-emerald-500/20 text-emerald-400' :
-                              candidate.jd_match_score >= 50 ? 'bg-yellow-500/20 text-yellow-400' :
-                              'bg-red-500/20 text-red-400'
-                            }`}>
-                              {candidate.jd_match_score}
-                            </span>
-                          ) : (
-                            <span className="text-slate-500 text-sm">—</span>
-                          )}
-                        </td>
+                          <TableCell>
+                            {candidate.jd_match_score !== null ? (
+                              <Badge className={`${
+                                candidate.jd_match_score >= 70 ? 'bg-emerald-500/20 text-emerald-400' :
+                                candidate.jd_match_score >= 50 ? 'bg-yellow-500/20 text-yellow-400' :
+                                'bg-red-500/20 text-red-400'
+                              }`}>
+                                {candidate.jd_match_score}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">—</span>
+                            )}
+                          </TableCell>
 
-                        {/* Stage */}
-                        <td className="p-4">
-                          <span className={`px-2 py-1 rounded-full text-xs ${stageDisplay.bg} ${stageDisplay.text}`}>
-                            {stageDisplay.label}
-                          </span>
-                        </td>
+                          <TableCell>
+                            <Badge variant={stageDisplay.variant} className={stageDisplay.className}>
+                              {stageDisplay.label}
+                            </Badge>
+                          </TableCell>
 
-                        {/* Scores */}
-                        <td className="p-4">
-                          <div className="space-y-1">
-                            <ScoreBar
-                              score={candidate.rating}
-                              label="Hunger"
-                              color={candidate.rating && candidate.rating >= 70 ? 'bg-emerald-500' : candidate.rating && candidate.rating >= 50 ? 'bg-yellow-500' : 'bg-red-500'}
-                            />
-                            <ScoreBar
-                              score={candidate.round_2_rating}
-                              label="Skills"
-                              color={candidate.round_2_rating && candidate.round_2_rating >= 70 ? 'bg-blue-500' : candidate.round_2_rating && candidate.round_2_rating >= 50 ? 'bg-yellow-500' : 'bg-red-500'}
-                            />
-                          </div>
-                        </td>
+                          <TableCell>
+                            <div className="space-y-1">
+                              <ScoreBar
+                                score={candidate.rating}
+                                label="Hunger"
+                                color={candidate.rating && candidate.rating >= 70 ? 'bg-emerald-500' : candidate.rating && candidate.rating >= 50 ? 'bg-yellow-500' : 'bg-red-500'}
+                              />
+                              <ScoreBar
+                                score={candidate.round_2_rating}
+                                label="Skills"
+                                color={candidate.round_2_rating && candidate.round_2_rating >= 70 ? 'bg-blue-500' : candidate.round_2_rating && candidate.round_2_rating >= 50 ? 'bg-yellow-500' : 'bg-red-500'}
+                              />
+                            </div>
+                          </TableCell>
 
-                        {/* Verdict */}
-                        <td className="p-4">
-                          {candidate.final_verdict ? (
-                            <span className={`px-2 py-1 rounded-full text-xs ${
-                              candidate.final_verdict.includes('Strong') ? 'bg-emerald-500/20 text-emerald-400' :
-                              candidate.final_verdict === 'Hire' ? 'bg-blue-500/20 text-blue-400' :
-                              candidate.final_verdict.includes('Weak') ? 'bg-yellow-500/20 text-yellow-400' :
-                              'bg-red-500/20 text-red-400'
-                            }`}>
-                              {candidate.final_verdict}
-                            </span>
-                          ) : (
-                            <span className="text-slate-500 text-sm">—</span>
-                          )}
-                        </td>
+                          <TableCell>
+                            {candidate.final_verdict ? (
+                              <Badge className={`${
+                                candidate.final_verdict.includes('Strong') ? 'bg-emerald-500/20 text-emerald-400' :
+                                candidate.final_verdict === 'Hire' ? 'bg-blue-500/20 text-blue-400' :
+                                candidate.final_verdict.includes('Weak') ? 'bg-yellow-500/20 text-yellow-400' :
+                                'bg-red-500/20 text-red-400'
+                              }`}>
+                                {candidate.final_verdict}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">—</span>
+                            )}
+                          </TableCell>
 
-                        {/* Actions */}
-                        <td className="p-4">
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => setSelectedCandidate(candidate)}
-                              className="p-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
-                              title="View Details"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
-
-                            {(candidate.video_url || candidate.round_2_video_url) && (
-                              <button
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="secondary"
+                                size="icon"
                                 onClick={() => setSelectedCandidate(candidate)}
-                                className="p-2 bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 rounded-lg transition-colors"
-                                title="Has Video Recording"
+                                title="View Details"
                               >
-                                <Video className="w-4 h-4" />
-                              </button>
-                            )}
+                                <Eye className="w-4 h-4" />
+                              </Button>
 
-                            {canSendInvite && (
-                              <button
-                                onClick={() => handleSendInvite(candidate.id)}
-                                disabled={sendingInvite === candidate.id}
-                                className="p-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50"
-                                title="Send Interview Invite"
-                              >
-                                <Send className="w-4 h-4" />
-                              </button>
-                            )}
+                              {(candidate.video_url || candidate.round_2_video_url) && (
+                                <Button
+                                  variant="secondary"
+                                  size="icon"
+                                  onClick={() => setSelectedCandidate(candidate)}
+                                  className="bg-purple-600/20 hover:bg-purple-600/30 text-purple-400"
+                                  title="Has Video Recording"
+                                >
+                                  <Video className="w-4 h-4" />
+                                </Button>
+                              )}
 
-                            {canInviteR2 && (
-                              <button
-                                onClick={() => handleInviteRound2(candidate.id)}
-                                disabled={sendingInvite === candidate.id}
-                                className="p-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors disabled:opacity-50"
-                                title="Invite to Round 2"
-                              >
-                                <ArrowRight className="w-4 h-4" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                              {canSendInvite && (
+                                <Button
+                                  size="icon"
+                                  onClick={() => handleSendInvite(candidate.id)}
+                                  disabled={sendingInvite === candidate.id}
+                                  className="bg-blue-600 hover:bg-blue-500"
+                                  title="Send Interview Invite"
+                                >
+                                  <Send className="w-4 h-4" />
+                                </Button>
+                              )}
 
-              {candidates.length === 0 && (
-                <div className="p-8 text-center text-slate-400">
-                  No candidates found matching your filters.
-                </div>
-              )}
-            </>
-          )}
+                              {canInviteR2 && (
+                                <Button
+                                  size="icon"
+                                  onClick={() => handleInviteRound2(candidate.id)}
+                                  disabled={sendingInvite === candidate.id}
+                                  className="bg-emerald-600 hover:bg-emerald-500"
+                                  title="Invite to Round 2"
+                                >
+                                  <ArrowRight className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
 
-          {/* Pagination */}
-          {totalCount > 0 && (
-            <div className="flex items-center justify-between p-4 border-t border-slate-700">
-              <p className="text-slate-400 text-sm">
-                Showing {startIndex} - {endIndex} of {totalCount} candidates
-              </p>
+                {candidates.length === 0 && (
+                  <div className="p-8 text-center text-muted-foreground">
+                    No candidates found matching your filters.
+                  </div>
+                )}
+              </>
+            )}
 
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => goToPage(1)}
-                  disabled={currentPage === 1}
-                  className="p-2 hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="First page"
-                >
-                  <ChevronsLeft className="w-4 h-4 text-slate-400" />
-                </button>
-                <button
-                  onClick={() => goToPage(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className="p-2 hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Previous page"
-                >
-                  <ChevronLeft className="w-4 h-4 text-slate-400" />
-                </button>
+            {/* Pagination */}
+            {totalCount > 0 && (
+              <div className="flex items-center justify-between p-4 border-t">
+                <p className="text-muted-foreground text-sm">
+                  Showing {startIndex} - {endIndex} of {totalCount} candidates
+                </p>
 
-                {getPageNumbers().map((page, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => typeof page === 'number' && goToPage(page)}
-                    disabled={page === '...'}
-                    className={`min-w-[36px] h-9 px-2 rounded-lg transition-colors ${
-                      page === currentPage
-                        ? 'bg-emerald-600 text-white'
-                        : page === '...'
-                        ? 'text-slate-500 cursor-default'
-                        : 'hover:bg-slate-700 text-slate-400'
-                    }`}
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => goToPage(1)}
+                    disabled={currentPage === 1}
+                    title="First page"
                   >
-                    {page}
-                  </button>
-                ))}
+                    <ChevronsLeft className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => goToPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    title="Previous page"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
 
-                <button
-                  onClick={() => goToPage(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  className="p-2 hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Next page"
-                >
-                  <ChevronRight className="w-4 h-4 text-slate-400" />
-                </button>
-                <button
-                  onClick={() => goToPage(totalPages)}
-                  disabled={currentPage === totalPages}
-                  className="p-2 hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Last page"
-                >
-                  <ChevronsRight className="w-4 h-4 text-slate-400" />
-                </button>
+                  {getPageNumbers().map((page, idx) => (
+                    <Button
+                      key={idx}
+                      variant={page === currentPage ? 'default' : 'ghost'}
+                      size="sm"
+                      onClick={() => typeof page === 'number' && goToPage(page)}
+                      disabled={page === '...'}
+                      className={page === currentPage ? 'bg-emerald-600 hover:bg-emerald-500' : ''}
+                    >
+                      {page}
+                    </Button>
+                  ))}
+
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => goToPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    title="Next page"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => goToPage(totalPages)}
+                    disabled={currentPage === totalPages}
+                    title="Last page"
+                  >
+                    <ChevronsRight className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Detail Modal */}
-      {selectedCandidate && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b border-slate-700">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center">
-                  <span className="text-emerald-400 font-bold text-lg">
-                    {selectedCandidate.full_name.charAt(0)}
-                  </span>
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-white">{selectedCandidate.full_name}</h2>
-                  <p className="text-slate-400">{selectedCandidate.job_title || 'No role specified'}</p>
-                </div>
+      <Dialog open={!!selectedCandidate} onOpenChange={() => setSelectedCandidate(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center">
+                <span className="text-emerald-400 font-bold text-lg">
+                  {selectedCandidate?.full_name.charAt(0)}
+                </span>
               </div>
-              <button
-                onClick={() => setSelectedCandidate(null)}
-                className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
-              >
-                <X className="w-6 h-6 text-slate-400" />
-              </button>
+              <div>
+                <DialogTitle className="text-xl">{selectedCandidate?.full_name}</DialogTitle>
+                <p className="text-muted-foreground">{selectedCandidate?.job_title || 'No role specified'}</p>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="overflow-y-auto flex-1 space-y-6 pr-2">
+            {/* Scores */}
+            <div className="grid grid-cols-2 gap-4">
+              <Card>
+                <CardContent className="pt-4">
+                  <p className="text-muted-foreground text-sm mb-1">Round 1: Hunger</p>
+                  <p className={`text-3xl font-bold ${
+                    selectedCandidate?.rating && selectedCandidate.rating >= 70 ? 'text-emerald-400' :
+                    selectedCandidate?.rating ? 'text-yellow-400' : 'text-muted-foreground'
+                  }`}>
+                    {selectedCandidate?.rating !== null ? `${selectedCandidate?.rating}/100` : 'Pending'}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4">
+                  <p className="text-muted-foreground text-sm mb-1">Round 2: Skills</p>
+                  <p className={`text-3xl font-bold ${
+                    selectedCandidate?.round_2_rating && selectedCandidate.round_2_rating >= 70 ? 'text-blue-400' :
+                    selectedCandidate?.round_2_rating ? 'text-yellow-400' : 'text-muted-foreground'
+                  }`}>
+                    {selectedCandidate?.round_2_rating !== null ? `${selectedCandidate?.round_2_rating}/100` : 'Pending'}
+                  </p>
+                </CardContent>
+              </Card>
             </div>
 
-            {/* Modal Body */}
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-180px)]">
-              {/* Scores */}
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div className="bg-slate-900 rounded-xl p-4">
-                  <p className="text-slate-400 text-sm mb-1">Round 1: Hunger</p>
-                  <p className={`text-3xl font-bold ${
-                    selectedCandidate.rating && selectedCandidate.rating >= 70 ? 'text-emerald-400' :
-                    selectedCandidate.rating ? 'text-yellow-400' : 'text-slate-500'
-                  }`}>
-                    {selectedCandidate.rating !== null ? `${selectedCandidate.rating}/100` : 'Pending'}
-                  </p>
-                </div>
-                <div className="bg-slate-900 rounded-xl p-4">
-                  <p className="text-slate-400 text-sm mb-1">Round 2: Skills</p>
-                  <p className={`text-3xl font-bold ${
-                    selectedCandidate.round_2_rating && selectedCandidate.round_2_rating >= 70 ? 'text-blue-400' :
-                    selectedCandidate.round_2_rating ? 'text-yellow-400' : 'text-slate-500'
-                  }`}>
-                    {selectedCandidate.round_2_rating !== null ? `${selectedCandidate.round_2_rating}/100` : 'Pending'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Final Verdict */}
-              {selectedCandidate.final_verdict && (
-                <div className="mb-6 p-4 bg-slate-900 rounded-xl">
-                  <p className="text-slate-400 text-sm mb-1">Final Verdict</p>
+            {/* Final Verdict */}
+            {selectedCandidate?.final_verdict && (
+              <Card>
+                <CardContent className="pt-4">
+                  <p className="text-muted-foreground text-sm mb-1">Final Verdict</p>
                   <p className={`text-2xl font-bold ${
                     selectedCandidate.final_verdict.includes('Strong') ? 'text-emerald-400' :
                     selectedCandidate.final_verdict === 'Hire' ? 'text-blue-400' :
@@ -732,33 +759,37 @@ export default function DashboardPage() {
                   }`}>
                     {selectedCandidate.final_verdict}
                   </p>
-                </div>
-              )}
+                </CardContent>
+              </Card>
+            )}
 
-              {/* AI Summary */}
-              {selectedCandidate.ai_summary && (
-                <div className="mb-6">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Brain className="w-5 h-5 text-purple-400" />
-                    <h3 className="text-lg font-semibold text-white">AI Summary</h3>
-                  </div>
-                  <div className="bg-slate-900 rounded-xl p-4">
-                    <p className="text-slate-300">{selectedCandidate.ai_summary}</p>
-                  </div>
+            {/* AI Summary */}
+            {selectedCandidate?.ai_summary && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Brain className="w-5 h-5 text-purple-400" />
+                  <h3 className="text-lg font-semibold">AI Summary</h3>
                 </div>
-              )}
+                <Card>
+                  <CardContent className="pt-4">
+                    <p>{selectedCandidate.ai_summary}</p>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
-              {/* Video Recordings */}
-              {(selectedCandidate.video_url || selectedCandidate.round_2_video_url) && (
-                <div className="mb-6">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Video className="w-5 h-5 text-purple-400" />
-                    <h3 className="text-lg font-semibold text-white">Interview Recordings</h3>
-                  </div>
-                  <div className="space-y-4">
-                    {selectedCandidate.video_url && (
-                      <div className="bg-slate-900 rounded-xl p-4">
-                        <p className="text-slate-400 text-sm mb-2">Round 1 Recording</p>
+            {/* Video Recordings */}
+            {(selectedCandidate?.video_url || selectedCandidate?.round_2_video_url) && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Video className="w-5 h-5 text-purple-400" />
+                  <h3 className="text-lg font-semibold">Interview Recordings</h3>
+                </div>
+                <div className="space-y-4">
+                  {selectedCandidate?.video_url && (
+                    <Card>
+                      <CardContent className="pt-4">
+                        <p className="text-muted-foreground text-sm mb-2">Round 1 Recording</p>
                         <video
                           src={selectedCandidate.video_url}
                           controls
@@ -767,11 +798,13 @@ export default function DashboardPage() {
                         >
                           Your browser does not support video playback.
                         </video>
-                      </div>
-                    )}
-                    {selectedCandidate.round_2_video_url && (
-                      <div className="bg-slate-900 rounded-xl p-4">
-                        <p className="text-slate-400 text-sm mb-2">Round 2 Recording</p>
+                      </CardContent>
+                    </Card>
+                  )}
+                  {selectedCandidate?.round_2_video_url && (
+                    <Card>
+                      <CardContent className="pt-4">
+                        <p className="text-muted-foreground text-sm mb-2">Round 2 Recording</p>
                         <video
                           src={selectedCandidate.round_2_video_url}
                           controls
@@ -780,78 +813,80 @@ export default function DashboardPage() {
                         >
                           Your browser does not support video playback.
                         </video>
-                      </div>
-                    )}
-                  </div>
+                      </CardContent>
+                    </Card>
+                  )}
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* Round 1 Transcript */}
-              {selectedCandidate.interview_transcript && (
-                <div className="mb-6">
-                  <div className="flex items-center gap-2 mb-3">
-                    <FileText className="w-5 h-5 text-yellow-400" />
-                    <h3 className="text-lg font-semibold text-white">Round 1 Transcript</h3>
-                  </div>
-                  <div className="bg-slate-900 rounded-xl p-4 max-h-48 overflow-y-auto">
-                    <pre className="text-slate-300 text-sm whitespace-pre-wrap font-mono">
+            {/* Round 1 Transcript */}
+            {selectedCandidate?.interview_transcript && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <FileText className="w-5 h-5 text-yellow-400" />
+                  <h3 className="text-lg font-semibold">Round 1 Transcript</h3>
+                </div>
+                <Card>
+                  <CardContent className="pt-4 max-h-48 overflow-y-auto">
+                    <pre className="text-sm whitespace-pre-wrap font-mono">
                       {selectedCandidate.interview_transcript}
                     </pre>
-                  </div>
-                </div>
-              )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
-              {/* Round 2 Transcript */}
-              {selectedCandidate.round_2_transcript && (
-                <div className="mb-6">
-                  <div className="flex items-center gap-2 mb-3">
-                    <FileText className="w-5 h-5 text-blue-400" />
-                    <h3 className="text-lg font-semibold text-white">Round 2 Transcript</h3>
-                  </div>
-                  <div className="bg-slate-900 rounded-xl p-4 max-h-48 overflow-y-auto">
-                    <pre className="text-slate-300 text-sm whitespace-pre-wrap font-mono">
+            {/* Round 2 Transcript */}
+            {selectedCandidate?.round_2_transcript && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <FileText className="w-5 h-5 text-blue-400" />
+                  <h3 className="text-lg font-semibold">Round 2 Transcript</h3>
+                </div>
+                <Card>
+                  <CardContent className="pt-4 max-h-48 overflow-y-auto">
+                    <pre className="text-sm whitespace-pre-wrap font-mono">
                       {selectedCandidate.round_2_transcript}
                     </pre>
-                  </div>
-                </div>
-              )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
-              {/* Resume */}
-              {selectedCandidate.resume_text && (
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <Briefcase className="w-5 h-5 text-emerald-400" />
-                    <h3 className="text-lg font-semibold text-white">Resume</h3>
-                  </div>
-                  <div className="bg-slate-900 rounded-xl p-4 max-h-48 overflow-y-auto">
-                    <p className="text-slate-300 text-sm whitespace-pre-wrap">
+            {/* Resume */}
+            {selectedCandidate?.resume_text && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Briefcase className="w-5 h-5 text-emerald-400" />
+                  <h3 className="text-lg font-semibold">Resume</h3>
+                </div>
+                <Card>
+                  <CardContent className="pt-4 max-h-48 overflow-y-auto">
+                    <p className="text-sm whitespace-pre-wrap">
                       {selectedCandidate.resume_text}
                     </p>
-                  </div>
-                </div>
-              )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
-              {/* No data state */}
-              {!selectedCandidate.ai_summary && !selectedCandidate.interview_transcript && (
-                <div className="text-center py-8">
-                  <Clock className="w-12 h-12 text-slate-500 mx-auto mb-4" />
-                  <p className="text-slate-400">Interview not completed yet</p>
-                </div>
-              )}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-6 border-t border-slate-700 flex justify-end gap-3">
-              <button
-                onClick={() => setSelectedCandidate(null)}
-                className="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
-              >
-                Close
-              </button>
-            </div>
+            {/* No data state */}
+            {!selectedCandidate?.ai_summary && !selectedCandidate?.interview_transcript && (
+              <div className="text-center py-8">
+                <Clock className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">Interview not completed yet</p>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedCandidate(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

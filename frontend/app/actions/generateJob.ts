@@ -1,6 +1,7 @@
 'use server';
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateText } from 'ai';
+import { gemini } from '@/lib/ai';
 
 interface JobGenerationParams {
   title: string;
@@ -15,18 +16,9 @@ interface JobGenerationParams {
 }
 
 export async function generateJobDescription(params: JobGenerationParams): Promise<string> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is not configured');
-  }
-
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-
   // Build context from optional fields
   const contextParts: string[] = [];
-  
+
   if (params.experienceLevel) {
     contextParts.push(`Experience Level: ${params.experienceLevel}`);
   }
@@ -46,7 +38,7 @@ export async function generateJobDescription(params: JobGenerationParams): Promi
     contextParts.push(`Company Perks to Highlight: ${params.companyPerks}`);
   }
 
-  const additionalContext = contextParts.length > 0 
+  const additionalContext = contextParts.length > 0
     ? `\n\nADDITIONAL CONTEXT:\n${contextParts.join('\n')}`
     : '';
 
@@ -71,9 +63,10 @@ OUTPUT FORMAT:
 - Tone: Professional, direct, and compelling. No fluff or buzzword overload.
 - Keep it concise but thorough.`;
 
-  const result = await model.generateContent(prompt);
-  const response = await result.response;
-  const text = response.text();
+  const { text } = await generateText({
+    model: gemini,
+    prompt,
+  });
 
   return text;
 }
