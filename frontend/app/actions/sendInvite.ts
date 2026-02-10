@@ -18,8 +18,11 @@ function getGmailService() {
   const tokenJson = process.env.GOOGLE_TOKEN_JSON;
   const credentialsJson = process.env.GOOGLE_CREDENTIALS_JSON;
 
+  console.log('[Gmail Init] GOOGLE_TOKEN_JSON present:', !!tokenJson, '| length:', tokenJson?.length ?? 0);
+  console.log('[Gmail Init] GOOGLE_CREDENTIALS_JSON present:', !!credentialsJson, '| length:', credentialsJson?.length ?? 0);
+
   if (!tokenJson || !credentialsJson) {
-    console.log('[Gmail] Missing GOOGLE_TOKEN_JSON or GOOGLE_CREDENTIALS_JSON');
+    console.log('[Gmail Init] MISSING env vars — cannot initialize Gmail');
     return null;
   }
 
@@ -27,6 +30,13 @@ function getGmailService() {
     const token = JSON.parse(tokenJson);
     const credentials = JSON.parse(credentialsJson);
     const clientConfig = credentials.installed || credentials.web || {};
+
+    console.log('[Gmail Init] Credential type:', credentials.installed ? 'installed (desktop)' : credentials.web ? 'web' : 'unknown');
+    console.log('[Gmail Init] Client ID:', clientConfig.client_id?.slice(0, 20) + '...');
+    console.log('[Gmail Init] Has client_secret:', !!clientConfig.client_secret);
+    console.log('[Gmail Init] Has access_token:', !!token.token);
+    console.log('[Gmail Init] Has refresh_token:', !!token.refresh_token);
+    console.log('[Gmail Init] Token expiry:', token.expiry || token.expiry_date || 'not set');
 
     const oauth2Client = new google.auth.OAuth2(
       clientConfig.client_id,
@@ -40,9 +50,10 @@ function getGmailService() {
       token_type: 'Bearer',
     });
 
+    console.log('[Gmail Init] OAuth2 client created successfully');
     return google.gmail({ version: 'v1', auth: oauth2Client });
   } catch (error) {
-    console.error('[Gmail] Failed to initialize:', error);
+    console.error('[Gmail Init] Failed to initialize:', error);
     return null;
   }
 }
@@ -104,36 +115,40 @@ export async function sendInterviewInvite(candidateId: number): Promise<SendInvi
     const interviewLink = `${INTERVIEW_BASE_URL}/${candidate.interview_token}`;
 
     // Send email via Gmail API
+    console.log(`[Send Invite] Attempting to send Round 1 invite to ${candidate.email} (candidate ${candidateId})`);
+    console.log(`[Send Invite] Job: "${jobTitle}" | Token: ${candidate.interview_token?.slice(0, 8)}...`);
+    console.log(`[Send Invite] Interview link: ${interviewLink}`);
+
     const gmail = getGmailService();
     if (gmail) {
       try {
         const htmlBody = `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #10b981;">Great News, ${candidate.full_name}!</h2>
-            
+
             <p>We've reviewed your application for <strong>${jobTitle}</strong> and would like to invite you to an AI Interview.</p>
-            
+
             <p>This is an innovative interview experience where you'll have a conversation with our AI interviewer. It takes about 10-15 minutes.</p>
-            
+
             <p style="font-weight: bold; color: #333;">Please complete your interview within 48 hours of receiving this email.</p>
-            
+
             <div style="margin: 30px 0;">
-              <a href="${interviewLink}" 
+              <a href="${interviewLink}"
                  style="background-color: #10b981; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold;">
                 Start Your Interview
               </a>
             </div>
-            
+
             <p style="color: #666; font-size: 14px;">
               <strong>Tips for success:</strong><br>
               • Find a quiet place with good lighting<br>
               • Use a computer with a webcam and microphone<br>
               • Speak naturally and be yourself
             </p>
-            
+
             <p>Best of luck!</p>
             <p><strong>${COMPANY_NAME} Recruiting Team</strong></p>
-            
+
             <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
             <p style="color: #999; font-size: 12px;">
               If the button doesn't work, copy this link: ${interviewLink}
@@ -147,19 +162,25 @@ export async function sendInterviewInvite(candidateId: number): Promise<SendInvi
           htmlBody
         );
 
-        await gmail.users.messages.send({
+        console.log(`[Send Invite] Sending via Gmail API...`);
+        const result = await gmail.users.messages.send({
           userId: 'me',
           requestBody: { raw: rawMessage },
         });
 
-        console.log(`[Send Invite] Gmail email sent to ${candidate.email}`);
-      } catch (emailError) {
-        console.error('[Send Invite] Gmail failed:', emailError);
-        return { success: false, error: 'Failed to send email via Gmail' };
+        console.log(`[Send Invite] SUCCESS — Gmail message ID: ${result.data.id}, threadId: ${result.data.threadId}`);
+      } catch (emailError: unknown) {
+        const err = emailError as { code?: number; message?: string; errors?: unknown[] };
+        console.error('[Send Invite] Gmail FAILED:', {
+          code: err.code,
+          message: err.message,
+          errors: err.errors,
+          full: emailError,
+        });
+        return { success: false, error: `Gmail send failed: ${err.message || 'Unknown error'}` };
       }
     } else {
-      console.log(`[Send Invite] No Gmail configured - would send to ${candidate.email}`);
-      console.log(`[Send Invite] Interview link: ${interviewLink}`);
+      console.log(`[Send Invite] No Gmail service available — skipping email send`);
     }
 
     // Update candidate status
@@ -226,36 +247,40 @@ export async function inviteToRound2(candidateId: number): Promise<SendInviteRes
     }
 
     // Send email via Gmail API
+    console.log(`[Round 2 Invite] Attempting to send Round 2 invite to ${candidate.email} (candidate ${candidateId})`);
+    console.log(`[Round 2 Invite] Job: "${jobTitle}" | Rating: ${candidate.rating} | Token: ${candidate.interview_token?.slice(0, 8)}...`);
+    console.log(`[Round 2 Invite] Round 2 link: ${round2Link}`);
+
     const gmail = getGmailService();
     if (gmail) {
       try {
         const htmlBody = `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #3b82f6;">Congratulations, ${candidate.full_name}!</h2>
-            
+
             <p>You've passed Round 1 of our interview process with a score of <strong>${candidate.rating}/100</strong>. Well done!</p>
-            
+
             <p>We'd like to invite you to <strong>Round 2: Technical Interview</strong> for the <strong>${jobTitle}</strong> position. In this round, you'll meet with our Technical Interviewer who will dive deeper into your technical skills and experience.</p>
-            
+
             <p style="font-weight: bold; color: #333;">To keep your application moving forward, please complete this step within the next 2 days.</p>
-            
+
             <div style="margin: 30px 0;">
-              <a href="${round2Link}" 
+              <a href="${round2Link}"
                  style="background-color: #3b82f6; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold;">
                 Start Round 2 Interview
               </a>
             </div>
-            
+
             <p style="color: #666; font-size: 14px;">
               <strong>What to expect:</strong><br>
               • Technical questions based on your experience<br>
               • Deep dive into your past projects<br>
               • About 15-20 minutes
             </p>
-            
+
             <p>Good luck!</p>
             <p><strong>${COMPANY_NAME} Recruiting Team</strong></p>
-            
+
             <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
             <p style="color: #999; font-size: 12px;">
               If the button doesn't work, copy this link: ${round2Link}
@@ -269,19 +294,25 @@ export async function inviteToRound2(candidateId: number): Promise<SendInviteRes
           htmlBody
         );
 
-        await gmail.users.messages.send({
+        console.log(`[Round 2 Invite] Sending via Gmail API...`);
+        const result = await gmail.users.messages.send({
           userId: 'me',
           requestBody: { raw: rawMessage },
         });
 
-        console.log(`[Round 2 Invite] Gmail email sent to ${candidate.email}`);
-      } catch (emailError) {
-        console.error('[Round 2 Invite] Gmail failed:', emailError);
-        return { success: false, error: 'Failed to send email via Gmail' };
+        console.log(`[Round 2 Invite] SUCCESS — Gmail message ID: ${result.data.id}, threadId: ${result.data.threadId}`);
+      } catch (emailError: unknown) {
+        const err = emailError as { code?: number; message?: string; errors?: unknown[] };
+        console.error('[Round 2 Invite] Gmail FAILED:', {
+          code: err.code,
+          message: err.message,
+          errors: err.errors,
+          full: emailError,
+        });
+        return { success: false, error: `Gmail send failed: ${err.message || 'Unknown error'}` };
       }
     } else {
-      console.log(`[Round 2 Invite] No Gmail configured - would send to ${candidate.email}`);
-      console.log(`[Round 2 Invite] Link: ${round2Link}`);
+      console.log(`[Round 2 Invite] No Gmail service available — skipping email send`);
     }
 
     // Update to round 2

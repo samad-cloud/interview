@@ -40,7 +40,7 @@ Please do ensure you revisit the job advert with regards to salary on offer - we
 
 Best,
 {company_name} Recruiting
-Tejas Kambli, HR Assistant
+John Poole, Recruitment Manager
 """
 
 # Direct interview invite (non-Dubai)
@@ -57,7 +57,7 @@ The interview takes about 20-30 minutes and can be done at your convenience.
 
 Best of luck!
 {company_name} Recruiting
-Tejas Kambli, HR Assistant
+John Poole, Recruitment Manager
 """
 
 

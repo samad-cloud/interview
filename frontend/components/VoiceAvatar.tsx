@@ -1114,8 +1114,8 @@ Round: ${round}
           <div className="mt-6 pt-4 border-t border-slate-800">
             <p className="text-slate-500 text-xs">
               Experienced a technical issue? Contact us at{' '}
-              <a href="mailto:samad.abbas@printerpix.com" className="text-cyan-400 hover:text-cyan-300 underline">
-                samad.abbas@printerpix.com
+              <a href="mailto:printerpix.recruitment@gmail.com" className="text-cyan-400 hover:text-cyan-300 underline">
+                printerpix.recruitment@gmail.com
               </a>
             </p>
           </div>
