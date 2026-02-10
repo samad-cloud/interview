@@ -15,10 +15,6 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Printerpix Recruitment",
   description: "Printerpix Recruitment",
-  icons: {
-    icon: "/logo.jfif",
-    apple: "/logo.jfif",
-  },
 };
 
 export default function RootLayout({
