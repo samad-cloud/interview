@@ -210,7 +210,7 @@ def parse_resume(filepath):
             
             # Use Gemini to clean up and structure the text
             response = gemini_client.models.generate_content(
-                model="gemini-2.0-flash",
+                model="gemini-2.5-flash",
                 contents=f"Clean up and format this resume text. Return it in a readable format:\n\n{raw_text}"
             )
             return response.text
@@ -223,7 +223,7 @@ def parse_resume(filepath):
         uploaded_file = gemini_client.files.upload(file=filepath, config={"mime_type": "application/pdf"})
         
         response = gemini_client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             contents=[
                 uploaded_file,
                 "Extract all text content from this resume PDF. Return the full text in a clean, readable format."

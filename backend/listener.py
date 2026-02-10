@@ -53,13 +53,16 @@ VALID (return true):
 - Freelance Visa, Investor Visa, Family Visa
 - UAE National, GCC National, Citizen
 - Already has work permit / residency that allows job change
+- Residence Visa,Employment Visa, Student Visa, etc.
 
 INVALID (return false):
 - Employer Visa / Employment Visa (tied to current employer)
 - Needs Sponsorship / Labour Transfer
 - Tourist Visa, Visit Visa
 - No valid visa / Expired visa
-- Student Visa (unless they specify they can work)
+
+
+If they have a residence visa, employment visa, student visa, etc. then they are valid. It needs to be a visa that allows them to work with a new employer without sponsorship.
 
 Return ONLY a valid JSON object: {{"has_valid_visa": true}} or {{"has_valid_visa": false}}"""
 
@@ -75,7 +78,7 @@ Please use the link below to complete your interview within 48 hours:
 
 Best,
 {company_name} Recruiting
-Tejas Kambli, HR Assistant
+John Poole, Recruitment Manager
 """
 
 REJECTION_EMAIL = """Hi {full_name},
@@ -87,7 +90,7 @@ We will keep your resume on file for future opportunities.
 Best of luck in your job search!
 
 {company_name} Recruiting
-Tejas Kambli, HR Assistant
+John Poole, Recruitment Manager
 """
 
 
@@ -142,53 +145,31 @@ def get_email_body(gmail_service, msg_id: str) -> str:
 
 
 def analyze_visa_status(gemini_client, reply_text: str) -> bool:
-    """Use Gemini to analyze if candidate has valid visa."""
+    """Use Gemini to analyze if candidate has valid visa using structured output."""
     prompt = VISA_CHECK_PROMPT.format(reply_text=reply_text)
-    
-    # Use JSON mode for guaranteed valid JSON output
-    response = gemini_client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=prompt,
-        config={
-            "response_mime_type": "application/json",
-        }
+
+    from google.genai import types
+
+    visa_schema = types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "has_valid_visa": types.Schema(type=types.Type.BOOLEAN),
+        },
+        required=["has_valid_visa"],
     )
-    
-    response_text = response.text.strip()
-    
-    try:
-        result = json.loads(response_text)
-        return result.get("has_valid_visa", False)
-    except json.JSONDecodeError:
-        # Fallback: check the CANDIDATE'S REPLY (not Gemini's response) for valid visa keywords
-        log("WARN", f"Gemini JSON parse failed. Checking candidate reply directly...")
-        candidate_reply_lower = reply_text.lower()
-        
-        # Valid visa keywords
-        valid_keywords = [
-            "golden visa", "gold visa", "personal visa", "freelance visa",
-            "investor visa", "family visa", "green card", "permanent resident",
-            "citizen", "national", "residency", "work permit"
-        ]
-        
-        # Invalid visa keywords (check these first)
-        invalid_keywords = [
-            "employer visa", "employment visa", "need sponsor", "sponsorship",
-            "tourist visa", "visit visa", "no visa", "expired"
-        ]
-        
-        for keyword in invalid_keywords:
-            if keyword in candidate_reply_lower:
-                log("INFO", f"Fallback detected INVALID keyword: '{keyword}'")
-                return False
-        
-        for keyword in valid_keywords:
-            if keyword in candidate_reply_lower:
-                log("INFO", f"Fallback detected VALID keyword: '{keyword}'")
-                return True
-        
-        log("WARN", f"Fallback couldn't determine visa status. Defaulting to VALID to avoid false rejections.")
-        return True  # Default to valid to avoid wrongly rejecting candidates
+
+    response = gemini_client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=visa_schema,
+        ),
+    )
+
+    result = json.loads(response.text.strip())
+    log("INFO", f"Visa structured output: {result}")
+    return result["has_valid_visa"]
 
 
 def create_email_message(to_email: str, subject: str, body: str) -> dict:

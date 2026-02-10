@@ -35,38 +35,33 @@ def fetch_ungraded_candidates(supabase):
 
 
 def grade_candidate(gemini_client, resume_text: str, job_description: str) -> dict:
-    """Use Gemini to score the candidate against the job description."""
+    """Use Gemini to score the candidate against the job description using structured output."""
     prompt = GRADING_PROMPT.format(
         job_description=job_description,
         resume_text=resume_text
     )
-    
-    # Use JSON mode for guaranteed valid JSON output
-    response = gemini_client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=prompt,
-        config={
-            "response_mime_type": "application/json",
-        }
+
+    from google.genai import types
+
+    grading_schema = types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "score": types.Schema(type=types.Type.INTEGER),
+            "reasoning": types.Schema(type=types.Type.STRING),
+        },
+        required=["score", "reasoning"],
     )
-    
-    # With JSON mode, response is guaranteed valid JSON
-    response_text = response.text.strip()
-    
-    try:
-        return json.loads(response_text)
-    except json.JSONDecodeError as e:
-        # Fallback: try to extract score with regex if JSON parsing fails
-        import re
-        score_match = re.search(r'"score"\s*:\s*(\d+)', response_text)
-        reasoning_match = re.search(r'"reasoning"\s*:\s*"([^"]+)"', response_text)
-        
-        if score_match:
-            return {
-                "score": int(score_match.group(1)),
-                "reasoning": reasoning_match.group(1) if reasoning_match else "Score extracted from malformed response"
-            }
-        raise e  # Re-raise if we can't extract anything
+
+    response = gemini_client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=grading_schema,
+        ),
+    )
+
+    return json.loads(response.text.strip())
 
 
 def update_candidate_grade(supabase, candidate_id: int, score: int, reasoning: str, existing_metadata: dict):
