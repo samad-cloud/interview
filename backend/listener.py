@@ -53,13 +53,15 @@ VALID (return true):
 - Freelance Visa, Investor Visa, Family Visa
 - UAE National, GCC National, Citizen
 - Already has work permit / residency that allows job change
-- Residence Visa,Employment Visa, Student Visa, etc.
+- Residence Visa, Student Visa, etc.
 
-INVALID (return false):
-- Employer Visa / Employment Visa (tied to current employer)
-- Needs Sponsorship / Labour Transfer
+
+TO make sure you don't miss any valid visas, please check the following:
+Any visa other than a tourist/visit visa or a person currently on an emplyment visa in another company is valid.
+
+INVALID VISA(return false):
 - Tourist Visa, Visit Visa
-- No valid visa / Expired visa
+- Person currently on an emplyment visa in another company
 
 
 If they have a residence visa, employment visa, student visa, etc. then they are valid. It needs to be a visa that allows them to work with a new employer without sponsorship.
