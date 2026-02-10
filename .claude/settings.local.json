@@ -11,7 +11,16 @@
       "Bash(npx shadcn@latest init:*)",
       "Bash(npx shadcn@latest add button input select textarea card dialog table badge tabs form label -y)",
       "Bash(npm install:*)",
-      "WebFetch(domain:ai-sdk.dev)"
+      "WebFetch(domain:ai-sdk.dev)",
+      "mcp__playwright__browser_snapshot",
+      "Bash(dir:*)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_wait_for",
+      "mcp__playwright__browser_take_screenshot",
+      "mcp__playwright__browser_resize",
+      "mcp__playwright__browser_close",
+      "Bash(npm ls:*)",
+      "Bash(npx shadcn@latest add:*)"
     ]
   }
 }

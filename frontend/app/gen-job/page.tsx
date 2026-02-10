@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
 import { generateJobDescription } from '../actions/generateJob';
+import { generateSkills } from '../actions/generateSkills';
 import {
   ArrowLeft,
   Briefcase,
@@ -17,7 +18,7 @@ import {
   Loader2,
   CheckCircle,
   Plus,
-  X
+  X,
 } from 'lucide-react';
 
 // shadcn components
@@ -39,11 +40,13 @@ import {
 function SkillInput({
   skills,
   setSkills,
-  placeholder
+  placeholder,
+  disabled = false,
 }: {
   skills: string[],
   setSkills: (skills: string[]) => void,
-  placeholder: string
+  placeholder: string,
+  disabled?: boolean,
 }) {
   const [input, setInput] = useState('');
 
@@ -75,9 +78,10 @@ function SkillInput({
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
+          disabled={disabled}
           className="flex-1"
         />
-        <Button type="button" variant="secondary" size="icon" onClick={addSkill}>
+        <Button type="button" variant="secondary" size="icon" onClick={addSkill} disabled={disabled}>
           <Plus className="w-4 h-4" />
         </Button>
       </div>
@@ -136,10 +140,45 @@ export default function GenJobPage() {
   const [description, setDescription] = useState('');
 
   // UI State
+  const [isGeneratingSkills, setIsGeneratingSkills] = useState(false);
+  const skillsGeneratedForTitle = useRef<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [activeStep, setActiveStep] = useState(1);
+
+  // Auto-generate skills when entering Step 3
+  useEffect(() => {
+    if (activeStep !== 3 || !title || skillsGeneratedForTitle.current === title) return;
+
+    let cancelled = false;
+    setIsGeneratingSkills(true);
+    setMessage(null);
+
+    generateSkills(title)
+      .then((result) => {
+        if (cancelled) return;
+        skillsGeneratedForTitle.current = title;
+        setSkillsMustHave(prev => {
+          const merged = new Set([...prev, ...result.mustHave]);
+          return Array.from(merged);
+        });
+        setSkillsNiceToHave(prev => {
+          const merged = new Set([...prev, ...result.niceToHave]);
+          return Array.from(merged);
+        });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.error('Skill generation failed:', error);
+        setMessage({ type: 'error', text: 'Failed to auto-generate skills. You can add them manually.' });
+      })
+      .finally(() => {
+        if (!cancelled) setIsGeneratingSkills(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [activeStep, title]);
 
   const handleGenerate = async () => {
     if (!title || !location) {
@@ -537,20 +576,28 @@ export default function GenJobPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>Must-Have Skills</Label>
+                <Label className="flex items-center gap-2">
+                  Must-Have Skills
+                  {isGeneratingSkills && <Loader2 className="w-3 h-3 animate-spin text-emerald-400" />}
+                </Label>
                 <SkillInput
                   skills={skillsMustHave}
                   setSkills={setSkillsMustHave}
-                  placeholder="Type a skill and press Enter (e.g., Python)"
+                  placeholder={isGeneratingSkills ? 'Generating skills...' : 'Type a skill and press Enter (e.g., Python)'}
+                  disabled={isGeneratingSkills}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Nice-to-Have Skills</Label>
+                <Label className="flex items-center gap-2">
+                  Nice-to-Have Skills
+                  {isGeneratingSkills && <Loader2 className="w-3 h-3 animate-spin text-emerald-400" />}
+                </Label>
                 <SkillInput
                   skills={skillsNiceToHave}
                   setSkills={setSkillsNiceToHave}
-                  placeholder="Type a skill and press Enter (e.g., Docker)"
+                  placeholder={isGeneratingSkills ? 'Generating skills...' : 'Type a skill and press Enter (e.g., Docker)'}
+                  disabled={isGeneratingSkills}
                 />
               </div>
 

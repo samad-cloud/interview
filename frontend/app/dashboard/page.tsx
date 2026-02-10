@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { sendInterviewInvite, inviteToRound2 } from '@/app/actions/sendInvite';
+import { generateInterviewNotes, type InterviewNotes } from '@/app/actions/generateNotes';
 import {
   Trophy,
   Clock,
@@ -22,7 +23,10 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Plus,
-  Loader2
+  Loader2,
+  Sparkles,
+  NotebookPen,
+  Info,
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -92,6 +96,39 @@ interface Stats {
 
 const PAGE_SIZE = 25;
 
+// --- Boolean Search Parser ---
+// Supports: AND, OR, NOT, quoted phrases
+// Example: "machine learning" AND Python NOT Java
+interface BooleanClause {
+  type: 'AND' | 'OR' | 'NOT';
+  term: string;
+}
+
+function parseBooleanQuery(input: string): BooleanClause[] {
+  const clauses: BooleanClause[] = [];
+  if (!input.trim()) return clauses;
+
+  // Tokenize: extract quoted phrases and individual words
+  const tokens: string[] = [];
+  const regex = /"([^"]+)"|(\S+)/g;
+  let match;
+  while ((match = regex.exec(input)) !== null) {
+    tokens.push(match[1] || match[2]);
+  }
+
+  let nextType: 'AND' | 'OR' | 'NOT' = 'AND';
+  for (const token of tokens) {
+    const upper = token.toUpperCase();
+    if (upper === 'AND') { nextType = 'AND'; continue; }
+    if (upper === 'OR') { nextType = 'OR'; continue; }
+    if (upper === 'NOT') { nextType = 'NOT'; continue; }
+    clauses.push({ type: nextType, term: token });
+    nextType = 'AND'; // default back to AND
+  }
+
+  return clauses;
+}
+
 export default function DashboardPage() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -109,6 +146,14 @@ export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [stageFilter, setStageFilter] = useState<string>('all');
+
+  // Boolean resume search
+  const [resumeSearchInput, setResumeSearchInput] = useState('');
+  const [resumeSearchQuery, setResumeSearchQuery] = useState('');
+
+  // Notes
+  const [generatingNotes, setGeneratingNotes] = useState(false);
+  const [interviewNotes, setInterviewNotes] = useState<InterviewNotes | null>(null);
 
   // Action states
   const [sendingInvite, setSendingInvite] = useState<number | null>(null);
@@ -180,16 +225,37 @@ export default function DashboardPage() {
     }
   }, []);
 
+  // Boolean resume search matching
+  const matchesBooleanSearch = useCallback((resumeText: string | null, query: string): boolean => {
+    if (!query.trim()) return true;
+    if (!resumeText) return false;
+    const lower = resumeText.toLowerCase();
+    const clauses = parseBooleanQuery(query);
+    if (clauses.length === 0) return true;
+
+    let result = true;
+    for (const clause of clauses) {
+      const termMatch = lower.includes(clause.term.toLowerCase());
+      if (clause.type === 'AND') result = result && termMatch;
+      else if (clause.type === 'OR') result = result || termMatch;
+      else if (clause.type === 'NOT') result = result && !termMatch;
+    }
+    return result;
+  }, []);
+
   // Fetch candidates with pagination and filters
   const fetchCandidates = useCallback(async () => {
     setIsLoading(true);
     try {
-      const from = (currentPage - 1) * PAGE_SIZE;
-      const to = from + PAGE_SIZE - 1;
+      // When Boolean resume search is active, fetch more and filter client-side
+      const isBooleanActive = !!resumeSearchQuery.trim();
+      const fetchLimit = isBooleanActive ? 500 : PAGE_SIZE;
+      const from = isBooleanActive ? 0 : (currentPage - 1) * PAGE_SIZE;
+      const to = from + fetchLimit - 1;
 
       let query = supabase
         .from('candidates')
-        .select('id, full_name, email, rating, round_2_rating, jd_match_score, ai_summary, status, current_stage, interview_transcript, round_2_transcript, resume_text, job_id, final_verdict, interview_token, created_at, video_url, round_2_video_url', { count: 'exact' });
+        .select('id, full_name, email, rating, round_2_rating, jd_match_score, ai_summary, status, current_stage, interview_transcript, round_2_transcript, resume_text, job_id, final_verdict, interview_token, created_at, video_url, round_2_video_url', { count: isBooleanActive ? undefined : 'exact' });
 
       if (searchQuery) {
         query = query.or(`full_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
@@ -225,19 +291,29 @@ export default function DashboardPage() {
         return;
       }
 
-      const candidatesWithJobs = (data || []).map(candidate => ({
+      let results = (data || []).map(candidate => ({
         ...candidate,
         job_title: candidate.job_id ? jobMap.get(candidate.job_id) || 'Unknown Role' : undefined,
       }));
 
-      setCandidates(candidatesWithJobs);
-      setTotalCount(count || 0);
+      // Apply client-side Boolean resume search
+      if (isBooleanActive) {
+        results = results.filter(c => matchesBooleanSearch(c.resume_text, resumeSearchQuery));
+        const pageStart = (currentPage - 1) * PAGE_SIZE;
+        const totalFiltered = results.length;
+        results = results.slice(pageStart, pageStart + PAGE_SIZE);
+        setCandidates(results);
+        setTotalCount(totalFiltered);
+      } else {
+        setCandidates(results);
+        setTotalCount(count || 0);
+      }
     } catch (err) {
       console.error('Failed to fetch candidates:', err);
     } finally {
       setIsLoading(false);
     }
-  }, [currentPage, searchQuery, roleFilter, stageFilter, jobMap]);
+  }, [currentPage, searchQuery, resumeSearchQuery, roleFilter, stageFilter, jobMap, matchesBooleanSearch]);
 
   useEffect(() => {
     fetchStats();
@@ -258,8 +334,15 @@ export default function DashboardPage() {
   }, [searchInput]);
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setResumeSearchQuery(resumeSearchInput);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [resumeSearchInput]);
+
+  useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, roleFilter, stageFilter]);
+  }, [searchQuery, resumeSearchQuery, roleFilter, stageFilter]);
 
   const getStageDisplay = (candidate: Candidate) => {
     const stage = candidate.current_stage || 'round_1';
@@ -299,6 +382,24 @@ export default function DashboardPage() {
         </span>
       </div>
     );
+  };
+
+  const handleGenerateNotes = async () => {
+    if (!selectedCandidate) return;
+    setGeneratingNotes(true);
+    try {
+      const notes = await generateInterviewNotes({
+        candidateName: selectedCandidate.full_name,
+        jobTitle: selectedCandidate.job_title,
+        round1Transcript: selectedCandidate.interview_transcript,
+        round2Transcript: selectedCandidate.round_2_transcript,
+      });
+      setInterviewNotes(notes);
+    } catch (err) {
+      console.error('Notes generation failed:', err);
+    } finally {
+      setGeneratingNotes(false);
+    }
   };
 
   const handleSendInvite = async (candidateId: number) => {
@@ -387,6 +488,12 @@ export default function DashboardPage() {
                 Create Job
               </Link>
             </Button>
+            <Button variant="outline" asChild>
+              <Link href="/jobs">
+                <Briefcase className="w-4 h-4 mr-2" />
+                Manage Jobs
+              </Link>
+            </Button>
             <Button variant="outline" asChild className="bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 border-yellow-500/30">
               <Link href="/screener">
                 <Zap className="w-4 h-4 mr-2" />
@@ -471,6 +578,30 @@ export default function DashboardPage() {
               <SelectItem value="completed">Completed</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+
+        {/* Boolean Resume Search */}
+        <div className="mb-6">
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1">
+              <FileText className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+              <Input
+                type="text"
+                placeholder='Boolean resume search — e.g. Python AND React NOT Java, "machine learning" OR AI'
+                value={resumeSearchInput}
+                onChange={(e) => setResumeSearchInput(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            {resumeSearchQuery && (
+              <Badge variant="secondary" className="shrink-0">
+                {parseBooleanQuery(resumeSearchQuery).length} term{parseBooleanQuery(resumeSearchQuery).length !== 1 ? 's' : ''}
+              </Badge>
+            )}
+          </div>
+          {resumeSearchInput && !resumeSearchQuery && (
+            <p className="text-xs text-muted-foreground mt-1 ml-1">Searching...</p>
+          )}
         </div>
 
         {/* Table */}
@@ -704,7 +835,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Detail Modal */}
-      <Dialog open={!!selectedCandidate} onOpenChange={() => setSelectedCandidate(null)}>
+      <Dialog open={!!selectedCandidate} onOpenChange={(open) => { if (!open) { setSelectedCandidate(null); setInterviewNotes(null); } }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <div className="flex items-center gap-4">
@@ -775,6 +906,149 @@ export default function DashboardPage() {
                     <p>{selectedCandidate.ai_summary}</p>
                   </CardContent>
                 </Card>
+              </div>
+            )}
+
+            {/* Generate Notes */}
+            {(selectedCandidate?.interview_transcript || selectedCandidate?.round_2_transcript) && (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <NotebookPen className="w-5 h-5 text-emerald-400" />
+                    <h3 className="text-lg font-semibold">Interview Notes</h3>
+                  </div>
+                  {!interviewNotes && (
+                    <Button
+                      size="sm"
+                      onClick={handleGenerateNotes}
+                      disabled={generatingNotes}
+                      className="bg-emerald-600 hover:bg-emerald-500"
+                    >
+                      {generatingNotes ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                          Generate Notes
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+
+                {interviewNotes && (
+                  <div className="space-y-4">
+                    {/* Overall Impression */}
+                    <Card>
+                      <CardContent className="pt-4">
+                        <p className="text-sm font-medium text-muted-foreground mb-1">Overall Impression</p>
+                        <p className="text-sm">{interviewNotes.overallImpression}</p>
+                      </CardContent>
+                    </Card>
+
+                    {/* Strengths & Concerns */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <Card>
+                        <CardContent className="pt-4">
+                          <p className="text-sm font-medium text-emerald-400 mb-2">Strengths</p>
+                          <ul className="space-y-1">
+                            {interviewNotes.strengths.map((s, i) => (
+                              <li key={i} className="text-sm flex items-start gap-2">
+                                <span className="text-emerald-400 mt-0.5">+</span>
+                                {s}
+                              </li>
+                            ))}
+                          </ul>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-4">
+                          <p className="text-sm font-medium text-red-400 mb-2">Concerns</p>
+                          <ul className="space-y-1">
+                            {interviewNotes.concerns.map((c, i) => (
+                              <li key={i} className="text-sm flex items-start gap-2">
+                                <span className="text-red-400 mt-0.5">-</span>
+                                {c}
+                              </li>
+                            ))}
+                          </ul>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {/* Key Moments */}
+                    <Card>
+                      <CardContent className="pt-4">
+                        <p className="text-sm font-medium text-muted-foreground mb-2">Key Moments</p>
+                        <div className="space-y-2">
+                          {interviewNotes.keyMoments.map((m, i) => (
+                            <div key={i} className="flex items-start gap-2 text-sm">
+                              <span className={`mt-0.5 ${
+                                m.significance === 'positive' ? 'text-emerald-400' :
+                                m.significance === 'negative' ? 'text-red-400' : 'text-muted-foreground'
+                              }`}>
+                                {m.significance === 'positive' ? '+' : m.significance === 'negative' ? '-' : '~'}
+                              </span>
+                              {m.moment}
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Technical + Culture */}
+                    <div className="grid grid-cols-2 gap-4">
+                      {interviewNotes.technicalAssessment && (
+                        <Card>
+                          <CardContent className="pt-4">
+                            <p className="text-sm font-medium text-blue-400 mb-1">Technical Assessment</p>
+                            <p className="text-sm">{interviewNotes.technicalAssessment}</p>
+                          </CardContent>
+                        </Card>
+                      )}
+                      <Card className={interviewNotes.technicalAssessment ? '' : 'col-span-2'}>
+                        <CardContent className="pt-4">
+                          <p className="text-sm font-medium text-purple-400 mb-1">Culture Fit</p>
+                          <p className="text-sm">{interviewNotes.cultureFit}</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {/* Recommendation */}
+                    <Card className="border-emerald-500/30">
+                      <CardContent className="pt-4">
+                        <p className="text-sm font-medium text-emerald-400 mb-1">Recommendation</p>
+                        <p className="text-sm font-medium">{interviewNotes.recommendation}</p>
+                      </CardContent>
+                    </Card>
+
+                    {/* Follow-up Questions */}
+                    <Card>
+                      <CardContent className="pt-4">
+                        <p className="text-sm font-medium text-yellow-400 mb-2">Follow-up Questions</p>
+                        <ul className="space-y-1">
+                          {interviewNotes.followUpQuestions.map((q, i) => (
+                            <li key={i} className="text-sm flex items-start gap-2">
+                              <span className="text-yellow-400 mt-0.5">{i + 1}.</span>
+                              {q}
+                            </li>
+                          ))}
+                        </ul>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+
+                {!interviewNotes && !generatingNotes && (
+                  <Card className="bg-muted/30">
+                    <CardContent className="pt-4 text-center py-6">
+                      <p className="text-sm text-muted-foreground">Click &quot;Generate Notes&quot; to create AI-powered interview notes from the transcript.</p>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             )}
 

@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 // Routes that require authentication
-const PROTECTED_ROUTES = ['/dashboard', '/screener', '/gen-job'];
+const PROTECTED_ROUTES = ['/dashboard', '/screener', '/gen-job', '/jobs'];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -50,5 +50,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/screener/:path*', '/gen-job/:path*'],
+  matcher: ['/dashboard/:path*', '/screener/:path*', '/gen-job/:path*', '/jobs/:path*'],
 };

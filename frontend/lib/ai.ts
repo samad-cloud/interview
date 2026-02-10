@@ -1,12 +1,11 @@
-import { createGateway } from '@ai-sdk/gateway';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 
-// Initialize Vercel AI Gateway
-export const gateway = createGateway({
-  apiKey: process.env.AI_GATEWAY_API_KEY,
+export const google = createGoogleGenerativeAI({
+  apiKey: process.env.GEMINI_API_KEY,
 });
 
 // Default model for most operations (fast)
-export const gemini = gateway('google/gemini-2.5-flash');
+export const gemini = google('gemini-2.5-flash');
 
 // Model for complex reasoning tasks
-export const geminiPro = gateway('google/gemini-3-pro-preview');
+export const geminiPro = google('gemini-2.5-pro');
