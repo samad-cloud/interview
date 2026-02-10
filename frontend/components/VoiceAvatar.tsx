@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabaseClient';
 interface VoiceAvatarProps {
   candidateId: string;
   candidateName: string;
+  jobTitle: string;
   jobDescription: string;
   resumeText: string;
   round?: 1 | 2;
@@ -26,6 +27,7 @@ type CallStatus = 'idle' | 'connecting' | 'active' | 'analyzing' | 'ended';
 export default function VoiceAvatar({
   candidateId,
   candidateName,
+  jobTitle,
   jobDescription,
   resumeText,
   round = 1,
@@ -917,16 +919,6 @@ Round: ${round}
   }, [stopDeepgramListening, stopMediaCheck]);
 
   // ============ RENDER ============
-
-  // Extract job title (first part of job description, before location/details)
-  const extractJobTitle = (jd: string) => {
-    // Take first line or first few words before common delimiters
-    const firstLine = jd.split('\n')[0];
-    const beforeLocation = firstLine.split(/(?:London|Dubai|Remote|UK|US|Europe|,)/i)[0];
-    return beforeLocation.trim() || firstLine.substring(0, 50);
-  };
-
-  const jobTitle = extractJobTitle(jobDescription);
 
   // Mic level feedback text
   const micFeedback = micLevel < 10 ? 'Too quiet' : micLevel <= 50 ? 'Good!' : 'Great!';

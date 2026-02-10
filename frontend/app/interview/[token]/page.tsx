@@ -9,6 +9,7 @@ import { Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 interface CandidateData {
   id: number;
   full_name: string;
+  job_id: number | null;
   job_description: string | null;
   resume_text: string | null;
   status: string | null;
@@ -20,6 +21,7 @@ export default function VoiceInterviewPage() {
   const token = params.token as string;
 
   const [candidate, setCandidate] = useState<CandidateData | null>(null);
+  const [jobTitle, setJobTitle] = useState<string>('Open Position');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,7 +37,7 @@ export default function VoiceInterviewPage() {
         // Query by interview_token (secure, unguessable UUID)
         const { data, error: supabaseError } = await supabase
           .from('candidates')
-          .select('id, full_name, job_description, resume_text, status, rating')
+          .select('id, full_name, job_id, job_description, resume_text, status, rating')
           .eq('interview_token', token)
           .single();
 
@@ -51,6 +53,18 @@ export default function VoiceInterviewPage() {
         }
 
         setCandidate(data);
+
+        // Fetch job title from jobs table
+        if (data.job_id) {
+          const { data: job } = await supabase
+            .from('jobs')
+            .select('title')
+            .eq('id', data.job_id)
+            .single();
+          if (job?.title) {
+            setJobTitle(job.title);
+          }
+        }
       } catch (err) {
         console.error('Error fetching candidate:', err);
         setError('Failed to load interview data');
@@ -130,6 +144,7 @@ export default function VoiceInterviewPage() {
     <VoiceAvatar
       candidateId={String(candidate.id)}
       candidateName={candidate.full_name}
+      jobTitle={jobTitle}
       jobDescription={candidate.job_description || 'Software Engineer at Printerpix'}
       resumeText={candidate.resume_text || 'No resume provided'}
     />
