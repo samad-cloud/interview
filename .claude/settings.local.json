@@ -20,7 +20,8 @@
       "mcp__playwright__browser_resize",
       "mcp__playwright__browser_close",
       "Bash(npm ls:*)",
-      "Bash(npx shadcn@latest add:*)"
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(copy:*)"
     ]
   }
 }

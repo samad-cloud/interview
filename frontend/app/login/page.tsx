@@ -110,7 +110,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <Image
-            src="/logo.jfif"
+            src="/logo.jpg"
             alt="Printerpix"
             width={64}
             height={64}

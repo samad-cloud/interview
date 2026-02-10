@@ -470,7 +470,7 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
             <Image
-              src="/logo.jfif"
+              src="/logo.jpg"
               alt="Printerpix"
               width={48}
               height={48}

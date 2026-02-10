@@ -284,7 +284,7 @@ export default function GenJobPage() {
               </Link>
             </Button>
             <Image
-              src="/logo.jfif"
+              src="/logo.jpg"
               alt="Printerpix"
               width={40}
               height={40}

@@ -329,7 +329,7 @@ export default function JobsPage() {
                 <ArrowLeft className="w-5 h-5" />
               </Link>
             </Button>
-            <Image src="/logo.jfif" alt="Printerpix" width={48} height={48} className="rounded-xl" />
+            <Image src="/logo.jpg" alt="Printerpix" width={48} height={48} className="rounded-xl" />
             <div>
               <h1 className="text-3xl font-bold">Manage Jobs</h1>
               <p className="text-muted-foreground">
