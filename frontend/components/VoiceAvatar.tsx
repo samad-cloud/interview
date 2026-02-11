@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Mic, MicOff, Camera, CameraOff, PhoneOff, Loader2, Volume2, Square, AlertCircle } from 'lucide-react';
+import { Mic, MicOff, Camera, CameraOff, PhoneOff, Loader2, Volume2, Square, AlertCircle, Clock } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 
 interface VoiceAvatarProps {
@@ -92,6 +92,12 @@ export default function VoiceAvatar({
   const [showDoneHint, setShowDoneHint] = useState(false);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Interview timer state
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [isWrappingUp, setIsWrappingUp] = useState(false);
+  const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const endInterviewRef = useRef<(() => Promise<void>) | null>(null);
+
   // Round 1 (Wayne) - Personality/Drive assessment
   const round1Prompt = `=== YOUR IDENTITY ===
   NAME: Wayne
@@ -121,6 +127,11 @@ export default function VoiceAvatar({
   4. **The "Excellence" Test:** Ask questions that reveal if they are a "dead beat" or a "winner."
   5. **NEVER PRETEND TO BE THE CANDIDATE:** You are Wayne the interviewer. NEVER say "I have experience in..." or describe YOUR work history. You have no background to share. The resume above is THEIR experience, not yours.
   
+  === INTERVIEW DURATION ===
+  This interview lasts 15 minutes. You will be told how much time has elapsed.
+  When time is running low (around 13 minutes), wrap up naturally — thank the candidate warmly, summarize your impression briefly, and end with [END_INTERVIEW].
+  If you feel you've gathered enough information before time runs out, you may end early the same way.
+
   === REMEMBER ===
   You are Wayne. You ASK questions. You do NOT answer questions about yourself.
   The candidate is ${candidateName}. They ANSWER your questions.`;
@@ -152,6 +163,11 @@ export default function VoiceAvatar({
   4. **Expose Gaps:** It's OK to find gaps. Say "Interesting. So you're less experienced with X? That's fine, just want to understand your level."
   5. **NEVER PRETEND TO BE THE CANDIDATE:** You are Atlas the interviewer. NEVER describe YOUR work history or experience. Ask THEM questions.
   
+  === INTERVIEW DURATION ===
+  This interview lasts 15 minutes. You will be told how much time has elapsed.
+  When time is running low (around 13 minutes), wrap up naturally — thank the candidate, give a brief summary of technical strengths you observed, and end with [END_INTERVIEW].
+  If you feel you've verified enough technical depth before time runs out, you may end early the same way.
+
   === REMEMBER ===
   You are Atlas. You ASK technical questions. You do NOT answer questions about yourself.
   The candidate is ${candidateName}. They ANSWER your questions.`;
@@ -389,11 +405,12 @@ export default function VoiceAvatar({
         silenceTimerRef.current = null;
       }
       setShowDoneHint(false);
-      
+
       // Stop listening while processing
       stopDeepgramListening();
 
       // Call Gemini to generate interviewer response
+      const minutesElapsed = Math.floor(elapsedSeconds / 60);
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -401,24 +418,35 @@ export default function VoiceAvatar({
           message: text,
           systemPrompt: systemPrompt,
           history: conversationHistoryRef.current,
+          minutesElapsed,
+          isWrappingUp,
         }),
       });
-      
+
       if (!response.ok) {
         throw new Error('Failed to get AI response');
       }
-      
+
       const { reply } = await response.json();
       console.log('Gemini response:', reply);
-      
+
+      // Check if AI wants to end the interview
+      const wantsToEnd = reply.includes('[END_INTERVIEW]');
+      const cleanReply = reply.replace(/\[END_INTERVIEW\]/g, '').trim();
+
       // Log interviewer's response and speak it
-      addToConversation('interviewer', reply);
-      await speakText(reply);
+      addToConversation('interviewer', cleanReply);
+      await speakText(cleanReply);
+
+      // After TTS finishes, auto-end if AI signaled
+      if (wantsToEnd) {
+        endInterviewRef.current?.();
+      }
     } catch (err) {
       console.error('Failed to get AI response:', err);
       setError('Failed to get response');
     }
-  }, [callStatus, addToConversation, systemPrompt, speakText, stopDeepgramListening]);
+  }, [callStatus, addToConversation, systemPrompt, speakText, stopDeepgramListening, elapsedSeconds, isWrappingUp]);
 
   // Start Deepgram listening
   const startDeepgramListening = useCallback(async () => {
@@ -552,6 +580,38 @@ export default function VoiceAvatar({
   useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
   useEffect(() => { sendToAIRef.current = sendToAI; }, [sendToAI]);
   useEffect(() => { startDeepgramListeningRef.current = startDeepgramListening; }, [startDeepgramListening]);
+
+  // Interview timer — starts when call becomes active, cleans up on end/unmount
+  useEffect(() => {
+    if (callStatus === 'active') {
+      timerIntervalRef.current = setInterval(() => {
+        setElapsedSeconds(prev => {
+          const next = prev + 1;
+          // At 13 minutes, set wrapping up flag
+          if (next === 780) {
+            setIsWrappingUp(true);
+          }
+          // At 15 minutes, force-end the interview
+          if (next >= 900) {
+            endInterviewRef.current?.();
+          }
+          return next;
+        });
+      }, 1000);
+    } else {
+      // Clear timer when not active
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+    }
+    return () => {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+    };
+  }, [callStatus]);
 
   // Initialize user camera
   const initUserCamera = async () => {
@@ -890,10 +950,14 @@ Round: ${round}
     setCallStatus('ended');
   };
 
+  // Keep endInterview ref in sync (defined after the function so it's not used before declaration)
+  useEffect(() => { endInterviewRef.current = endInterview; }, [endInterview]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
       stopDeepgramListening();
       stopMediaCheck();
       if (userStreamRef.current) {
@@ -990,7 +1054,7 @@ Round: ${round}
 
           {!mediaCheckDone && (
             <p className="text-slate-500 text-sm mb-6">
-              This will be a quick 20-30 minute conversation with our AI interviewer.<br />
+              This will be a quick 15-minute conversation with our AI interviewer.<br />
               Just relax and be yourself.
             </p>
           )}
@@ -1117,8 +1181,27 @@ Round: ${round}
   }
 
   // ============ ACTIVE INTERVIEW STATE ============
+  const timerMinutes = Math.floor(elapsedSeconds / 60);
+  const timerSecs = elapsedSeconds % 60;
+  const timerDisplay = `${timerMinutes.toString().padStart(2, '0')}:${timerSecs.toString().padStart(2, '0')}`;
+  const timerUrgent = elapsedSeconds >= 780; // 13 min+
+
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col">
+      {/* Timer - fixed top right */}
+      <div className="fixed top-4 right-4 z-20">
+        <div className={`flex items-center gap-2 px-4 py-2 rounded-lg backdrop-blur-sm border ${
+          timerUrgent
+            ? 'bg-red-500/20 border-red-500/40 text-red-400'
+            : 'bg-slate-900/80 border-slate-700 text-slate-300'
+        }`}>
+          <Clock className="w-4 h-4" />
+          <span className={`font-mono text-lg font-semibold ${timerUrgent ? 'animate-pulse' : ''}`}>
+            {timerDisplay}
+          </span>
+        </div>
+      </div>
+
       {/* Main Interview Area */}
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="relative w-full max-w-2xl">

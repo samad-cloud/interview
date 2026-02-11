@@ -9,7 +9,7 @@ interface ConversationEntry {
 
 export async function POST(request: Request) {
   try {
-    const { message, systemPrompt, history } = await request.json();
+    const { message, systemPrompt, history, minutesElapsed, isWrappingUp } = await request.json();
 
     if (!message || !systemPrompt) {
       return NextResponse.json(
@@ -41,6 +41,16 @@ export async function POST(request: Request) {
       conversationContext += '=== END CONVERSATION ===\n';
     }
 
+    // Build time context
+    let timeContext = '';
+    if (typeof minutesElapsed === 'number') {
+      timeContext = `\n=== TIME STATUS ===\nElapsed: ${minutesElapsed} minutes of 15-minute interview.\n`;
+      if (isWrappingUp) {
+        timeContext += `STATUS: TIME IS ALMOST UP. You MUST wrap up NOW. Deliver a brief, warm closing statement thanking the candidate, and end your response with the exact token [END_INTERVIEW].\n`;
+      }
+      timeContext += `=== END TIME STATUS ===\n`;
+    }
+
     // Full prompt - VERY explicit about roles
     const fullPrompt = `=== CRITICAL INSTRUCTION ===
 YOU ARE THE INTERVIEWER. You are asking questions.
@@ -49,7 +59,7 @@ NEVER describe your own experience or background. You have none. You only ask qu
 
 ${systemPrompt}
 ${conversationContext}
-
+${timeContext}
 === WHAT THE CANDIDATE JUST SAID ===
 "${message}"
 
@@ -60,6 +70,8 @@ Generate ONLY what the interviewer (you) would say next.
 - Be conversational, not robotic
 - NEVER say "I have experience in..." or describe YOUR work - you are the interviewer, not the candidate
 - Do NOT use asterisks, markdown, or stage directions
+- When you feel you have covered enough ground OR when told time is running low, deliver a brief closing statement and end your response with the exact token [END_INTERVIEW]
+- Only use [END_INTERVIEW] when you are genuinely done — do not use it mid-conversation
 
 YOUR RESPONSE:`;
 
