@@ -3,6 +3,12 @@
 import { generateObject } from 'ai';
 import { gemini } from '@/lib/ai';
 import { z } from 'zod';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 const interviewNotesSchema = z.object({
   overallImpression: z.string().describe('2-3 sentence overall impression of the candidate'),
@@ -21,11 +27,13 @@ const interviewNotesSchema = z.object({
 export type InterviewNotes = z.infer<typeof interviewNotesSchema>;
 
 export async function generateInterviewNotes({
+  candidateId,
   candidateName,
   jobTitle,
   round1Transcript,
   round2Transcript,
 }: {
+  candidateId: number;
   candidateName: string;
   jobTitle?: string;
   round1Transcript?: string | null;
@@ -62,6 +70,16 @@ INSTRUCTIONS:
 - Follow-up questions should target gaps or areas that need deeper exploration
 - If both rounds are present, synthesize insights from both into a cohesive assessment`,
   });
+
+  // Persist notes to database
+  const { error } = await supabase
+    .from('candidates')
+    .update({ interview_notes: object })
+    .eq('id', candidateId);
+
+  if (error) {
+    console.error('Failed to save interview notes:', error);
+  }
 
   return object;
 }

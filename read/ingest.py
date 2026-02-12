@@ -270,8 +270,30 @@ def lookup_job(supabase, job_title: str) -> dict | None:
     return None
 
 
-def save_candidate(supabase, email, name, resume_text, gmail_msg_id, job_id, job_description):
-    supabase.table("candidates").insert({
+def upload_resume_to_storage(supabase, filepath, candidate_email):
+    """Upload the original resume file to Supabase Storage and return the public URL."""
+    import time
+    ext = Path(filepath).suffix.lower()
+    safe_email = re.sub(r"[^\w\-_.]", "_", candidate_email)
+    storage_path = f"{safe_email}_{int(time.time())}{ext}"
+
+    mime_types = {".pdf": "application/pdf", ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".doc": "application/msword"}
+    content_type = mime_types.get(ext, "application/octet-stream")
+
+    with open(filepath, "rb") as f:
+        supabase.storage.from_("resumes").upload(
+            path=storage_path,
+            file=f,
+            file_options={"content-type": content_type},
+        )
+
+    public_url = supabase.storage.from_("resumes").get_public_url(storage_path)
+    log("INFO", f"Uploaded resume to storage: {storage_path}")
+    return public_url
+
+
+def save_candidate(supabase, email, name, resume_text, gmail_msg_id, job_id, job_description, resume_url=None):
+    data = {
         "email": email,
         "full_name": name,
         "resume_text": resume_text,
@@ -279,7 +301,10 @@ def save_candidate(supabase, email, name, resume_text, gmail_msg_id, job_id, job
         "job_id": job_id,
         "job_description": job_description,
         "metadata": {"gmail_message_id": gmail_msg_id},
-    }).execute()
+    }
+    if resume_url:
+        data["resume_url"] = resume_url
+    supabase.table("candidates").insert(data).execute()
 
 
 # --- Main Processing ---
@@ -334,13 +359,20 @@ def process_email(gmail, supabase, msg_id):
         log("WARN", f"No resume attachment (PDF/DOCX/DOC) for {email}, skipping")
         return
 
+    # Upload original file to Supabase Storage
+    resume_url = None
+    try:
+        resume_url = upload_resume_to_storage(supabase, filepath, email)
+    except Exception as e:
+        log("WARN", f"Failed to upload resume to storage: {e} — continuing with text extraction")
+
     resume_text = parse_resume(filepath)
-    save_candidate(supabase, email, name, resume_text, msg_id, job["id"], job["description"])
+    save_candidate(supabase, email, name, resume_text, msg_id, job["id"], job["description"], resume_url)
     mark_as_read(gmail, msg_id)
-    
+
     # Cleanup downloaded file
     filepath.unlink(missing_ok=True)
-    
+
     log("INFO", f"Saved {name} <{email}> for job: {job_title}")
 
 

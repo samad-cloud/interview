@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { generateInterviewNotes } from '@/app/actions/generateNotes';
 
 export async function POST(request: Request) {
   try {
@@ -27,9 +28,35 @@ export async function POST(request: Request) {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Format transcript if it's an array
-    const transcriptText = Array.isArray(transcript) 
-      ? transcript.join('\n') 
+    const transcriptText = Array.isArray(transcript)
+      ? transcript.join('\n')
       : transcript;
+
+    // Fetch candidate data for notes generation
+    const { data: candidate, error: candidateError } = await supabase
+      .from('candidates')
+      .select('full_name, job_id, interview_transcript')
+      .eq('id', candidateId)
+      .single();
+
+    if (candidateError || !candidate) {
+      console.error('Failed to fetch candidate:', candidateError);
+      return NextResponse.json(
+        { error: 'Candidate not found' },
+        { status: 404 }
+      );
+    }
+
+    // Fetch job title
+    let jobTitle = 'Unknown Position';
+    if (candidate.job_id) {
+      const { data: job } = await supabase
+        .from('jobs')
+        .select('title')
+        .eq('id', candidate.job_id)
+        .single();
+      if (job) jobTitle = job.title || 'Unknown Position';
+    }
 
     // Save Round 2 transcript to database
     const { error: updateError } = await supabase
@@ -48,6 +75,19 @@ export async function POST(request: Request) {
     }
 
     console.log(`[End Interview Round 2] Saved transcript for candidate ${candidateId}`);
+
+    // Auto-generate interview notes with both transcripts (fire-and-forget)
+    generateInterviewNotes({
+      candidateId,
+      candidateName: candidate.full_name || 'Unknown',
+      jobTitle,
+      round1Transcript: candidate.interview_transcript || null,
+      round2Transcript: transcriptText,
+    }).then(() => {
+      console.log(`[End Interview Round 2] Auto-generated notes for candidate ${candidateId}`);
+    }).catch((err) => {
+      console.error(`[End Interview Round 2] Failed to auto-generate notes for ${candidateId}:`, err);
+    });
 
     return NextResponse.json({
       success: true,

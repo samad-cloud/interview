@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, SchemaType, type ResponseSchema } from '@google/generative-ai';
+import { generateInterviewNotes } from '@/app/actions/generateNotes';
 
 interface GeminiAnalysis {
   score: number;
@@ -10,6 +11,19 @@ interface GeminiAnalysis {
   red_flag: boolean;
   summary: string;
 }
+
+const analysisSchema: ResponseSchema = {
+  type: SchemaType.OBJECT,
+  properties: {
+    score: { type: SchemaType.INTEGER, description: 'Candidate score from 0-100' },
+    decision: { type: SchemaType.STRING, format: 'enum', enum: ['Strong Hire', 'Hire', 'Weak', 'Reject'], description: 'Hiring decision' },
+    top_strength: { type: SchemaType.STRING, description: 'Top strength in max 10 words' },
+    top_weakness: { type: SchemaType.STRING, description: 'Top weakness in max 10 words' },
+    red_flag: { type: SchemaType.BOOLEAN, description: 'True if candidate lied, was evasive, or completely disengaged' },
+    summary: { type: SchemaType.STRING, description: 'Max 2 sentence summary' },
+  },
+  required: ['score', 'decision', 'top_strength', 'top_weakness', 'red_flag', 'summary'],
+};
 
 export async function POST(request: Request) {
   try {
@@ -39,7 +53,7 @@ export async function POST(request: Request) {
     // Step 1: Fetch candidate data
     const { data: candidate, error: candidateError } = await supabase
       .from('candidates')
-      .select('job_id, resume_text')
+      .select('job_id, resume_text, full_name')
       .eq('id', candidateId)
       .single();
 
@@ -68,9 +82,9 @@ export async function POST(request: Request) {
       }
     }
 
-    // Step 3: Initialize Gemini
+    // Step 3: Initialize Gemini with structured output
     const googleApiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
-    
+
     if (!googleApiKey) {
       console.error('Missing Google API key');
       return NextResponse.json(
@@ -80,16 +94,22 @@ export async function POST(request: Request) {
     }
 
     const genAI = new GoogleGenerativeAI(googleApiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.0-flash',
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: analysisSchema,
+      },
+    });
 
     // Prepare resume excerpt (first 500 chars)
-    const resumeExcerpt = candidate.resume_text 
-      ? candidate.resume_text.substring(0, 500) 
+    const resumeExcerpt = candidate.resume_text
+      ? candidate.resume_text.substring(0, 500)
       : 'No resume provided';
 
     // Format transcript if it's an array
-    const transcriptText = Array.isArray(transcript) 
-      ? transcript.join('\n') 
+    const transcriptText = Array.isArray(transcript)
+      ? transcript.join('\n')
       : transcript;
 
     // Guard: reject scoring if no candidate responses in transcript
@@ -124,7 +144,7 @@ export async function POST(request: Request) {
     }
 
     // Step 4: The Judge - Gemini Analysis
-    const prompt = `You are a strict technical recruiter. Analyze this interview transcript against the Job Description and Resume.
+    const prompt = `You are a senior talent evaluator scoring a Round 1 personality and drive interview. This round does NOT test technical skills — it tests hunger, resilience, and ownership mindset.
 
 JOB TITLE: ${jobTitle}
 JOB DESCRIPTION: ${jobDescription}
@@ -133,42 +153,21 @@ RESUME HIGHLIGHTS: ${resumeExcerpt}
 TRANSCRIPT:
 ${transcriptText}
 
-TASK: Output strictly valid JSON (no markdown, no code blocks) with this exact schema:
-{
-  "score": (integer 0-100),
-  "decision": ("Strong Hire" | "Hire" | "Weak" | "Reject"),
-  "top_strength": (string, max 10 words),
-  "top_weakness": (string, max 10 words),
-  "red_flag": (boolean - true if candidate lied or totally failed),
-  "summary": (string, max 2 sentences)
-}
+SCORING CRITERIA (what this round actually tested):
+1. Internal Locus of Control — Do they own their failures or blame others?
+2. Permissionless Action — Do they solve problems without being asked, or wait for instructions?
+3. High Standards — Do they obsess over quality and hate mediocrity?
+4. Drive & Resilience — Do they push through setbacks or give up easily?
+5. Communication — Are they articulate, specific, and honest? Or vague and evasive?
 
-Respond with ONLY the JSON object, nothing else.`;
+SCORING GUIDE:
+- 80-100: Clear A-player. Owns failures, acts without permission, gives specific examples, high standards.
+- 60-79: Solid candidate. Shows some drive but may be vague in places or lack standout moments.
+- 40-59: Mediocre. Generic answers, blames circumstances, waits for instructions, no fire.
+- 0-39: Red flags. Evasive, entitled, excuse-maker, or disengaged.`;
 
     const result = await model.generateContent(prompt);
-    const responseText = result.response.text().trim();
-    
-    // Clean up response (remove markdown code blocks if present)
-    let cleanedResponse = responseText;
-    if (cleanedResponse.startsWith('```')) {
-      cleanedResponse = cleanedResponse.replace(/```json?\n?/g, '').replace(/```$/g, '').trim();
-    }
-
-    let analysis: GeminiAnalysis;
-    try {
-      analysis = JSON.parse(cleanedResponse);
-    } catch (parseError) {
-      console.error('Failed to parse Gemini response:', cleanedResponse);
-      // Default analysis if parsing fails
-      analysis = {
-        score: 50,
-        decision: 'Weak',
-        top_strength: 'Unable to analyze',
-        top_weakness: 'Analysis failed',
-        red_flag: false,
-        summary: 'Interview analysis could not be completed automatically.',
-      };
-    }
+    const analysis: GeminiAnalysis = JSON.parse(result.response.text());
 
     // Step 5: Save to database
     const { error: updateError } = await supabase
@@ -191,7 +190,20 @@ Respond with ONLY the JSON object, nothing else.`;
 
     console.log(`[End Interview] Candidate ${candidateId} scored ${analysis.score}/100 - ${analysis.decision}`);
 
-    // Step 6: Return success with analysis
+    // Step 6: Auto-generate interview notes (fire-and-forget, don't block response)
+    generateInterviewNotes({
+      candidateId,
+      candidateName: candidate.full_name || 'Unknown',
+      jobTitle,
+      round1Transcript: transcriptText,
+      round2Transcript: null,
+    }).then(() => {
+      console.log(`[End Interview] Auto-generated notes for candidate ${candidateId}`);
+    }).catch((err) => {
+      console.error(`[End Interview] Failed to auto-generate notes for ${candidateId}:`, err);
+    });
+
+    // Step 7: Return success with analysis
     return NextResponse.json({
       success: true,
       analysis,
@@ -205,4 +217,3 @@ Respond with ONLY the JSON object, nothing else.`;
     );
   }
 }
-

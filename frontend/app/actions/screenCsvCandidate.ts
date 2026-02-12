@@ -1,6 +1,6 @@
 'use server';
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, SchemaType, type ResponseSchema } from '@google/generative-ai';
 import { createClient } from '@supabase/supabase-js';
 
 interface CsvScreenResult {
@@ -13,6 +13,17 @@ interface CsvScreenResult {
   error?: string;
   skipped?: boolean;
 }
+
+const csvScreeningSchema: ResponseSchema = {
+  type: SchemaType.OBJECT,
+  properties: {
+    resume_text: { type: SchemaType.STRING, description: 'Full extracted resume text' },
+    score: { type: SchemaType.INTEGER, description: 'Match score 0-100' },
+    reasoning: { type: SchemaType.STRING, description: 'One sentence explanation of score' },
+    status: { type: SchemaType.STRING, format: 'enum', enum: ['RECOMMENDED', 'REJECT'], description: 'RECOMMENDED if score >= 70, otherwise REJECT' },
+  },
+  required: ['resume_text', 'score', 'reasoning', 'status'],
+};
 
 export async function screenCsvCandidate(
   jobId: string,
@@ -83,14 +94,20 @@ export async function screenCsvCandidate(
       return { success: false, name: candidate.name, email: candidate.email, error: 'Failed to download resume' };
     }
 
-    // Initialize Gemini
+    // Initialize Gemini with structured output
     const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     if (!apiKey) {
       return { success: false, error: 'AI service not configured' };
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.0-flash',
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: csvScreeningSchema,
+      },
+    });
 
     const prompt = `You are an Expert Technical Recruiter. Analyze this resume against the job description.
 
@@ -111,34 +128,14 @@ TASKS:
 3. Write a 1-sentence reasoning explaining the score.
 4. Set status: "RECOMMENDED" if score >= 70, otherwise "REJECT".
 
-CONTEXT: We are looking for 'Go-Getters' and high achievers. Be strict.
-
-OUTPUT: Return ONLY valid JSON (no markdown, no explanation):
-{
-  "resume_text": "Full extracted resume text",
-  "score": 75,
-  "reasoning": "Strong Python skills but lacks required AWS experience",
-  "status": "RECOMMENDED"
-}`;
+CONTEXT: We are looking for 'Go-Getters' and high achievers. Be strict.`;
 
     const result = await model.generateContent([
       { inlineData: { mimeType, data: resumeBase64 } },
       prompt,
     ]);
 
-    const responseText = result.response.text().trim();
-    let cleanedResponse = responseText;
-    if (cleanedResponse.startsWith('```')) {
-      cleanedResponse = cleanedResponse.replace(/```json?\n?/g, '').replace(/```$/g, '').trim();
-    }
-
-    let parsed: { resume_text: string; score: number; reasoning: string; status: 'RECOMMENDED' | 'REJECT' };
-    try {
-      parsed = JSON.parse(cleanedResponse);
-    } catch {
-      console.error('Failed to parse Gemini response:', cleanedResponse);
-      return { success: false, name: candidate.name, email: candidate.email, error: 'Failed to parse resume' };
-    }
+    const parsed: { resume_text: string; score: number; reasoning: string; status: 'RECOMMENDED' | 'REJECT' } = JSON.parse(result.response.text());
 
     const status = parsed.score >= 70 ? 'RECOMMENDED' : 'REJECT';
     const dbStatus = parsed.score >= 70 ? 'GRADED' : 'CV_REJECTED';

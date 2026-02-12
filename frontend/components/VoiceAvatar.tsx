@@ -95,8 +95,10 @@ export default function VoiceAvatar({
   // Interview timer state
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [isWrappingUp, setIsWrappingUp] = useState(false);
+  const [timeExpired, setTimeExpired] = useState(false);
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const endInterviewRef = useRef<(() => Promise<void>) | null>(null);
+  const timeExpiredRef = useRef(false);
 
   // Round 1 (Wayne) - Personality/Drive assessment
   const round1Prompt = `=== YOUR IDENTITY ===
@@ -164,8 +166,8 @@ export default function VoiceAvatar({
   5. **NEVER PRETEND TO BE THE CANDIDATE:** You are Atlas the interviewer. NEVER describe YOUR work history or experience. Ask THEM questions.
   
   === INTERVIEW DURATION ===
-  This interview lasts 15 minutes. You will be told how much time has elapsed.
-  When time is running low (around 13 minutes), wrap up naturally — thank the candidate, give a brief summary of technical strengths you observed, and end with [END_INTERVIEW].
+  This interview lasts 40 minutes. You will be told how much time has elapsed.
+  When time is running low (around 38 minutes), wrap up naturally — thank the candidate, give a brief summary of technical strengths you observed, and end with [END_INTERVIEW].
   If you feel you've verified enough technical depth before time runs out, you may end early the same way.
 
   === REMEMBER ===
@@ -409,6 +411,19 @@ export default function VoiceAvatar({
       // Stop listening while processing
       stopDeepgramListening();
 
+      // If time has expired, deliver a farewell instead of asking another question
+      if (timeExpiredRef.current) {
+        const closingMessage = round === 2
+          ? `That's a great answer, ${candidateName}. Unfortunately we've run out of time. Thank you for walking me through the technical details — I have a much clearer picture of your capabilities now. The team will review everything and be in touch. Best of luck!`
+          : `I appreciate that answer, ${candidateName}. We've hit our time limit, but I really enjoyed our conversation. Thank you for being so open with me. The team will review everything and be in touch soon. Take care!`;
+
+        addToConversation('interviewer', closingMessage);
+        await speakText(closingMessage);
+        await new Promise(resolve => setTimeout(resolve, 300));
+        endInterviewRef.current?.();
+        return;
+      }
+
       // Call Gemini to generate interviewer response
       const minutesElapsed = Math.floor(elapsedSeconds / 60);
       const response = await fetch('/api/chat', {
@@ -446,7 +461,7 @@ export default function VoiceAvatar({
       console.error('Failed to get AI response:', err);
       setError('Failed to get response');
     }
-  }, [callStatus, addToConversation, systemPrompt, speakText, stopDeepgramListening, elapsedSeconds, isWrappingUp]);
+  }, [callStatus, addToConversation, systemPrompt, speakText, stopDeepgramListening, elapsedSeconds, isWrappingUp, candidateName, round]);
 
   // Start Deepgram listening
   const startDeepgramListening = useCallback(async () => {
@@ -582,24 +597,31 @@ export default function VoiceAvatar({
   useEffect(() => { startDeepgramListeningRef.current = startDeepgramListening; }, [startDeepgramListening]);
 
   // Interview timer — starts when call becomes active, cleans up on end/unmount
+  // Round 1: 15 min interview, wrap at 13, expire at 15, hard cutoff 30
+  // Round 2: 40 min interview, wrap at 38, expire at 40, hard cutoff 55
+  const wrapUpAt = round === 2 ? 2280 : 780;    // 38 min : 13 min
+  const expireAt = round === 2 ? 2400 : 900;    // 40 min : 15 min
+  const hardCutoff = round === 2 ? 3300 : 1800; // 55 min : 30 min
+
   useEffect(() => {
     if (callStatus === 'active') {
       timerIntervalRef.current = setInterval(() => {
         setElapsedSeconds(prev => {
           const next = prev + 1;
-          // At 13 minutes, set wrapping up flag
-          if (next === 780) {
+          if (next === wrapUpAt) {
             setIsWrappingUp(true);
           }
-          // At 15 minutes, force-end the interview
-          if (next >= 900) {
+          if (next === expireAt) {
+            timeExpiredRef.current = true;
+            setTimeExpired(true);
+          }
+          if (next >= hardCutoff) {
             endInterviewRef.current?.();
           }
           return next;
         });
       }, 1000);
     } else {
-      // Clear timer when not active
       if (timerIntervalRef.current) {
         clearInterval(timerIntervalRef.current);
         timerIntervalRef.current = null;
@@ -611,7 +633,7 @@ export default function VoiceAvatar({
         timerIntervalRef.current = null;
       }
     };
-  }, [callStatus]);
+  }, [callStatus, wrapUpAt, expireAt, hardCutoff]);
 
   // Initialize user camera
   const initUserCamera = async () => {
@@ -1054,7 +1076,7 @@ Round: ${round}
 
           {!mediaCheckDone && (
             <p className="text-slate-500 text-sm mb-6">
-              This will be a quick 15-minute conversation with our AI interviewer.<br />
+              This will be a {round === 2 ? '40' : '15'}-minute conversation with our AI interviewer.<br />
               Just relax and be yourself.
             </p>
           )}
@@ -1184,21 +1206,26 @@ Round: ${round}
   const timerMinutes = Math.floor(elapsedSeconds / 60);
   const timerSecs = elapsedSeconds % 60;
   const timerDisplay = `${timerMinutes.toString().padStart(2, '0')}:${timerSecs.toString().padStart(2, '0')}`;
-  const timerUrgent = elapsedSeconds >= 780; // 13 min+
+  const timerUrgent = elapsedSeconds >= wrapUpAt;
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col">
       {/* Timer - fixed top right */}
       <div className="fixed top-4 right-4 z-20">
         <div className={`flex items-center gap-2 px-4 py-2 rounded-lg backdrop-blur-sm border ${
-          timerUrgent
-            ? 'bg-red-500/20 border-red-500/40 text-red-400'
-            : 'bg-slate-900/80 border-slate-700 text-slate-300'
+          timeExpired
+            ? 'bg-red-500/30 border-red-500/50 text-red-300'
+            : timerUrgent
+              ? 'bg-red-500/20 border-red-500/40 text-red-400'
+              : 'bg-slate-900/80 border-slate-700 text-slate-300'
         }`}>
           <Clock className="w-4 h-4" />
           <span className={`font-mono text-lg font-semibold ${timerUrgent ? 'animate-pulse' : ''}`}>
             {timerDisplay}
           </span>
+          {timeExpired && (
+            <span className="text-xs font-medium ml-1">Finish your answer</span>
+          )}
         </div>
       </div>
 

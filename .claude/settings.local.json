@@ -21,7 +21,9 @@
       "mcp__playwright__browser_close",
       "Bash(npm ls:*)",
       "Bash(npx shadcn@latest add:*)",
-      "Bash(copy:*)"
+      "Bash(copy:*)",
+      "Bash(ls -la \"C:\\\\Users\\\\Admin3k\\\\Documents\\\\interview\\\\migrations\"\" 2>/dev/null || echo \"No migrations directory found \")",
+      "Bash(git -C \"C:\\\\Users\\\\Admin3k\\\\Documents\\\\interview\" diff HEAD)"
     ]
   }
 }

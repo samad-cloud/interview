@@ -9,7 +9,6 @@ import {
   Clock,
   Eye,
   FileText,
-  Brain,
   Briefcase,
   Send,
   ArrowRight,
@@ -68,6 +67,7 @@ interface Candidate {
   round_2_rating: number | null;
   jd_match_score: number | null;
   ai_summary: string | null;
+  interview_notes: InterviewNotes | null;
   status: string;
   current_stage: string | null;
   interview_transcript: string | null;
@@ -154,6 +154,13 @@ export default function DashboardPage() {
   // Notes
   const [generatingNotes, setGeneratingNotes] = useState(false);
   const [interviewNotes, setInterviewNotes] = useState<InterviewNotes | null>(null);
+
+  // Load saved notes when candidate is selected
+  useEffect(() => {
+    if (selectedCandidate?.interview_notes) {
+      setInterviewNotes(selectedCandidate.interview_notes);
+    }
+  }, [selectedCandidate]);
 
   // Action states
   const [sendingInvite, setSendingInvite] = useState<number | null>(null);
@@ -255,7 +262,7 @@ export default function DashboardPage() {
 
       let query = supabase
         .from('candidates')
-        .select('id, full_name, email, rating, round_2_rating, jd_match_score, ai_summary, status, current_stage, interview_transcript, round_2_transcript, resume_text, job_id, final_verdict, interview_token, created_at, video_url, round_2_video_url', { count: isBooleanActive ? undefined : 'exact' });
+        .select('id, full_name, email, rating, round_2_rating, jd_match_score, ai_summary, interview_notes, status, current_stage, interview_transcript, round_2_transcript, resume_text, job_id, final_verdict, interview_token, created_at, video_url, round_2_video_url', { count: isBooleanActive ? undefined : 'exact' });
 
       if (searchQuery) {
         query = query.or(`full_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
@@ -389,12 +396,17 @@ export default function DashboardPage() {
     setGeneratingNotes(true);
     try {
       const notes = await generateInterviewNotes({
+        candidateId: selectedCandidate.id,
         candidateName: selectedCandidate.full_name,
         jobTitle: selectedCandidate.job_title,
         round1Transcript: selectedCandidate.interview_transcript,
         round2Transcript: selectedCandidate.round_2_transcript,
       });
       setInterviewNotes(notes);
+      // Update local candidate state so notes persist if modal is reopened
+      setCandidates(prev => prev.map(c =>
+        c.id === selectedCandidate.id ? { ...c, interview_notes: notes } : c
+      ));
     } catch (err) {
       console.error('Notes generation failed:', err);
     } finally {
@@ -894,22 +906,7 @@ export default function DashboardPage() {
               </Card>
             )}
 
-            {/* AI Summary */}
-            {selectedCandidate?.ai_summary && (
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <Brain className="w-5 h-5 text-purple-400" />
-                  <h3 className="text-lg font-semibold">AI Summary</h3>
-                </div>
-                <Card>
-                  <CardContent className="pt-4">
-                    <p>{selectedCandidate.ai_summary}</p>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-
-            {/* Generate Notes */}
+            {/* Interview Notes */}
             {(selectedCandidate?.interview_transcript || selectedCandidate?.round_2_transcript) && (
               <div>
                 <div className="flex items-center justify-between mb-3">
@@ -1146,7 +1143,7 @@ export default function DashboardPage() {
             )}
 
             {/* No data state */}
-            {!selectedCandidate?.ai_summary && !selectedCandidate?.interview_transcript && (
+            {!selectedCandidate?.interview_transcript && !selectedCandidate?.round_2_transcript && (
               <div className="text-center py-8">
                 <Clock className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                 <p className="text-muted-foreground">Interview not completed yet</p>
