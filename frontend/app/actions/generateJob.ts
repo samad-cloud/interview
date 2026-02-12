@@ -16,7 +16,17 @@ interface JobGenerationParams {
   companyPerks?: string;
 }
 
-export async function generateJobDescription(params: JobGenerationParams): Promise<string> {
+export interface JobCitation {
+  url: string;
+  title: string;
+}
+
+interface JobGenerationResult {
+  description: string;
+  citations: JobCitation[];
+}
+
+export async function generateJobDescription(params: JobGenerationParams): Promise<JobGenerationResult> {
   // Build context from optional fields
   const contextParts: string[] = [];
 
@@ -44,7 +54,7 @@ export async function generateJobDescription(params: JobGenerationParams): Promi
     : '';
 
   // Step 1: Research competitor JDs using Google Search grounding
-  const { text: competitorResearch } = await generateText({
+  const { text: competitorResearch, sources } = await generateText({
     model: google('gemini-2.5-flash'),
     tools: {
       google_search: google.tools.googleSearch({}),
@@ -105,5 +115,14 @@ OUTPUT RULES:
 - Keep it concise but thorough.`,
   });
 
-  return object.jobDescription;
+  // Extract citations from search grounding sources
+  const citations: JobCitation[] = (sources ?? [])
+    .filter((s): s is typeof s & { url: string; title: string } =>
+      s.sourceType === 'url' && !!s.url
+    )
+    .map(s => ({ url: s.url, title: s.title || new URL(s.url).hostname }))
+    // Deduplicate by URL
+    .filter((c, i, arr) => arr.findIndex(x => x.url === c.url) === i);
+
+  return { description: object.jobDescription, citations };
 }

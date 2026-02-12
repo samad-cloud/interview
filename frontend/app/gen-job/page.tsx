@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
-import { generateJobDescription } from '../actions/generateJob';
+import { generateJobDescription, type JobCitation } from '../actions/generateJob';
 import { generateSkills } from '../actions/generateSkills';
 import {
   ArrowLeft,
@@ -19,6 +19,8 @@ import {
   CheckCircle,
   Plus,
   X,
+  ExternalLink,
+  Globe,
 } from 'lucide-react';
 
 // shadcn components
@@ -138,6 +140,7 @@ export default function GenJobPage() {
 
   // Step 5: Generated Description
   const [description, setDescription] = useState('');
+  const [citations, setCitations] = useState<JobCitation[]>([]);
 
   // UI State
   const [isGeneratingSkills, setIsGeneratingSkills] = useState(false);
@@ -205,7 +208,8 @@ export default function GenJobPage() {
         niceToHave: skillsNiceToHave.join(', '),
         companyPerks: visaSponsorship ? 'Visa sponsorship available' : '',
       });
-      setDescription(result);
+      setDescription(result.description);
+      setCitations(result.citations);
       setActiveStep(5);
     } catch (error) {
       console.error('Generation failed:', error);
@@ -764,6 +768,32 @@ export default function GenJobPage() {
                   className="font-mono text-sm"
                 />
               </div>
+
+              {/* Citations */}
+              {citations.length > 0 && (
+                <div className="space-y-3">
+                  <Label className="flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-blue-400" />
+                    Sources Referenced ({citations.length})
+                  </Label>
+                  <Card className="bg-muted/50">
+                    <CardContent className="pt-4 space-y-2">
+                      {citations.map((citation, i) => (
+                        <a
+                          key={i}
+                          href={citation.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition-colors group"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5 shrink-0 opacity-60 group-hover:opacity-100" />
+                          <span className="truncate">{citation.title}</span>
+                        </a>
+                      ))}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
 
               <div className="flex justify-between pt-4">
                 <Button variant="outline" onClick={() => setActiveStep(4)}>
