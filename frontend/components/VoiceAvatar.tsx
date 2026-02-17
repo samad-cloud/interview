@@ -328,27 +328,36 @@ export default function VoiceAvatar({
         console.warn('[Recording] TTS audio routing failed:', routeErr);
       }
 
-      audio.onended = () => {
-        isSpeakingRef.current = false;
-        setIsSpeaking(false);
-        URL.revokeObjectURL(audioUrl);
-        // Resume listening after speaking
-        if (isMicOnRef.current) {
-          startDeepgramListeningRef.current?.();
-        }
-      };
+      // Wait for audio to fully finish before resolving
+      // This prevents endInterview() from firing while TTS is still playing
+      await new Promise<void>((resolve) => {
+        audio.onended = () => {
+          isSpeakingRef.current = false;
+          setIsSpeaking(false);
+          URL.revokeObjectURL(audioUrl);
+          // Resume listening after speaking
+          if (isMicOnRef.current) {
+            startDeepgramListeningRef.current?.();
+          }
+          resolve();
+        };
 
-      audio.onerror = () => {
-        console.error('Audio playback error');
-        isSpeakingRef.current = false;
-        setIsSpeaking(false);
-        URL.revokeObjectURL(audioUrl);
-        if (isMicOnRef.current) {
-          startDeepgramListeningRef.current?.();
-        }
-      };
+        audio.onerror = () => {
+          console.error('Audio playback error');
+          isSpeakingRef.current = false;
+          setIsSpeaking(false);
+          URL.revokeObjectURL(audioUrl);
+          if (isMicOnRef.current) {
+            startDeepgramListeningRef.current?.();
+          }
+          resolve();
+        };
 
-      await audio.play();
+        audio.play().catch((err) => {
+          console.error('Audio play failed:', err);
+          resolve();
+        });
+      });
     } catch (err) {
       console.error('TTS error:', err);
       setIsSpeaking(false);
@@ -414,8 +423,8 @@ export default function VoiceAvatar({
       // If time has expired, deliver a farewell instead of asking another question
       if (timeExpiredRef.current) {
         const closingMessage = round === 2
-          ? `That's a great answer, ${candidateName}. Unfortunately we've run out of time. Thank you for walking me through the technical details — I have a much clearer picture of your capabilities now. The team will review everything and be in touch. Best of luck!`
-          : `I appreciate that answer, ${candidateName}. We've hit our time limit, but I really enjoyed our conversation. Thank you for being so open with me. The team will review everything and be in touch soon. Take care!`;
+          ? `That's a great answer, ${candidateName}. We've reached the end of our time together. I really appreciate you walking me through the technical details — it's given me a clear picture of your capabilities and how you think through problems. The team will review everything carefully and be in touch with next steps. Thanks again, and best of luck!`
+          : `I really appreciate that answer, ${candidateName}. We've reached the end of our time together, and I want to thank you for being so open and thoughtful with your responses. I've really enjoyed getting to know you. Our team will review everything carefully and be in touch with next steps. Take care, and best of luck!`;
 
         addToConversation('interviewer', closingMessage);
         await speakText(closingMessage);
@@ -800,8 +809,8 @@ export default function VoiceAvatar({
 
       // Welcome message - varies by round
       const welcomeMessage = round === 2
-        ? `Welcome back, ${candidateName}. I'm Atlas from the technical team. I've reviewed your conversation with Wayne, and now I'd like to dive deeper into some of the things you mentioned. Ready to get started?`
-        : `Hey ${candidateName}! Great to meet you. How are you doing today?`;
+        ? `Welcome back, ${candidateName}! I'm Atlas, the technical interviewer for the ${jobTitle} role at Printerpix. I've reviewed your conversation with Wayne, and I was impressed. Now I'd like to dig into some of the technical details you mentioned. Same rules apply — take your time, think out loud if it helps, and ask me to repeat anything. Ready to dive in?`
+        : `Hi ${candidateName}, great to meet you! I'm Wayne, your interviewer for the ${jobTitle} role at Printerpix. It's completely normal to feel a few butterflies — this is a new experience for most people. Today we'll focus on concrete examples from your experience, because that's the best way to understand how you work. Take your time, think out loud if it helps, and ask me to repeat anything if you're unsure. When you're ready, let's jump in with the first question.`;
       
       addToConversation('interviewer', welcomeMessage);
       await speakText(welcomeMessage);
