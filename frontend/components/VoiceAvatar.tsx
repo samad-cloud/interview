@@ -1286,15 +1286,15 @@ Round: ${round}
       )}
 
       {/* Subtitle Area */}
-      <div className="h-32 bg-slate-900/80 backdrop-blur-sm border-t border-slate-800 flex items-center justify-center px-8">
+      <div className="min-h-24 max-h-48 bg-slate-900/80 backdrop-blur-sm border-t border-slate-800 flex items-end justify-center px-8 py-4 overflow-y-auto">
         <div className="max-w-3xl w-full text-center">
           {isSpeaking && subtitle && (
-            <p className="text-white text-xl font-medium leading-relaxed">
+            <p className="text-white text-base font-medium leading-relaxed">
               {subtitle}
             </p>
           )}
           {!isSpeaking && transcript && (
-            <p className="text-cyan-400 text-lg italic">
+            <p className="text-cyan-400 text-base italic leading-relaxed">
               &ldquo;{transcript}&rdquo;
             </p>
           )}
