@@ -9,6 +9,7 @@ import { generateSkills } from '../actions/generateSkills';
 import {
   ArrowLeft,
   Briefcase,
+  Building2,
   DollarSign,
   GraduationCap,
   Sparkles,
@@ -37,6 +38,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+
+interface Company {
+  id: string;
+  name: string;
+  about: string;
+  industry: string | null;
+  website: string | null;
+  headquarters: string | null;
+  size: string | null;
+  culture: string | null;
+}
 
 // Skill tag input component
 function SkillInput({
@@ -112,6 +132,19 @@ function SkillInput({
 }
 
 export default function GenJobPage() {
+  // Company
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState('');
+  const [showAddCompany, setShowAddCompany] = useState(false);
+  const [newCompanyName, setNewCompanyName] = useState('');
+  const [newCompanyAbout, setNewCompanyAbout] = useState('');
+  const [newCompanyIndustry, setNewCompanyIndustry] = useState('');
+  const [newCompanyWebsite, setNewCompanyWebsite] = useState('');
+  const [newCompanyHeadquarters, setNewCompanyHeadquarters] = useState('');
+  const [newCompanySize, setNewCompanySize] = useState('');
+  const [newCompanyCulture, setNewCompanyCulture] = useState('');
+  const [isSavingCompany, setIsSavingCompany] = useState(false);
+
   // Step 1: Core Details
   const [title, setTitle] = useState('');
   const [department, setDepartment] = useState('');
@@ -149,6 +182,13 @@ export default function GenJobPage() {
   const [isPublishing, setIsPublishing] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [activeStep, setActiveStep] = useState(1);
+
+  // Fetch companies on mount
+  useEffect(() => {
+    supabase.from('companies').select('*').order('name').then(({ data }) => {
+      if (data) setCompanies(data as Company[]);
+    });
+  }, []);
 
   // Auto-generate skills when entering Step 3
   useEffect(() => {
@@ -197,10 +237,24 @@ export default function GenJobPage() {
         ? `${salaryCurrency} ${salaryMin} - ${salaryMax} ${salaryPeriod}`
         : '';
 
+      const selectedCompany = companies.find(c => c.id === selectedCompanyId);
+
       const result = await generateJobDescription({
         title,
         salary: salaryText,
         location,
+        companyName: selectedCompany?.name,
+        companyContext: selectedCompany
+          ? [
+              `Company: ${selectedCompany.name}`,
+              `About: ${selectedCompany.about}`,
+              selectedCompany.industry && `Industry: ${selectedCompany.industry}`,
+              selectedCompany.website && `Website: ${selectedCompany.website}`,
+              selectedCompany.headquarters && `Headquarters: ${selectedCompany.headquarters}`,
+              selectedCompany.size && `Company Size: ${selectedCompany.size}`,
+              selectedCompany.culture && `Culture & Values: ${selectedCompany.culture}`,
+            ].filter(Boolean).join('\n')
+          : undefined,
         experienceLevel: `${experienceMin}-${experienceMax} years`,
         keySkills: skillsMustHave.join(', '),
         employmentType: 'Full-time',
@@ -233,6 +287,7 @@ export default function GenJobPage() {
         title,
         description,
         is_active: true,
+        company_id: selectedCompanyId || null,
         location,
         work_arrangement: workArrangement,
         department: department || null,
@@ -354,6 +409,39 @@ export default function GenJobPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Company Selector */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4" />
+                  Company
+                </Label>
+                <div className="flex gap-2">
+                  <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Select a company..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {companies.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowAddCompany(true)}
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    Add Company
+                  </Button>
+                </div>
+                {selectedCompanyId && (
+                  <p className="text-sm text-muted-foreground italic">
+                    {companies.find(c => c.id === selectedCompanyId)?.about}
+                  </p>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="md:col-span-2 space-y-2">
                   <Label htmlFor="title">
@@ -822,6 +910,143 @@ export default function GenJobPage() {
         )}
 
       </div>
+
+      {/* Add Company Dialog */}
+      <Dialog open={showAddCompany} onOpenChange={setShowAddCompany}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add Company</DialogTitle>
+            <DialogDescription>
+              Company info helps the AI write a compelling &quot;About&quot; section in the job description.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="companyName">
+                Company Name <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="companyName"
+                value={newCompanyName}
+                onChange={(e) => setNewCompanyName(e.target.value)}
+                placeholder="e.g., Printerpix"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="companyAbout">
+                About / What We Do <span className="text-destructive">*</span>
+              </Label>
+              <Textarea
+                id="companyAbout"
+                value={newCompanyAbout}
+                onChange={(e) => setNewCompanyAbout(e.target.value)}
+                rows={3}
+                placeholder="e.g., We turn cherished memories into personalized photo products — mugs, canvases, phone cases — shipped to millions worldwide."
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="companyIndustry">Industry</Label>
+                <Input
+                  id="companyIndustry"
+                  value={newCompanyIndustry}
+                  onChange={(e) => setNewCompanyIndustry(e.target.value)}
+                  placeholder="e.g., E-commerce / Print"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="companyWebsite">Website</Label>
+                <Input
+                  id="companyWebsite"
+                  value={newCompanyWebsite}
+                  onChange={(e) => setNewCompanyWebsite(e.target.value)}
+                  placeholder="e.g., printerpix.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="companyHQ">Headquarters</Label>
+                <Input
+                  id="companyHQ"
+                  value={newCompanyHeadquarters}
+                  onChange={(e) => setNewCompanyHeadquarters(e.target.value)}
+                  placeholder="e.g., Dubai, UAE"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="companySize">Company Size</Label>
+                <Input
+                  id="companySize"
+                  value={newCompanySize}
+                  onChange={(e) => setNewCompanySize(e.target.value)}
+                  placeholder="e.g., 50-200 employees"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="companyCulture">Culture & Values</Label>
+              <Textarea
+                id="companyCulture"
+                value={newCompanyCulture}
+                onChange={(e) => setNewCompanyCulture(e.target.value)}
+                rows={2}
+                placeholder="e.g., Move fast, ship daily, data-driven. Small team, big ownership."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddCompany(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!newCompanyName.trim() || !newCompanyAbout.trim() || isSavingCompany}
+              onClick={async () => {
+                setIsSavingCompany(true);
+                try {
+                  const { data, error } = await supabase.from('companies').insert({
+                    name: newCompanyName.trim(),
+                    about: newCompanyAbout.trim(),
+                    industry: newCompanyIndustry.trim() || null,
+                    website: newCompanyWebsite.trim() || null,
+                    headquarters: newCompanyHeadquarters.trim() || null,
+                    size: newCompanySize.trim() || null,
+                    culture: newCompanyCulture.trim() || null,
+                  }).select().single();
+
+                  if (error) throw error;
+
+                  const newCompany = data as Company;
+                  setCompanies(prev => [...prev, newCompany].sort((a, b) => a.name.localeCompare(b.name)));
+                  setSelectedCompanyId(newCompany.id);
+
+                  // Reset form
+                  setNewCompanyName('');
+                  setNewCompanyAbout('');
+                  setNewCompanyIndustry('');
+                  setNewCompanyWebsite('');
+                  setNewCompanyHeadquarters('');
+                  setNewCompanySize('');
+                  setNewCompanyCulture('');
+                  setShowAddCompany(false);
+                } catch (err) {
+                  console.error('Failed to save company:', err);
+                  setMessage({ type: 'error', text: 'Failed to save company. Try again.' });
+                } finally {
+                  setIsSavingCompany(false);
+                }
+              }}
+            >
+              {isSavingCompany ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Saving...
+                </>
+              ) : (
+                'Save Company'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

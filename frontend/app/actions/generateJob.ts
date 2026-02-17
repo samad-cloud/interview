@@ -8,6 +8,8 @@ interface JobGenerationParams {
   title: string;
   salary: string;
   location: string;
+  companyName?: string;
+  companyContext?: string;
   experienceLevel?: string;
   keySkills?: string;
   employmentType?: string;
@@ -53,6 +55,10 @@ export async function generateJobDescription(params: JobGenerationParams): Promi
     ? `\n\nADDITIONAL CONTEXT:\n${contextParts.join('\n')}`
     : '';
 
+  const companySection = params.companyContext
+    ? `\n\nCOMPANY CONTEXT (use this to write a compelling "About ${params.companyName || 'the Company'}" opening section):\n${params.companyContext}`
+    : '';
+
   // Step 1: Research competitor JDs using Google Search grounding
   const { text: competitorResearch, sources } = await generateText({
     model: google('gemini-2.5-flash'),
@@ -89,7 +95,7 @@ Be specific. Quote actual phrases you find. Name patterns.`,
 CORE DETAILS:
 - Job Title: ${params.title}
 - Location: ${params.location}
-- Salary: ${params.salary}${additionalContext}
+- Salary: ${params.salary}${additionalContext}${companySection}
 
 COMPETITOR RESEARCH (use this to differentiate):
 ${competitorResearch}
@@ -110,7 +116,7 @@ ANTI-GENERIC RULES — These are NON-NEGOTIABLE:
 OUTPUT RULES:
 - Return ONLY the job description. No introductory text, no commentary, no "here is the JD" preamble.
 - Use clean Markdown (## for headers, - for bullets).
-- Sections: Role Summary (2-3 punchy sentences, not a paragraph), What You'll Build (specific projects/problems), Your First 90 Days, What We're Looking For (requirements with context for each), Nice-to-Have, Why This Role (not generic "why join us" — why THIS specific role is a good career move right now).
+- Sections: ${params.companyContext ? `About ${params.companyName || 'the Company'} (a compelling paragraph that makes candidates excited — use the COMPANY CONTEXT provided, don't make things up), ` : ''}Role Summary (2-3 punchy sentences, not a paragraph), What You'll Build (specific projects/problems), Your First 90 Days, What We're Looking For (requirements with context for each), Nice-to-Have, Why This Role (not generic "why join us" — why THIS specific role is a good career move right now).
 - Tone: Direct, honest, specific. Write like you're talking to a smart person, not filing a corporate form.
 - Keep it concise but thorough.`,
   });

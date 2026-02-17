@@ -28,7 +28,8 @@ cd backend && python utils.py            # Generate Gmail OAuth token
 
 ### Database Migrations
 ```bash
-# Pending migrations in migrations/ — run manually against Supabase SQL editor
+# Migrations in migrations/ — run via Supabase MCP (execute_sql tool)
+# After creating a migration file, execute it directly using the Supabase MCP server
 ```
 
 ### Deployment
@@ -61,6 +62,7 @@ Two independently deployed services sharing a Supabase PostgreSQL database.
 - `deepgram-tts/` — Returns TTS API key
 - `end-interview/` — Finalizes Round 1, scores transcript, stores result
 - `end-interview-round2/` — Finalizes Round 2
+- `tally-webhook/` — Receives Tally form submissions for Dubai visa eligibility. Updates candidate status (`FORM_COMPLETED` or `REJECTED_VISA`) and stores responses in `questionnaire_responses` JSONB column. Validated via `TALLY_WEBHOOK_SECRET` header.
 
 **Server Actions** (`app/actions/`) — All use `'use server'` directive:
 - `generateJob.ts` — Job description via `generateText()`
@@ -91,23 +93,29 @@ Two independently deployed services sharing a Supabase PostgreSQL database.
 
 ### Backend (Railway) — Python 3.11+
 
-- **`listener.py`**: Main orchestrator — continuous 60-second loop calling pipeline stages. Includes **Visa Gatekeeper** for Dubai roles (SMS-style questionnaire before interview invite, validates visa types via Gemini JSON mode).
+- **`listener.py`**: Main orchestrator — continuous 60-second loop calling pipeline stages: ingest → grade → mail.
 - **`read/ingest.py`**: Gmail "Applications" label → resume extraction (PDF/DOCX) → Gemini parsing → Supabase
 - **`grader.py`**: Scores candidates against job descriptions (Gemini JSON mode, score ≥ 70 passes)
-- **`mailer.py`**: Sends questionnaire or interview invite emails with token links
+- **`mailer.py`**: Sends Tally eligibility form (HTML email with CTA) for Dubai roles, or direct interview invite for others
 - **`utils.py`**: Shared Gmail OAuth2, Gemini client, Supabase client initialization
 
 ### Pipeline Flow
 ```
-Email → ingest.py (parse resume) → grader.py (score ≥70?) → mailer.py (send invite)
-  → /interview/[token] (Wayne: personality) → /api/end-interview (score + transcript)
+Email → ingest.py (parse resume) → grader.py (score ≥70?) → mailer.py
+  ├─ Non-Dubai → direct interview invite → /interview/[token]
+  └─ Dubai → HTML email with Tally CTA → Tally.so form
+       ├─ Valid visa → redirect to /interview/[token] + webhook → FORM_COMPLETED
+       └─ Invalid visa → Tally rejection page + webhook → REJECTED_VISA
+
+/interview/[token] (Wayne: personality) → /api/end-interview (score + transcript)
   → HR dashboard review → inviteToRound2() triggers generateDossier()
   → /round2/[token] (Atlas: technical, uses probe questions from dossier)
   → /api/end-interview-round2 → generateFinalVerdict() → HR final review
 ```
 
 ### Candidate Status Progression
-`NEW_APPLICATION` → `GRADED` (or `CV_REJECTED`) → `INVITE_SENT` → `INTERVIEW_STARTED` → `COMPLETED`
+- **Non-Dubai**: `NEW_APPLICATION` → `GRADED` (or `CV_REJECTED`) → `INVITE_SENT` → `INTERVIEW_STARTED` → `COMPLETED`
+- **Dubai**: `NEW_APPLICATION` → `GRADED` → `QUESTIONNAIRE_SENT` → `FORM_COMPLETED` (or `REJECTED_VISA`) → `INTERVIEW_STARTED` → `COMPLETED`
 
 ### Database (Supabase)
 
@@ -125,12 +133,14 @@ Two tables: `jobs` and `candidates`. The `candidates` table tracks all state —
 - `DEEPGRAM_API_KEY` — Speech-to-text and TTS
 - `GEMINI_API_KEY` — Direct Google SDK (real-time chat routes)
 - `AI_GATEWAY_API_KEY` — Vercel AI Gateway (server actions)
+- `TALLY_WEBHOOK_SECRET` — Shared secret for validating Tally webhook requests
 
 ### Backend (`backend/.env`)
 - `SUPABASE_URL`, `SUPABASE_KEY`
 - `GEMINI_API_KEY`
 - `GOOGLE_CREDENTIALS_JSON` (full credentials.json as string)
 - `GOOGLE_TOKEN_JSON` (full token.json as string)
+- `TALLY_FORM_ID` — Tally.so form ID for Dubai visa eligibility questionnaire
 
 ## Key Patterns
 
@@ -141,4 +151,4 @@ Two tables: `jobs` and `candidates`. The `candidates` table tracks all state —
 - **Voice interview pipeline**: Deepgram WebSocket for real-time STT → Gemini chat API with system prompts defining interviewer personality → Deepgram Aura TTS for spoken responses.
 - **Interview security**: UUID tokens for links, status-gated retake prevention, `created_at` field prevents emailing legacy candidates.
 - **Dossier pipeline**: When HR invites to Round 2, `sendInvite.ts` auto-calls `generateDossier()` which analyzes Round 1 transcript and generates probe questions. Atlas reads these from `round_1_dossier` column.
-- **Database migration rule**: When adding code that references new columns, tables, or schema changes, ALWAYS create a numbered migration file in `migrations/` (e.g., `002_description.sql`) and inform the user to apply it via Supabase SQL editor. Never assume schema changes exist without verifying.
+- **Database migration rule**: When adding code that references new columns, tables, or schema changes, ALWAYS create a numbered migration file in `migrations/` (e.g., `002_description.sql`) and then execute it directly via the Supabase MCP `execute_sql` tool. Never assume schema changes exist without verifying.

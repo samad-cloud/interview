@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import VoiceAvatar from '@/components/VoiceAvatar';
-import { Loader2, AlertCircle, CheckCircle } from 'lucide-react';
+import { Loader2, AlertCircle, CheckCircle, ArrowRight, MessageSquare, Clock, Users, ChevronRight } from 'lucide-react';
 
 interface CandidateData {
   id: number;
@@ -24,6 +24,7 @@ export default function VoiceInterviewPage() {
   const [jobTitle, setJobTitle] = useState<string>('Open Position');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [hasStarted, setHasStarted] = useState(false);
 
   useEffect(() => {
     const fetchCandidate = async () => {
@@ -139,14 +140,104 @@ export default function VoiceInterviewPage() {
     );
   }
 
-  // Success - Render Voice Interview
+  // Started - Render Voice Interview
+  if (hasStarted) {
+    return (
+      <VoiceAvatar
+        candidateId={String(candidate.id)}
+        candidateName={candidate.full_name}
+        jobTitle={jobTitle}
+        jobDescription={candidate.job_description || 'Software Engineer at Printerpix'}
+        resumeText={candidate.resume_text || 'No resume provided'}
+      />
+    );
+  }
+
+  // Landing Page
   return (
-    <VoiceAvatar
-      candidateId={String(candidate.id)}
-      candidateName={candidate.full_name}
-      jobTitle={jobTitle}
-      jobDescription={candidate.job_description || 'Software Engineer at Printerpix'}
-      resumeText={candidate.resume_text || 'No resume provided'}
-    />
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4 py-12">
+      <div className="max-w-2xl w-full">
+        {/* Header */}
+        <div className="text-center mb-10">
+          <p className="text-cyan-400 text-sm font-medium tracking-wide uppercase mb-3">
+            Printerpix Recruiting
+          </p>
+          <h1 className="text-3xl sm:text-4xl font-bold text-white mb-4">
+            Ready for a different kind of interview?
+          </h1>
+        </div>
+
+        {/* Content Card */}
+        <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl p-8 sm:p-10">
+          <p className="text-slate-300 text-base leading-relaxed mb-4">
+            At Printerpix, we&apos;re pioneering a better hiring process. To make our first conversation faster, fairer, and more focused on you, we use an AI assistant. This approach helps remove unconscious bias and allows you to interview in a low-pressure environment, at a time that suits your energy and schedule.
+          </p>
+          <p className="text-slate-300 text-base leading-relaxed mb-6">
+            As one of the first companies to use this technology, we&apos;re excited to have you be a part of this new way of hiring. It&apos;s still in early development, so think of it as a helpful tool rather than a formal interrogator. Your experience will provide valuable feedback as we continue to improve.
+          </p>
+
+          {/* Key Feature */}
+          <div className="bg-slate-800/50 rounded-xl p-5 mb-6 border border-slate-700/50">
+            <h2 className="text-white font-semibold text-base mb-2">
+              A key feature for you:
+            </h2>
+            <p className="text-slate-300 text-sm leading-relaxed">
+              To give you plenty of time to collect your thoughts, you are in complete control. Click the button to begin recording your response, and simply click it again when you are finished. There are no timers, so you can be as thoughtful and detailed as you like.
+            </p>
+          </div>
+
+          {/* What to Expect */}
+          <h2 className="text-white font-semibold text-base mb-3">
+            What to expect:
+          </h2>
+          <div className="space-y-3 mb-8">
+            <div className="flex items-start gap-3">
+              <Clock className="w-5 h-5 text-cyan-400 mt-0.5 shrink-0" />
+              <p className="text-slate-300 text-sm leading-relaxed">
+                The interview has a fixed number of questions and typically takes 15&ndash;20 minutes.
+              </p>
+            </div>
+            <div className="flex items-start gap-3">
+              <MessageSquare className="w-5 h-5 text-cyan-400 mt-0.5 shrink-0" />
+              <p className="text-slate-300 text-sm leading-relaxed">
+                We&apos;ll ask about your experience and how you&apos;ve handled specific situations.
+              </p>
+            </div>
+            <div className="flex items-start gap-3">
+              <Users className="w-5 h-5 text-cyan-400 mt-0.5 shrink-0" />
+              <p className="text-slate-300 text-sm leading-relaxed">
+                Every response is personally reviewed by our HR team. The AI helps us conduct the conversation, but real people evaluate your answers.
+              </p>
+            </div>
+            <div className="flex items-start gap-3">
+              <ChevronRight className="w-5 h-5 text-cyan-400 mt-0.5 shrink-0" />
+              <p className="text-slate-300 text-sm leading-relaxed">
+                If you complete this stage successfully, a member of our team will be in touch for a follow-up conversation.
+              </p>
+            </div>
+          </div>
+
+          {/* CTA Button */}
+          <button
+            onClick={() => setHasStarted(true)}
+            className="w-full flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold text-lg py-4 rounded-xl transition-colors cursor-pointer"
+          >
+            Begin Interview
+            <ArrowRight className="w-5 h-5" />
+          </button>
+
+          {/* Support */}
+          <p className="text-center text-slate-500 text-xs mt-5">
+            Having trouble? Contact{' '}
+            <a
+              href="mailto:printerpix-recruitment@gmail.com"
+              className="text-cyan-400 hover:text-cyan-300 underline"
+            >
+              printerpix-recruitment@gmail.com
+            </a>
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
