@@ -34,6 +34,30 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing interview_token' }, { status: 400 });
     }
 
+    // Helper: resolve Tally field value to human-readable text
+    // For multiple choice / checkbox / dropdown fields, Tally sends option UUIDs in `value`
+    // and includes an `options` array with { id, text } to map them back
+    const resolveFieldValue = (field: { value: unknown; options?: { id: string; text: string }[] }): string => {
+      if (!field.options || field.options.length === 0) {
+        return field.value?.toString() || '';
+      }
+      // Single value (MULTIPLE_CHOICE, DROPDOWN)
+      if (typeof field.value === 'string') {
+        const match = field.options.find((o) => o.id === field.value);
+        return match?.text || field.value;
+      }
+      // Array of values (CHECKBOXES)
+      if (Array.isArray(field.value)) {
+        return field.value
+          .map((v: string) => {
+            const match = field.options?.find((o) => o.id === v);
+            return match?.text || v;
+          })
+          .join(', ');
+      }
+      return field.value?.toString() || '';
+    };
+
     // Extract visa answer (first question / kill question)
     const visaField = data.fields.find(
       (f: { label: string }) =>
@@ -41,14 +65,14 @@ export async function POST(request: Request) {
         f.label?.toLowerCase().includes('work') ||
         f.label?.toLowerCase().includes('uae')
     );
-    const visaAnswer = visaField?.value?.toString().toLowerCase() || '';
+    const visaAnswer = visaField ? resolveFieldValue(visaField).toLowerCase() : '';
     const hasValidVisa = visaAnswer.includes('yes');
 
-    // Collect all form responses for audit
+    // Collect all form responses for audit (resolve option UUIDs to text)
     const formResponses: Record<string, string> = {};
     for (const field of data.fields) {
       if (field.label && field.label.toLowerCase() !== 'interview_token') {
-        formResponses[field.label] = field.value?.toString() || '';
+        formResponses[field.label] = resolveFieldValue(field);
       }
     }
 
@@ -101,7 +125,7 @@ export async function POST(request: Request) {
     }
 
     console.log(
-      `[Tally Webhook] Candidate ${candidate.email} → ${newStatus} (visa: ${hasValidVisa})`
+      `[Tally Webhook] Candidate ${candidate.email} → ${newStatus} (visa answer: "${visaAnswer}", valid: ${hasValidVisa})`
     );
 
     return NextResponse.json({ success: true, status: newStatus });
