@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Mic, MicOff, Camera, CameraOff, PhoneOff, Loader2, Volume2, Square, AlertCircle, Clock } from 'lucide-react';
+import { Mic, MicOff, Camera, CameraOff, PhoneOff, Loader2, Volume2, AlertCircle, Clock } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 
 interface VoiceAvatarProps {
@@ -423,8 +423,8 @@ export default function VoiceAvatar({
       // If time has expired, deliver a farewell instead of asking another question
       if (timeExpiredRef.current) {
         const closingMessage = round === 2
-          ? `That's a great answer, ${candidateName}. We've reached the end of our time together. I really appreciate you walking me through the technical details — it's given me a clear picture of your capabilities and how you think through problems. The team will review everything carefully and be in touch with next steps. Thanks again, and best of luck!`
-          : `I really appreciate that answer, ${candidateName}. We've reached the end of our time together, and I want to thank you for being so open and thoughtful with your responses. I've really enjoyed getting to know you. Our team will review everything carefully and be in touch with next steps. Take care, and best of luck!`;
+          ? `That's a great answer, ${candidateName}. We've reached the end of our time together. I really appreciate you walking me through the technical details — it's given me a clear picture of your capabilities and how you think through problems. The team will review everything carefully and be in touch with next steps. If you have any questions for our hiring team, feel free to drop us an email at printerpix-recruitment@gmail.com. Thanks again, and best of luck!`
+          : `I really appreciate that answer, ${candidateName}. We've reached the end of our time together, and I want to thank you for being so open and thoughtful with your responses. I've really enjoyed getting to know you. Our team will review everything carefully and be in touch with next steps. If you have any specific questions for our hiring team, feel free to drop them an email at printerpix-recruitment@gmail.com. Take care, and best of luck!`;
 
         addToConversation('interviewer', closingMessage);
         await speakText(closingMessage);
@@ -1308,22 +1308,8 @@ Round: ${round}
 
       {/* Control Bar */}
       <div className="h-24 bg-slate-900 border-t border-slate-800 flex items-center justify-center gap-6">
-        {/* Mic Toggle */}
-        <button
-          onClick={toggleMic}
-          disabled={isSpeaking}
-          className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${
-            isMicOn
-              ? 'bg-cyan-500 hover:bg-cyan-600 text-white'
-              : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
-          } ${isSpeaking ? 'opacity-50 cursor-not-allowed' : ''}`}
-          title={isMicOn ? 'Mute' : 'Unmute'}
-        >
-          {isMicOn ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
-        </button>
-
-        {/* Done Speaking Button - always visible when mic is on */}
-        {isMicOn && !isSpeaking && (
+        {/* Done Speaking Button */}
+        {!isSpeaking && (
           <div className="relative">
             {/* Silence nudge — appears after 5s of no voice */}
             {showDoneHint && transcript.trim() && (
@@ -1347,30 +1333,6 @@ Round: ${round}
               Done Speaking
             </button>
           </div>
-        )}
-
-        {/* Camera Toggle */}
-        <button
-          onClick={toggleCamera}
-          className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${
-            isCameraOn
-              ? 'bg-slate-700 hover:bg-slate-600 text-white'
-              : 'bg-slate-700 hover:bg-slate-600 text-slate-400'
-          }`}
-          title={isCameraOn ? 'Turn off camera' : 'Turn on camera'}
-        >
-          {isCameraOn ? <Camera className="w-6 h-6" /> : <CameraOff className="w-6 h-6" />}
-        </button>
-
-        {/* Stop Bot (interrupt) */}
-        {isSpeaking && (
-          <button
-            onClick={stopSpeaking}
-            className="w-14 h-14 rounded-full bg-orange-500 hover:bg-orange-600 text-white flex items-center justify-center transition-all animate-pulse"
-            title="Stop Bot"
-          >
-            <Square className="w-6 h-6" />
-          </button>
         )}
 
         {/* End Call */}
