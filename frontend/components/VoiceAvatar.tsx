@@ -86,8 +86,8 @@ export default function VoiceAvatar({
   const recordingChunksRef = useRef<Blob[]>([]);
   const isRecordingRef = useRef(false);
 
-  // Pre-fetched welcome audio blobs (fetched before user clicks Start)
-  const welcomeAudioRef = useRef<Blob[] | null>(null);
+  // In-flight welcome audio promises (started on mount, awaited at interview start)
+  const welcomeAudioPromisesRef = useRef<Promise<Blob>[] | null>(null);
 
   // Upload progress state
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
@@ -637,30 +637,25 @@ export default function VoiceAvatar({
   useEffect(() => { sendToAIRef.current = sendToAI; }, [sendToAI]);
   useEffect(() => { startDeepgramListeningRef.current = startDeepgramListening; }, [startDeepgramListening]);
 
-  // Pre-fetch welcome message TTS audio while user is on the landing/media-check screen
+  // Start fetching welcome message TTS immediately on mount (while user is on media-check screen)
+  // Stores promises — awaited when user clicks Start Interview
   useEffect(() => {
     const welcomeMessage = round === 2
       ? `Welcome back, ${candidateName}! I'm Atlas, the technical interviewer for the ${jobTitle} role at Printerpix. I've reviewed your conversation with Wayne, and I was impressed. Now I'd like to dig into some of the technical details you mentioned. Same rules apply — take your time, think out loud if it helps, and ask me to repeat anything. Ready to dive in?`
       : `Hi ${candidateName}, great to meet you! I'm Wayne, your interviewer for the ${jobTitle} role at Printerpix. It's completely normal to feel a few butterflies — this is a new experience for most people. Today we'll focus on concrete examples from your experience, because that's the best way to understand how you work. Take your time, think out loud if it helps, and ask me to repeat anything if you're unsure. When you're ready, let's jump in with the first question.`;
 
     const chunks = splitIntoTTSChunks(welcomeMessage);
-    Promise.all(
-      chunks.map(chunk =>
-        fetch('/api/deepgram-tts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: chunk }),
-        }).then(r => r.ok ? r.blob() : null)
-      )
-    ).then(blobs => {
-      const valid = blobs.filter((b): b is Blob => b !== null);
-      if (valid.length === chunks.length) {
-        welcomeAudioRef.current = valid;
-        console.log(`[TTS Prefetch] Welcome audio pre-fetched (${valid.length} chunks)`);
-      }
-    }).catch(err => {
-      console.warn('[TTS Prefetch] Failed, will fetch on demand:', err);
-    });
+    welcomeAudioPromisesRef.current = chunks.map(chunk =>
+      fetch('/api/deepgram-tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: chunk }),
+      }).then(r => {
+        if (!r.ok) throw new Error('TTS prefetch failed');
+        return r.blob();
+      })
+    );
+    console.log(`[TTS Prefetch] Fired ${chunks.length} welcome audio requests`);
   }, [candidateName, jobTitle, round]);
 
   // Interview timer — starts when call becomes active, cleans up on end/unmount
@@ -874,32 +869,29 @@ export default function VoiceAvatar({
 
       addToConversation('interviewer', welcomeMessage);
 
-      // Use pre-fetched welcome audio if available (instant playback)
-      if (welcomeAudioRef.current) {
-        console.log('[TTS] Using pre-fetched welcome audio');
-        isSpeakingRef.current = true;
-        speakCancelledRef.current = false;
-        setIsSpeaking(true);
-        setSubtitle(welcomeMessage);
+      // Play welcome audio from the requests fired on mount
+      // If already resolved → instant playback. If still in-flight → awaits seamlessly.
+      isSpeakingRef.current = true;
+      speakCancelledRef.current = false;
+      setIsSpeaking(true);
+      setSubtitle(welcomeMessage);
 
-        if (deepgramSocketRef.current) {
-          stopDeepgramListening();
-        }
+      if (deepgramSocketRef.current) {
+        stopDeepgramListening();
+      }
 
-        for (const blob of welcomeAudioRef.current) {
-          if (speakCancelledRef.current) break;
-          await playAudioChunk(blob);
-        }
+      const promises = welcomeAudioPromisesRef.current!;
+      for (const promise of promises) {
+        if (speakCancelledRef.current) break;
+        const blob = await promise;
+        if (speakCancelledRef.current) break;
+        await playAudioChunk(blob);
+      }
 
-        isSpeakingRef.current = false;
-        setIsSpeaking(false);
-        if (isMicOnRef.current) {
-          startDeepgramListeningRef.current?.();
-        }
-      } else {
-        // Fallback: fetch TTS on demand (prefetch didn't finish in time)
-        console.log('[TTS] Prefetch not ready, fetching welcome audio on demand');
-        await speakText(welcomeMessage);
+      isSpeakingRef.current = false;
+      setIsSpeaking(false);
+      if (isMicOnRef.current) {
+        startDeepgramListeningRef.current?.();
       }
 
     } catch (err) {
