@@ -74,6 +74,7 @@ export default function VoiceAvatar({
   // Refs to break stale closures in async callbacks
   const isMicOnRef = useRef(isMicOn);
   const isSpeakingRef = useRef(isSpeaking);
+  const speakCancelledRef = useRef(false);
   const sendToAIRef = useRef<((text: string) => Promise<void>) | null>(null);
   const startDeepgramListeningRef = useRef<(() => Promise<void>) | null>(null);
 
@@ -281,10 +282,72 @@ export default function VoiceAvatar({
     }
   }, [cameraError]);
 
-  // Speak text using Deepgram TTS
+  // Split text into sentence chunks for pipelined TTS playback
+  const splitIntoTTSChunks = (text: string): string[] => {
+    // Split on sentence-ending punctuation (keep the punctuation)
+    const raw = text.match(/[^.!?]+[.!?]+[\s]*/g);
+    if (!raw) return [text];
+
+    // Combine short sentences so each chunk is substantial enough
+    // to sound natural but small enough to generate quickly
+    const chunks: string[] = [];
+    let current = '';
+    for (const sentence of raw) {
+      if (current.length + sentence.length < 180) {
+        current += sentence;
+      } else {
+        if (current.trim()) chunks.push(current.trim());
+        current = sentence;
+      }
+    }
+    if (current.trim()) chunks.push(current.trim());
+    return chunks.length > 0 ? chunks : [text];
+  };
+
+  // Play a single audio blob with recording mixer routing
+  const playAudioChunk = useCallback(async (blob: Blob): Promise<void> => {
+    const audioUrl = URL.createObjectURL(blob);
+    const audio = new Audio(audioUrl);
+    audioRef.current = audio;
+
+    // Route TTS audio into recording mixer (mic + TTS → single track)
+    try {
+      if (recAudioCtxRef.current && recDestinationRef.current) {
+        if (recAudioCtxRef.current.state === 'suspended') {
+          await recAudioCtxRef.current.resume();
+        }
+        const ttsSource = recAudioCtxRef.current.createMediaElementSource(audio);
+        ttsSource.connect(recDestinationRef.current); // → recording
+        ttsSource.connect(recAudioCtxRef.current.destination); // → speakers
+      }
+    } catch (routeErr) {
+      console.warn('[Recording] TTS audio routing failed:', routeErr);
+    }
+
+    await new Promise<void>((resolve) => {
+      audio.onended = () => {
+        URL.revokeObjectURL(audioUrl);
+        resolve();
+      };
+      audio.onerror = () => {
+        console.error('Audio playback error');
+        URL.revokeObjectURL(audioUrl);
+        resolve();
+      };
+      audio.play().catch((err) => {
+        console.error('Audio play failed:', err);
+        resolve();
+      });
+    });
+  }, []);
+
+  // Speak text using Deepgram TTS with sentence-chunked pipeline
+  // Splits text into sentences, fetches TTS in parallel, plays sequentially.
+  // First sentence plays as soon as it's ready — eliminates the long wait.
   const speakText = useCallback(async (text: string) => {
     try {
       isSpeakingRef.current = true;
+      speakCancelledRef.current = false;
       setIsSpeaking(true);
       setSubtitle(text);
 
@@ -293,73 +356,39 @@ export default function VoiceAvatar({
         stopDeepgramListening();
       }
 
-      // Call our TTS API
-      const response = await fetch('/api/deepgram-tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-      });
+      const chunks = splitIntoTTSChunks(text);
 
-      if (!response.ok) {
-        throw new Error('TTS failed');
+      // Fire all TTS requests in parallel — short chunks generate fast
+      const audioPromises = chunks.map(chunk =>
+        fetch('/api/deepgram-tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: chunk }),
+        }).then(r => {
+          if (!r.ok) throw new Error('TTS failed');
+          return r.blob();
+        })
+      );
+
+      // Play each chunk sequentially as it resolves
+      for (let i = 0; i < audioPromises.length; i++) {
+        if (speakCancelledRef.current) break;
+
+        const blob = await audioPromises[i];
+        if (speakCancelledRef.current) break;
+
+        await playAudioChunk(blob);
       }
 
-      // Create audio from the response
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-      
-      // Create and play audio
-      const audio = new Audio(audioUrl);
-      audioRef.current = audio;
-
-      // Route TTS audio into recording mixer (mic + TTS → single track)
-      try {
-        if (recAudioCtxRef.current && recDestinationRef.current) {
-          if (recAudioCtxRef.current.state === 'suspended') {
-            await recAudioCtxRef.current.resume();
-          }
-          // crossOrigin not needed since audioUrl is a blob URL
-          const ttsSource = recAudioCtxRef.current.createMediaElementSource(audio);
-          ttsSource.connect(recDestinationRef.current); // → recording
-          ttsSource.connect(recAudioCtxRef.current.destination); // → speakers
-        }
-      } catch (routeErr) {
-        // Audio still plays normally via default output, just won't be in recording
-        console.warn('[Recording] TTS audio routing failed:', routeErr);
+      // Done speaking — reset state and resume listening
+      isSpeakingRef.current = false;
+      setIsSpeaking(false);
+      if (isMicOnRef.current) {
+        startDeepgramListeningRef.current?.();
       }
-
-      // Wait for audio to fully finish before resolving
-      // This prevents endInterview() from firing while TTS is still playing
-      await new Promise<void>((resolve) => {
-        audio.onended = () => {
-          isSpeakingRef.current = false;
-          setIsSpeaking(false);
-          URL.revokeObjectURL(audioUrl);
-          // Resume listening after speaking
-          if (isMicOnRef.current) {
-            startDeepgramListeningRef.current?.();
-          }
-          resolve();
-        };
-
-        audio.onerror = () => {
-          console.error('Audio playback error');
-          isSpeakingRef.current = false;
-          setIsSpeaking(false);
-          URL.revokeObjectURL(audioUrl);
-          if (isMicOnRef.current) {
-            startDeepgramListeningRef.current?.();
-          }
-          resolve();
-        };
-
-        audio.play().catch((err) => {
-          console.error('Audio play failed:', err);
-          resolve();
-        });
-      });
     } catch (err) {
       console.error('TTS error:', err);
+      isSpeakingRef.current = false;
       setIsSpeaking(false);
       // Fallback: use browser TTS
       const utterance = new SpeechSynthesisUtterance(text);
@@ -372,7 +401,7 @@ export default function VoiceAvatar({
       };
       speechSynthesis.speak(utterance);
     }
-  }, []);
+  }, [playAudioChunk]);
 
   // Stop Deepgram listening - defined before startDeepgramListening for reference
   const stopDeepgramListening = useCallback(() => {
@@ -763,8 +792,9 @@ export default function VoiceAvatar({
     }
   };
 
-  // Stop the bot mid-sentence
+  // Stop the bot mid-sentence (also cancels remaining queued chunks)
   const stopSpeaking = () => {
+    speakCancelledRef.current = true;
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
@@ -772,6 +802,7 @@ export default function VoiceAvatar({
     }
     // Also stop browser TTS if it's playing
     speechSynthesis.cancel();
+    isSpeakingRef.current = false;
     setIsSpeaking(false);
     setSubtitle('');
     // Resume listening after stopping

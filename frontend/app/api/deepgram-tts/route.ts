@@ -41,14 +41,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Get the audio buffer
-    const audioBuffer = await response.arrayBuffer();
-    
-    // Return the audio as a response
-    return new NextResponse(audioBuffer, {
+    // Stream Deepgram's response through instead of buffering the full audio
+    return new NextResponse(response.body, {
       headers: {
         'Content-Type': 'audio/mpeg',
-        'Content-Length': audioBuffer.byteLength.toString(),
       },
     });
 
