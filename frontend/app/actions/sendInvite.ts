@@ -287,7 +287,7 @@ export async function sendInterviewInvite(candidateId: number): Promise<SendInvi
     // Update candidate status
     const { error: updateError } = await supabase
       .from('candidates')
-      .update({ status: 'INVITE_SENT' })
+      .update({ status: 'INVITE_SENT', invite_sent_at: new Date().toISOString() })
       .eq('id', candidateId);
 
     if (updateError) {
@@ -462,9 +462,10 @@ export async function inviteToRound2(candidateId: number): Promise<SendInviteRes
     // Update to round 2
     const { error: updateError } = await supabase
       .from('candidates')
-      .update({ 
+      .update({
         current_stage: 'round_2',
-        status: 'ROUND_2_INVITED'
+        status: 'ROUND_2_INVITED',
+        invite_sent_at: new Date().toISOString()
       })
       .eq('id', candidateId);
 

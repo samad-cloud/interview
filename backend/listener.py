@@ -66,8 +66,8 @@ def run_pipeline_cycle():
 
     # Step 3: Send outreach
     try:
-        dubai, invites = run_mailer()
-        log("INFO", f"Step 3 (Mailer): {dubai} eligibility forms, {invites} invites sent")
+        dubai, invites, reminders = run_mailer()
+        log("INFO", f"Step 3 (Mailer): {dubai} eligibility forms, {invites} invites, {reminders} reminders sent")
     except Exception as e:
         log("ERROR", f"Step 3 (Mailer) failed: {e}")
 

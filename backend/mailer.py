@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""The Voice: Sends Tally eligibility forms to Dubai candidates OR interview links to others."""
+"""The Voice: Sends Tally eligibility forms to Dubai candidates OR interview links to others.
+Also sends reminder emails to candidates who haven't completed their interview after 3 days."""
 
 import os
 import base64
+from datetime import datetime, timezone
 from email.mime.text import MIMEText
 from urllib.parse import quote
 
@@ -12,7 +14,9 @@ from utils import get_supabase_client, get_gmail_service, log
 COMPANY_NAME = "Printerpix"
 MIN_SCORE = 70
 INTERVIEW_BASE_URL = "https://printerpix-recruitment.vercel.app/interview"
+ROUND2_BASE_URL = "https://printerpix-recruitment.vercel.app/round2"
 TALLY_FORM_ID = os.environ.get("TALLY_FORM_ID", "")
+REMINDER_AFTER_DAYS = 3
 
 # Dubai eligibility email (HTML with Tally CTA button)
 DUBAI_EMAIL_SUBJECT = f"Your application to {COMPANY_NAME}: Let's explore a fit"
@@ -235,6 +239,108 @@ INVITE_EMAIL_HTML = """<!DOCTYPE html>
 </html>"""
 
 
+# Reminder email for candidates who haven't completed their interview after 3 days
+REMINDER_EMAIL_SUBJECT = f"Quick reminder: Your {COMPANY_NAME} application"
+
+REMINDER_EMAIL_HTML = """<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interview Reminder – {company_name}</title>
+</head>
+<body style="margin:0; padding:0; background-color:#faf5f7; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; -webkit-font-smoothing:antialiased;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#faf5f7; padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:12px; overflow:hidden; max-width:600px; box-shadow:0 4px 24px rgba(195,3,97,0.08);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background-color:#c30361; padding:28px 36px;">
+              <h1 style="margin:0; color:#ffffff; font-size:22px; font-weight:700; letter-spacing:0.5px;">{company_name}</h1>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:32px 36px;">
+
+              <p style="margin:0 0 18px; color:#1f2937; font-size:15px; line-height:1.7;">
+                Hi {full_name},
+              </p>
+
+              <p style="margin:0 0 18px; color:#374151; font-size:15px; line-height:1.7;">
+                We noticed you started your application with us but haven't yet completed the interactive interview. We wanted to reach out in case you had any questions or ran into any technical issues.
+              </p>
+
+              <p style="margin:0 0 18px; color:#374151; font-size:15px; line-height:1.7;">
+                We're still very interested in learning more about you, and the interview is still available for you to complete. It takes about 15&ndash;20 minutes and can be done at any time that works for you.
+              </p>
+
+              <p style="margin:0 0 28px; color:#374151; font-size:15px; line-height:1.7;">
+                To keep your application moving forward, we'd appreciate if you could complete this within the next 2&ndash;3 days. We're reviewing candidates on a rolling basis and would love to include you in our upcoming review cycle.
+              </p>
+
+              <p style="margin:0 0 28px; color:#374151; font-size:15px; line-height:1.7;">
+                Looking forward to hearing from you!
+              </p>
+
+              <!-- CTA Button -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center" style="padding:4px 0 28px;">
+                    <!--[if mso]>
+                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{interview_link}" style="height:52px;v-text-anchor:middle;width:320px;" arcsize="12%" strokecolor="#a00250" fillcolor="#c30361">
+                    <w:anchorlock/>
+                    <center style="color:#ffffff;font-family:'Segoe UI',Tahoma,sans-serif;font-size:16px;font-weight:bold;">Complete My Interview &rarr;</center>
+                    </v:roundrect>
+                    <![endif]-->
+                    <!--[if !mso]><!-->
+                    <a href="{interview_link}" target="_blank" style="display:inline-block; background-color:#c30361; color:#ffffff; text-decoration:none; font-size:16px; font-weight:700; padding:16px 40px; border-radius:8px; line-height:1; letter-spacing:0.3px; border-bottom:3px solid #a00250;">
+                      Complete My Interview &rarr;
+                    </a>
+                    <!--<![endif]-->
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0; color:#6b7280; font-size:13px; line-height:1.5;">
+                If you're experiencing any technical difficulties or have questions about the process, please email <a href="mailto:printerpix-recruitment@gmail.com" style="color:#c30361; text-decoration:underline;">printerpix-recruitment@gmail.com</a> and we'll be happy to help.
+              </p>
+
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color:#1f2937; padding:24px 36px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td>
+                    <p style="margin:0 0 6px; color:#ffffff; font-size:14px; font-weight:600;">
+                      Best regards,
+                    </p>
+                    <p style="margin:0 0 4px; color:rgba(255,255,255,0.85); font-size:13px; line-height:1.5;">
+                      John Poole
+                    </p>
+                    <p style="margin:0; color:rgba(255,255,255,0.6); font-size:13px; line-height:1.5;">
+                      Recruitment Manager, {company_name}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+
 def fetch_top_candidates(supabase):
     """Fetch graded candidates with score >= MIN_SCORE, joining jobs.location for Dubai detection.
     Only fetches candidates with created_at set (excludes old/legacy candidates)."""
@@ -295,10 +401,11 @@ def send_interview_invite(gmail_service, email: str, full_name: str, interview_t
 
 
 def update_candidate_status(supabase, candidate_id: int, status: str):
-    """Update candidate status."""
-    supabase.table("candidates").update({
-        "status": status
-    }).eq("id", candidate_id).execute()
+    """Update candidate status. Also sets invite_sent_at when sending invites."""
+    update_data = {"status": status}
+    if status in ("INVITE_SENT", "ROUND_2_INVITED"):
+        update_data["invite_sent_at"] = datetime.now(timezone.utc).isoformat()
+    supabase.table("candidates").update(update_data).eq("id", candidate_id).execute()
 
 
 def fetch_form_completed_candidates(supabase):
@@ -313,10 +420,94 @@ def fetch_form_completed_candidates(supabase):
     return result.data
 
 
-def run_mailer() -> tuple[int, int]:
+def fetch_candidates_needing_reminder(supabase):
+    """Fetch candidates who were sent an interview invite 3+ days ago but haven't completed it.
+    Only returns candidates who haven't already received a reminder."""
+    result = (
+        supabase.table("candidates")
+        .select("id, email, full_name, interview_token, status, invite_sent_at, current_stage")
+        .in_("status", ["INVITE_SENT", "ROUND_2_INVITED"])
+        .not_.is_("invite_sent_at", "null")
+        .is_("reminder_sent_at", "null")
+        .not_.is_("created_at", "null")
+        .execute()
+    )
+    # Filter to only those where invite_sent_at is 3+ days ago
+    now = datetime.now(timezone.utc)
+    eligible = []
+    for c in result.data:
+        sent_at = c.get("invite_sent_at")
+        if not sent_at:
+            continue
+        # Parse the ISO timestamp
+        sent_dt = datetime.fromisoformat(sent_at.replace("Z", "+00:00"))
+        days_elapsed = (now - sent_dt).days
+        if days_elapsed >= REMINDER_AFTER_DAYS:
+            eligible.append(c)
+    return eligible
+
+
+def send_reminder_email(gmail_service, email: str, full_name: str, interview_link: str):
+    """Send a reminder email to a candidate who hasn't completed their interview."""
+    body = REMINDER_EMAIL_HTML.format(
+        full_name=full_name,
+        interview_link=interview_link,
+        company_name=COMPANY_NAME
+    )
+    message = create_email(email, REMINDER_EMAIL_SUBJECT, body, html=True)
+    gmail_service.users().messages().send(userId="me", body=message).execute()
+
+
+def run_reminders(supabase, gmail_service) -> int:
+    """Send reminder emails to candidates who haven't completed their interview after 3 days.
+    Returns the number of reminders sent."""
+    candidates = fetch_candidates_needing_reminder(supabase)
+    if not candidates:
+        log("INFO", "No candidates need reminders")
+        return 0
+
+    log("INFO", f"Found {len(candidates)} candidate(s) needing reminders")
+    sent = 0
+
+    for candidate in candidates:
+        try:
+            email = candidate["email"]
+            full_name = candidate.get("full_name", "Candidate")
+            interview_token = candidate.get("interview_token")
+            candidate_id = candidate["id"]
+            status = candidate.get("status", "")
+
+            if not interview_token:
+                log("WARN", f"No interview_token for {email}, skipping reminder")
+                continue
+
+            # Use the correct link based on whether this is Round 1 or Round 2
+            if status == "ROUND_2_INVITED":
+                interview_link = f"{ROUND2_BASE_URL}/{interview_token}"
+            else:
+                interview_link = f"{INTERVIEW_BASE_URL}/{interview_token}"
+
+            log("INFO", f"Sending reminder to {email} (status: {status})")
+            send_reminder_email(gmail_service, email, full_name, interview_link)
+
+            # Mark reminder as sent
+            supabase.table("candidates").update({
+                "reminder_sent_at": datetime.now(timezone.utc).isoformat()
+            }).eq("id", candidate_id).execute()
+
+            log("SUCCESS", f"Reminder sent to {email}")
+            sent += 1
+
+        except Exception as e:
+            log("ERROR", f"Failed to send reminder to {candidate.get('email', 'unknown')}: {e}")
+
+    return sent
+
+
+def run_mailer() -> tuple[int, int, int]:
     """
     Main mailer function - can be called from other modules.
-    Returns tuple of (dubai_forms_sent, interview_invites_sent).
+    Returns tuple of (dubai_forms_sent, interview_invites_sent, reminders_sent).
     """
     log("INFO", "Starting outreach to top candidates...")
 
@@ -388,8 +579,15 @@ def run_mailer() -> tuple[int, int]:
             log("ERROR", f"Failed to process {candidate.get('email', 'unknown')}: {e}")
             failed += 1
 
-    log("INFO", f"Outreach complete: {dubai_sent} eligibility forms, {invites_sent} interview invites, {failed} failed")
-    return (dubai_sent, invites_sent)
+    # --- Phase 3: Send reminders to candidates who haven't completed their interview ---
+    try:
+        reminders_sent = run_reminders(supabase, gmail_service)
+    except Exception as e:
+        log("ERROR", f"Reminder phase failed: {e}")
+        reminders_sent = 0
+
+    log("INFO", f"Outreach complete: {dubai_sent} eligibility forms, {invites_sent} interview invites, {reminders_sent} reminders, {failed} failed")
+    return (dubai_sent, invites_sent, reminders_sent)
 
 
 def main():
