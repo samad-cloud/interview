@@ -179,10 +179,10 @@ export default function VoiceInterviewPage() {
           {/* Key Feature */}
           <div className="bg-slate-800/50 rounded-xl p-5 mb-6 border border-slate-700/50">
             <h2 className="text-white font-semibold text-base mb-2">
-              A key feature for you:
+              Your Interview, Your Pace
             </h2>
             <p className="text-slate-300 text-sm leading-relaxed">
-              To give you plenty of time to collect your thoughts, you are in complete control. Click the button to begin recording your response, and simply click it again when you are finished. There are no timers, so you can be as thoughtful and detailed as you like.
+              This conversation is designed for you to feel comfortable and focused. Once the interviewer finishes asking a question, feel free to take a second and collect your thoughts before you begin speaking. When you are satisfied with your response, simply click the &quot;Done Speaking&quot; button to submit it and move to the next question. Since each answer is final once submitted, please ensure you&apos;ve shared all the details you&apos;d like the team to hear.
             </p>
           </div>
 
