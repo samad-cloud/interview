@@ -818,7 +818,7 @@ export default function DashboardPage() {
                           </TableCell>
 
                           <TableCell>
-                            <Badge variant={stageDisplay.variant} className={stageDisplay.className}>
+                            <Badge variant={stageDisplay.variant} className={`whitespace-nowrap ${stageDisplay.className}`}>
                               {stageDisplay.label}
                             </Badge>
                           </TableCell>
