@@ -316,17 +316,34 @@ export default function DashboardPage() {
 
       if (stageFilter !== 'all') {
         switch (stageFilter) {
-          case 'not_interviewed':
-            query = query.is('rating', null);
+          case 'screening':
+            query = query.is('rating', null).not('status', 'in', '("CV_REJECTED","QUESTIONNAIRE_SENT","REJECTED_VISA","INVITE_SENT","INTERVIEW_STARTED","FORM_COMPLETED")');
             break;
-          case 'round_1':
-            query = query.not('rating', 'is', null).or('current_stage.is.null,current_stage.eq.round_1');
+          case 'cv_rejected':
+            query = query.eq('status', 'CV_REJECTED');
             break;
-          case 'round_2':
-            query = query.eq('current_stage', 'round_2');
+          case 'eligibility_pending':
+            query = query.eq('status', 'QUESTIONNAIRE_SENT');
             break;
-          case 'completed':
-            query = query.eq('current_stage', 'completed');
+          case 'eligibility_failed':
+            query = query.eq('status', 'REJECTED_VISA');
+            break;
+          case 'r1_pending':
+            query = query.is('rating', null).in('status', ['INVITE_SENT', 'INTERVIEW_STARTED', 'FORM_COMPLETED']);
+            break;
+          case 'r1_failed':
+            query = query.not('rating', 'is', null).lt('rating', 70).is('round_2_rating', null)
+              .not('current_stage', 'in', '("round_2","completed")');
+            break;
+          case 'r2_pending':
+            query = query.is('round_2_rating', null).not('rating', 'is', null)
+              .or('current_stage.eq.round_2,status.eq.ROUND_2_APPROVED,status.eq.ROUND_2_INVITED,rating.gte.70');
+            break;
+          case 'r2_failed':
+            query = query.not('round_2_rating', 'is', null).lt('round_2_rating', 70);
+            break;
+          case 'successful':
+            query = query.not('round_2_rating', 'is', null).gte('round_2_rating', 70);
             break;
         }
       }
@@ -404,26 +421,45 @@ export default function DashboardPage() {
   }, [searchQuery, resumeSearchQuery, roleFilter, stageFilter, sortColumn, sortDirection]);
 
   const getStageDisplay = (candidate: Candidate) => {
-    const stage = candidate.current_stage || 'round_1';
-    if (candidate.status === 'REJECTED_VISA') {
-      return { label: 'No Visa', variant: 'default' as const, className: 'bg-red-500/20 text-red-400 border-red-500/30' };
-    }
+    // Status-based stages (most specific first)
     if (candidate.status === 'CV_REJECTED') {
       return { label: 'CV Rejected', variant: 'default' as const, className: 'bg-red-500/20 text-red-400 border-red-500/30' };
     }
     if (candidate.status === 'QUESTIONNAIRE_SENT') {
-      return { label: 'Visa Pending', variant: 'default' as const, className: 'bg-orange-500/20 text-orange-400 border-orange-500/30' };
+      return { label: 'Eligibility Pending', variant: 'default' as const, className: 'bg-orange-500/20 text-orange-400 border-orange-500/30' };
     }
-    if (stage === 'completed') {
-      return { label: 'Completed', variant: 'default' as const, className: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' };
+    if (candidate.status === 'REJECTED_VISA') {
+      return { label: 'Eligibility Failed', variant: 'default' as const, className: 'bg-red-500/20 text-red-400 border-red-500/30' };
     }
-    if (stage === 'round_2') {
-      return { label: 'Round 2', variant: 'default' as const, className: 'bg-blue-500/20 text-blue-400 border-blue-500/30' };
+
+    // R2 completed — check outcome
+    if (candidate.round_2_rating !== null) {
+      return candidate.round_2_rating >= 70
+        ? { label: 'Successful', variant: 'default' as const, className: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' }
+        : { label: 'R2 Failed', variant: 'default' as const, className: 'bg-red-500/20 text-red-400 border-red-500/30' };
     }
+
+    // In R2 pipeline but no score yet
+    if (candidate.current_stage === 'round_2' || candidate.status === 'ROUND_2_INVITED' || candidate.status === 'ROUND_2_APPROVED') {
+      return { label: 'R2 Pending', variant: 'default' as const, className: 'bg-blue-500/20 text-blue-400 border-blue-500/30' };
+    }
+
+    // R1 completed — check outcome
     if (candidate.rating !== null) {
-      return { label: 'R1 Done', variant: 'default' as const, className: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' };
+      if (candidate.rating >= 70) {
+        // Passed R1, auto-invite to R2 scheduled
+        return { label: 'R2 Pending', variant: 'default' as const, className: 'bg-blue-500/20 text-blue-400 border-blue-500/30' };
+      }
+      return { label: 'R1 Failed', variant: 'default' as const, className: 'bg-red-500/20 text-red-400 border-red-500/30' };
     }
-    return { label: 'Pending', variant: 'secondary' as const, className: '' };
+
+    // R1 invite sent but not taken
+    if (['INVITE_SENT', 'INTERVIEW_STARTED', 'FORM_COMPLETED'].includes(candidate.status)) {
+      return { label: 'R1 Pending', variant: 'default' as const, className: 'bg-sky-500/20 text-sky-400 border-sky-500/30' };
+    }
+
+    // Default — in screening pipeline
+    return { label: 'Screening', variant: 'secondary' as const, className: '' };
   };
 
   const ScoreBar = ({ score, label, color }: { score: number | null, label: string, color: string }) => {
@@ -707,15 +743,20 @@ export default function DashboardPage() {
           </Select>
 
           <Select value={stageFilter} onValueChange={setStageFilter}>
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="w-48">
               <SelectValue placeholder="All Stages" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Stages</SelectItem>
-              <SelectItem value="not_interviewed">Not Interviewed</SelectItem>
-              <SelectItem value="round_1">Round 1 Done</SelectItem>
-              <SelectItem value="round_2">In Round 2</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
+              <SelectItem value="screening">Screening</SelectItem>
+              <SelectItem value="cv_rejected">CV Rejected</SelectItem>
+              <SelectItem value="eligibility_pending">Eligibility Pending</SelectItem>
+              <SelectItem value="eligibility_failed">Eligibility Failed</SelectItem>
+              <SelectItem value="r1_pending">R1 Pending</SelectItem>
+              <SelectItem value="r1_failed">R1 Failed</SelectItem>
+              <SelectItem value="r2_pending">R2 Pending</SelectItem>
+              <SelectItem value="r2_failed">R2 Failed</SelectItem>
+              <SelectItem value="successful">Successful</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -785,8 +826,19 @@ export default function DashboardPage() {
                   <TableBody>
                     {candidates.map((candidate, index) => {
                       const stageDisplay = getStageDisplay(candidate);
-                      const canSendInvite = !candidate.rating && candidate.status !== 'INVITE_SENT' && candidate.status !== 'QUESTIONNAIRE_SENT' && candidate.status !== 'REJECTED_VISA' && candidate.status !== 'CV_REJECTED';
-                      const canInviteR2 = candidate.rating !== null && candidate.rating >= 70 && candidate.current_stage !== 'round_2' && candidate.current_stage !== 'completed';
+                      // R1 invite: show for any candidate without R1 rating who doesn't already have an active invite
+                      const canSendInvite = candidate.rating === null &&
+                        !['INVITE_SENT', 'INTERVIEW_STARTED', 'FORM_COMPLETED'].includes(candidate.status);
+                      // R2 invite: show for any R1-completed candidate not already in R2 (enables override for R1 Failed)
+                      const canInviteR2 = candidate.rating !== null &&
+                        candidate.round_2_rating === null &&
+                        candidate.current_stage !== 'round_2' &&
+                        candidate.current_stage !== 'completed' &&
+                        candidate.status !== 'ROUND_2_INVITED' &&
+                        candidate.status !== 'ROUND_2_APPROVED';
+                      // Override detection for visual distinction
+                      const isR1Override = canSendInvite && ['CV_REJECTED', 'QUESTIONNAIRE_SENT', 'REJECTED_VISA'].includes(candidate.status);
+                      const isR2Override = canInviteR2 && candidate.rating !== null && candidate.rating < 70;
                       const rowNumber = startIndex + index;
 
                       return (
@@ -892,8 +944,8 @@ export default function DashboardPage() {
                                   size="icon"
                                   onClick={() => handleSendInvite(candidate.id)}
                                   disabled={sendingInvite === candidate.id}
-                                  className="bg-blue-600 hover:bg-blue-500"
-                                  title="Send Interview Invite"
+                                  className={isR1Override ? "bg-amber-600 hover:bg-amber-500" : "bg-blue-600 hover:bg-blue-500"}
+                                  title={isR1Override ? "Override: Send Interview Invite" : "Send Interview Invite"}
                                 >
                                   <Send className="w-4 h-4" />
                                 </Button>
@@ -904,8 +956,8 @@ export default function DashboardPage() {
                                   size="icon"
                                   onClick={() => handleInviteRound2(candidate.id)}
                                   disabled={sendingInvite === candidate.id}
-                                  className="bg-emerald-600 hover:bg-emerald-500"
-                                  title="Invite to Round 2"
+                                  className={isR2Override ? "bg-amber-600 hover:bg-amber-500" : "bg-emerald-600 hover:bg-emerald-500"}
+                                  title={isR2Override ? "Override: Invite to Round 2" : "Invite to Round 2"}
                                 >
                                   <ArrowRight className="w-4 h-4" />
                                 </Button>
