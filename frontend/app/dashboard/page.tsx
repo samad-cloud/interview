@@ -405,6 +405,15 @@ export default function DashboardPage() {
 
   const getStageDisplay = (candidate: Candidate) => {
     const stage = candidate.current_stage || 'round_1';
+    if (candidate.status === 'REJECTED_VISA') {
+      return { label: 'No Visa', variant: 'default' as const, className: 'bg-red-500/20 text-red-400 border-red-500/30' };
+    }
+    if (candidate.status === 'CV_REJECTED') {
+      return { label: 'CV Rejected', variant: 'default' as const, className: 'bg-red-500/20 text-red-400 border-red-500/30' };
+    }
+    if (candidate.status === 'QUESTIONNAIRE_SENT') {
+      return { label: 'Visa Pending', variant: 'default' as const, className: 'bg-orange-500/20 text-orange-400 border-orange-500/30' };
+    }
     if (stage === 'completed') {
       return { label: 'Completed', variant: 'default' as const, className: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' };
     }
@@ -776,7 +785,7 @@ export default function DashboardPage() {
                   <TableBody>
                     {candidates.map((candidate, index) => {
                       const stageDisplay = getStageDisplay(candidate);
-                      const canSendInvite = !candidate.rating && candidate.status !== 'INVITE_SENT';
+                      const canSendInvite = !candidate.rating && candidate.status !== 'INVITE_SENT' && candidate.status !== 'QUESTIONNAIRE_SENT' && candidate.status !== 'REJECTED_VISA' && candidate.status !== 'CV_REJECTED';
                       const canInviteR2 = candidate.rating !== null && candidate.rating >= 70 && candidate.current_stage !== 'round_2' && candidate.current_stage !== 'completed';
                       const rowNumber = startIndex + index;
 
