@@ -455,8 +455,8 @@ export default function VoiceAvatar({
       // If time has expired, deliver a farewell instead of asking another question
       if (timeExpiredRef.current) {
         const closingMessage = round === 2
-          ? `That's a great answer, ${candidateName}. We've reached the end of our time together. I really appreciate you walking me through the technical details — it's given me a clear picture of your capabilities and how you think through problems. The team will get back to you regarding the next steps of the process within 2 days. If you have any questions for our hiring team, feel free to drop us an email at printerpix-recruitment@gmail.com. Thanks again, and best of luck!`
-          : `I really appreciate that answer, ${candidateName}. We've reached the end of our time together, and I want to thank you for being so open and thoughtful with your responses. I've really enjoyed getting to know you. The team will get back to you regarding the next steps of the process within 2 days. If you have any specific questions for our hiring team, feel free to drop them an email at printerpix-recruitment@gmail.com. Take care, and best of luck!`;
+          ? `That's a great answer, ${candidateName}. We've reached the end of our time together. I really appreciate you walking me through the technical details — it's given me a clear picture of your capabilities and how you think through problems. The team will get back to you regarding the next steps of the process within 2 days. If you have any questions for our hiring team, feel free to drop us an email at printerpix.recruitment@gmail.com. Thanks again, and best of luck!`
+          : `I really appreciate that answer, ${candidateName}. We've reached the end of our time together, and I want to thank you for being so open and thoughtful with your responses. I've really enjoyed getting to know you. The team will get back to you regarding the next steps of the process within 2 days. If you have any specific questions for our hiring team, feel free to drop them an email at printerpix.recruitment@gmail.com. Take care, and best of luck!`;
 
         addToConversation('interviewer', closingMessage);
         await speakText(closingMessage);
@@ -1280,8 +1280,8 @@ Round: ${round}
           <div className="mt-6 pt-4 border-t border-slate-800">
             <p className="text-slate-500 text-xs">
               Experienced a technical issue? Contact us at{' '}
-              <a href="mailto:printerpix-recruitment@gmail.com" className="text-cyan-400 hover:text-cyan-300 underline">
-                printerpix-recruitment@gmail.com
+              <a href="mailto:printerpix.recruitment@gmail.com" className="text-cyan-400 hover:text-cyan-300 underline">
+                printerpix.recruitment@gmail.com
               </a>
             </p>
           </div>

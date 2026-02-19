@@ -79,7 +79,7 @@ DUBAI_EMAIL_HTML = """<!DOCTYPE html>
                 </tr>
               </table>
               <p style="margin:0; color:#6b7280; font-size:13px; line-height:1.5;">
-                If you experience any issues, please email <a href="mailto:printerpix-recruitment@gmail.com" style="color:#1e3a5f; text-decoration:underline;">printerpix-recruitment@gmail.com</a>
+                If you experience any issues, please email <a href="mailto:printerpix.recruitment@gmail.com" style="color:#1e3a5f; text-decoration:underline;">printerpix.recruitment@gmail.com</a>
               </p>
             </td>
           </tr>
@@ -204,7 +204,7 @@ INVITE_EMAIL_HTML = """<!DOCTYPE html>
               </table>
 
               <p style="margin:0; color:#6b7280; font-size:13px; line-height:1.5;">
-                If you experience any issues, please email <a href="mailto:printerpix-recruitment@gmail.com" style="color:#c30361; text-decoration:underline;">printerpix-recruitment@gmail.com</a>
+                If you experience any issues, please email <a href="mailto:printerpix.recruitment@gmail.com" style="color:#c30361; text-decoration:underline;">printerpix.recruitment@gmail.com</a>
               </p>
 
             </td>
@@ -306,7 +306,7 @@ REMINDER_EMAIL_HTML = """<!DOCTYPE html>
               </table>
 
               <p style="margin:0; color:#6b7280; font-size:13px; line-height:1.5;">
-                If you're experiencing any technical difficulties or have questions about the process, please email <a href="mailto:printerpix-recruitment@gmail.com" style="color:#c30361; text-decoration:underline;">printerpix-recruitment@gmail.com</a> and we'll be happy to help.
+                If you're experiencing any technical difficulties or have questions about the process, please email <a href="mailto:printerpix.recruitment@gmail.com" style="color:#c30361; text-decoration:underline;">printerpix.recruitment@gmail.com</a> and we'll be happy to help.
               </p>
 
             </td>
@@ -333,6 +333,87 @@ REMINDER_EMAIL_HTML = """<!DOCTYPE html>
             </td>
           </tr>
 
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+
+# Round 2 invite email (sent after delayed "human review" period)
+ROUND2_EMAIL_SUBJECT = f"Great news about your {COMPANY_NAME} application"
+
+ROUND2_EMAIL_HTML = """<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0; padding:0; background-color:#f4f4f5; font-family:Arial, Helvetica, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5; padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:8px; overflow:hidden; max-width:600px;">
+          <tr>
+            <td style="background-color:#1e293b; padding:24px 32px;">
+              <h1 style="margin:0; color:#ffffff; font-size:20px; font-weight:600;">{company_name}</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;">
+              <p style="margin:0 0 16px; color:#1e293b; font-size:16px; line-height:1.6;">
+                Hi {full_name},
+              </p>
+              <p style="margin:0 0 16px; color:#374151; font-size:15px; line-height:1.6;">
+                Thank you for completing the first interview. We were impressed with your responses and would like to invite you to the next stage of our process.
+              </p>
+              <p style="margin:0 0 16px; color:#374151; font-size:15px; line-height:1.6;">
+                The next step is a technical AI interview. This conversation will dive deeper into the specific skills and expertise required for the <strong>{job_title}</strong> role. Like the first interview, it's designed to be completed on your own schedule and will give you the opportunity to demonstrate your technical capabilities in detail.
+              </p>
+              <p style="margin:0 0 12px; color:#1e293b; font-size:15px; font-weight:600; line-height:1.6;">
+                What to expect:
+              </p>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
+                <tr>
+                  <td style="padding:4px 0 4px 16px; color:#374151; font-size:15px; line-height:1.6;">&bull;&nbsp; The format is similar to the first interview &mdash; an AI-guided conversation where you control the pace.</td>
+                </tr>
+                <tr>
+                  <td style="padding:4px 0 4px 16px; color:#374151; font-size:15px; line-height:1.6;">&bull;&nbsp; You'll be asked questions related to your approach to problem-solving, technical challenges you've faced, and your expertise relevant to the role.</td>
+                </tr>
+                <tr>
+                  <td style="padding:4px 0 4px 16px; color:#374151; font-size:15px; line-height:1.6;">&bull;&nbsp; Remember to click the button to start recording your response, and click it again when you're finished. Take your time to think through your answers.</td>
+                </tr>
+                <tr>
+                  <td style="padding:4px 0 4px 16px; color:#374151; font-size:15px; line-height:1.6;">&bull;&nbsp; The interview typically takes 15&ndash;20 minutes, depending on how detailed your responses are.</td>
+                </tr>
+              </table>
+              <p style="margin:0 0 24px; color:#374151; font-size:15px; line-height:1.6;">
+                If you perform well in this technical round, the final step is a conversation with our team, where we'll discuss the role in more depth and answer any questions you may have.
+              </p>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center" style="padding:8px 0 24px;">
+                    <a href="{round2_link}" target="_blank" style="display:inline-block; background-color:#1e3a5f; color:#ffffff; text-decoration:none; font-size:16px; font-weight:600; padding:14px 32px; border-radius:6px; min-height:44px; line-height:44px;">
+                      Start Technical Interview
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0; color:#6b7280; font-size:13px; line-height:1.5;">
+                If you experience any issues, please email <a href="mailto:printerpix.recruitment@gmail.com" style="color:#1e3a5f; text-decoration:underline;">printerpix.recruitment@gmail.com</a>
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f8fafc; padding:20px 32px; border-top:1px solid #e5e7eb;">
+              <p style="margin:0; color:#6b7280; font-size:13px; line-height:1.5;">
+                Best,<br>
+                {company_name} Recruiting<br>
+                John Poole, Recruitment Manager
+              </p>
+            </td>
+          </tr>
         </table>
       </td>
     </tr>
@@ -422,20 +503,25 @@ def fetch_form_completed_candidates(supabase):
 
 def fetch_candidates_needing_reminder(supabase):
     """Fetch candidates who were sent an interview invite 3+ days ago but haven't completed it.
-    Only returns candidates who haven't already received a reminder."""
+    Only returns candidates who haven't already received a reminder and whose job is still active."""
     result = (
         supabase.table("candidates")
-        .select("id, email, full_name, interview_token, status, invite_sent_at, current_stage")
+        .select("id, email, full_name, interview_token, status, invite_sent_at, current_stage, job_id, jobs(is_active)")
         .in_("status", ["INVITE_SENT", "ROUND_2_INVITED"])
         .not_.is_("invite_sent_at", "null")
         .is_("reminder_sent_at", "null")
         .not_.is_("created_at", "null")
         .execute()
     )
-    # Filter to only those where invite_sent_at is 3+ days ago
+    # Filter to only those where invite_sent_at is 3+ days ago and job is active
     now = datetime.now(timezone.utc)
     eligible = []
     for c in result.data:
+        # Skip candidates whose job is no longer active
+        job = c.get("jobs")
+        if not job or not job.get("is_active"):
+            continue
+
         sent_at = c.get("invite_sent_at")
         if not sent_at:
             continue
@@ -466,8 +552,7 @@ def run_reminders(supabase, gmail_service) -> int:
         log("INFO", "No candidates need reminders")
         return 0
 
-    log("INFO", f"Found {len(candidates)} candidate(s) needing reminders")
-    sent = 0
+    log("INFO", f"Found {len(candidates)} candidate(s) needing reminders (sending max 1 per run)")
 
     for candidate in candidates:
         try:
@@ -496,18 +581,85 @@ def run_reminders(supabase, gmail_service) -> int:
             }).eq("id", candidate_id).execute()
 
             log("SUCCESS", f"Reminder sent to {email}")
-            sent += 1
+            # Rate limit: only send 1 reminder per run to avoid spam filters
+            return 1
 
         except Exception as e:
             log("ERROR", f"Failed to send reminder to {candidate.get('email', 'unknown')}: {e}")
 
+    return 0
+
+
+def fetch_round_2_approved_candidates(supabase):
+    """Fetch candidates approved for Round 2 whose scheduled send time has passed."""
+    now = datetime.now(timezone.utc).isoformat()
+    result = (
+        supabase.table("candidates")
+        .select("id, email, full_name, interview_token, job_id, jobs(title)")
+        .eq("status", "ROUND_2_APPROVED")
+        .not_.is_("round_2_invite_after", "null")
+        .lte("round_2_invite_after", now)
+        .not_.is_("created_at", "null")
+        .execute()
+    )
+    return result.data
+
+
+def send_round_2_invite(gmail_service, email: str, full_name: str, interview_token: str, job_title: str):
+    """Send Round 2 technical interview invite email."""
+    round2_link = f"{ROUND2_BASE_URL}/{interview_token}"
+    body = ROUND2_EMAIL_HTML.format(
+        full_name=full_name,
+        round2_link=round2_link,
+        job_title=job_title,
+        company_name=COMPANY_NAME
+    )
+    message = create_email(email, ROUND2_EMAIL_SUBJECT, body, html=True)
+    gmail_service.users().messages().send(userId="me", body=message).execute()
+
+
+def run_round_2_invites(supabase, gmail_service) -> int:
+    """Send Round 2 invite emails to candidates whose scheduled time has arrived.
+    Returns the number of invites sent."""
+    candidates = fetch_round_2_approved_candidates(supabase)
+    if not candidates:
+        log("INFO", "No Round 2 invites ready to send")
+        return 0
+
+    log("INFO", f"Found {len(candidates)} Round 2 invite(s) ready to send")
+    sent = 0
+
+    for candidate in candidates:
+        try:
+            email = candidate["email"]
+            full_name = candidate.get("full_name", "Candidate")
+            interview_token = candidate.get("interview_token")
+            candidate_id = candidate["id"]
+
+            if not interview_token:
+                log("WARN", f"No interview_token for {email}, skipping Round 2 invite")
+                continue
+
+            # Get job title from joined data
+            job = candidate.get("jobs")
+            job_title = job.get("title", "Open Position") if job else "Open Position"
+
+            log("INFO", f"Sending Round 2 invite to {email} (job: {job_title})")
+            send_round_2_invite(gmail_service, email, full_name, interview_token, job_title)
+            update_candidate_status(supabase, candidate_id, "ROUND_2_INVITED")
+            log("SUCCESS", f"Round 2 invite sent to {email}")
+            sent += 1
+
+        except Exception as e:
+            log("ERROR", f"Failed to send Round 2 invite to {candidate.get('email', 'unknown')}: {e}")
+
     return sent
 
 
-def run_mailer() -> tuple[int, int, int]:
+def run_mailer() -> tuple[int, int, int, int]:
     """
     Main mailer function - can be called from other modules.
-    Returns tuple of (dubai_forms_sent, interview_invites_sent, reminders_sent).
+    Returns tuple of (dubai_forms_sent, interview_invites_sent, reminders_sent, round_2_invites_sent).
     """
     log("INFO", "Starting outreach to top candidates...")
 
@@ -579,15 +731,22 @@ def run_mailer() -> tuple[int, int, int]:
             log("ERROR", f"Failed to process {candidate.get('email', 'unknown')}: {e}")
             failed += 1
 
-    # --- Phase 3: Send reminders to candidates who haven't completed their interview ---
+    # --- Phase 3: Send delayed Round 2 invites (scheduled after "human review" period) ---
+    try:
+        round_2_sent = run_round_2_invites(supabase, gmail_service)
+    except Exception as e:
+        log("ERROR", f"Round 2 invite phase failed: {e}")
+        round_2_sent = 0
+
+    # --- Phase 4: Send reminders to candidates who haven't completed their interview ---
     try:
         reminders_sent = run_reminders(supabase, gmail_service)
     except Exception as e:
         log("ERROR", f"Reminder phase failed: {e}")
         reminders_sent = 0
 
-    log("INFO", f"Outreach complete: {dubai_sent} eligibility forms, {invites_sent} interview invites, {reminders_sent} reminders, {failed} failed")
-    return (dubai_sent, invites_sent, reminders_sent)
+    log("INFO", f"Outreach complete: {dubai_sent} eligibility forms, {invites_sent} interview invites, {round_2_sent} round 2 invites, {reminders_sent} reminders, {failed} failed")
+    return (dubai_sent, invites_sent, reminders_sent, round_2_sent)
 
 
 def main():

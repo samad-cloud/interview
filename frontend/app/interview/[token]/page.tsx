@@ -211,10 +211,10 @@ export default function VoiceInterviewPage() {
           <p className="text-center text-slate-500 text-xs mt-5">
             Having trouble? Contact{' '}
             <a
-              href="mailto:printerpix-recruitment@gmail.com"
+              href="mailto:printerpix.recruitment@gmail.com"
               className="text-cyan-400 hover:text-cyan-300 underline"
             >
-              printerpix-recruitment@gmail.com
+              printerpix.recruitment@gmail.com
             </a>
           </p>
         </div>

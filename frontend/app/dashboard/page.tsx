@@ -12,6 +12,8 @@ import {
   Briefcase,
   Send,
   ArrowRight,
+  ArrowUp,
+  ArrowDown,
   Filter,
   Zap,
   Search,
@@ -26,6 +28,10 @@ import {
   Sparkles,
   NotebookPen,
   Info,
+  CheckCircle2,
+  XCircle,
+  MessageSquare,
+  UserCheck,
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -59,6 +65,25 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 
+interface FullVerdict {
+  technicalScore: number;
+  verdict: string;
+  summary: string;
+  technicalStrengths: string[];
+  technicalGaps: string[];
+  recommendation: string;
+}
+
+interface FullDossier {
+  probeQuestions: { question: string; targetClaim: string; probeType: string }[];
+  candidateStrengths: string[];
+  areasToProbe: string[];
+  overallAssessment: string;
+}
+
+type SortColumn = 'created_at' | 'jd_match_score' | 'rating';
+type SortDirection = 'asc' | 'desc';
+
 interface Candidate {
   id: number;
   full_name: string;
@@ -80,6 +105,9 @@ interface Candidate {
   created_at: string | null;
   video_url: string | null;
   round_2_video_url: string | null;
+  full_verdict: FullVerdict | null;
+  round_1_full_dossier: FullDossier | null;
+  hr_notes: string | null;
 }
 
 interface Job {
@@ -151,15 +179,29 @@ export default function DashboardPage() {
   const [resumeSearchInput, setResumeSearchInput] = useState('');
   const [resumeSearchQuery, setResumeSearchQuery] = useState('');
 
+  // Sorting
+  const [sortColumn, setSortColumn] = useState<SortColumn>('rating');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
   // Notes
   const [generatingNotes, setGeneratingNotes] = useState(false);
   const [interviewNotes, setInterviewNotes] = useState<InterviewNotes | null>(null);
+
+  // HR Decision
+  const [noteText, setNoteText] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+  const [savingDecision, setSavingDecision] = useState(false);
 
   // Load saved notes when candidate is selected
   useEffect(() => {
     if (selectedCandidate?.interview_notes) {
       setInterviewNotes(selectedCandidate.interview_notes);
     }
+  }, [selectedCandidate]);
+
+  // Reset note input when candidate changes
+  useEffect(() => {
+    setNoteText(selectedCandidate?.hr_notes || '');
   }, [selectedCandidate]);
 
   // Action states
@@ -262,7 +304,7 @@ export default function DashboardPage() {
 
       let query = supabase
         .from('candidates')
-        .select('id, full_name, email, rating, round_2_rating, jd_match_score, ai_summary, interview_notes, status, current_stage, interview_transcript, round_2_transcript, resume_text, job_id, final_verdict, interview_token, created_at, video_url, round_2_video_url', { count: isBooleanActive ? undefined : 'exact' });
+        .select('id, full_name, email, rating, round_2_rating, jd_match_score, ai_summary, interview_notes, status, current_stage, interview_transcript, round_2_transcript, resume_text, job_id, final_verdict, full_verdict, round_1_full_dossier, hr_notes, interview_token, created_at, video_url, round_2_video_url', { count: isBooleanActive ? undefined : 'exact' });
 
       if (searchQuery) {
         query = query.or(`full_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
@@ -290,7 +332,7 @@ export default function DashboardPage() {
       }
 
       const { data, error, count } = await query
-        .order('rating', { ascending: false, nullsFirst: false })
+        .order(sortColumn, { ascending: sortDirection === 'asc', nullsFirst: false })
         .range(from, to);
 
       if (error) {
@@ -306,6 +348,16 @@ export default function DashboardPage() {
       // Apply client-side Boolean resume search
       if (isBooleanActive) {
         results = results.filter(c => matchesBooleanSearch(c.resume_text, resumeSearchQuery));
+        // Client-side sort
+        results.sort((a, b) => {
+          const aVal = a[sortColumn];
+          const bVal = b[sortColumn];
+          if (aVal == null && bVal == null) return 0;
+          if (aVal == null) return 1;
+          if (bVal == null) return -1;
+          const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+          return sortDirection === 'asc' ? cmp : -cmp;
+        });
         const pageStart = (currentPage - 1) * PAGE_SIZE;
         const totalFiltered = results.length;
         results = results.slice(pageStart, pageStart + PAGE_SIZE);
@@ -320,7 +372,7 @@ export default function DashboardPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentPage, searchQuery, resumeSearchQuery, roleFilter, stageFilter, jobMap, matchesBooleanSearch]);
+  }, [currentPage, searchQuery, resumeSearchQuery, roleFilter, stageFilter, sortColumn, sortDirection, jobMap, matchesBooleanSearch]);
 
   useEffect(() => {
     fetchStats();
@@ -349,7 +401,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, resumeSearchQuery, roleFilter, stageFilter]);
+  }, [searchQuery, resumeSearchQuery, roleFilter, stageFilter, sortColumn, sortDirection]);
 
   const getStageDisplay = (candidate: Candidate) => {
     const stage = candidate.current_stage || 'round_1';
@@ -438,6 +490,73 @@ export default function DashboardPage() {
       alert(result.error || 'Failed to invite to round 2');
     }
     setSendingInvite(null);
+  };
+
+  const toggleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('desc');
+    }
+  };
+
+  const SortIcon = ({ column }: { column: SortColumn }) => {
+    if (sortColumn !== column) return <ArrowUp className="w-3 h-3 text-muted-foreground/40" />;
+    return sortDirection === 'asc'
+      ? <ArrowUp className="w-3 h-3 text-emerald-400" />
+      : <ArrowDown className="w-3 h-3 text-emerald-400" />;
+  };
+
+  const handleAdvance = async (candidateId: number) => {
+    setSavingDecision(true);
+    const { error } = await supabase
+      .from('candidates')
+      .update({ final_verdict: 'Hired', status: 'HIRED' })
+      .eq('id', candidateId);
+    if (!error) {
+      setCandidates(prev => prev.map(c =>
+        c.id === candidateId ? { ...c, final_verdict: 'Hired', status: 'HIRED' } : c
+      ));
+      if (selectedCandidate?.id === candidateId) {
+        setSelectedCandidate(prev => prev ? { ...prev, final_verdict: 'Hired', status: 'HIRED' } : null);
+      }
+    }
+    setSavingDecision(false);
+  };
+
+  const handleReject = async (candidateId: number) => {
+    setSavingDecision(true);
+    const { error } = await supabase
+      .from('candidates')
+      .update({ final_verdict: 'Rejected', status: 'REJECTED' })
+      .eq('id', candidateId);
+    if (!error) {
+      setCandidates(prev => prev.map(c =>
+        c.id === candidateId ? { ...c, final_verdict: 'Rejected', status: 'REJECTED' } : c
+      ));
+      if (selectedCandidate?.id === candidateId) {
+        setSelectedCandidate(prev => prev ? { ...prev, final_verdict: 'Rejected', status: 'REJECTED' } : null);
+      }
+    }
+    setSavingDecision(false);
+  };
+
+  const handleSaveNote = async (candidateId: number) => {
+    setSavingNote(true);
+    const { error } = await supabase
+      .from('candidates')
+      .update({ hr_notes: noteText })
+      .eq('id', candidateId);
+    if (!error) {
+      setCandidates(prev => prev.map(c =>
+        c.id === candidateId ? { ...c, hr_notes: noteText } : c
+      ));
+      if (selectedCandidate?.id === candidateId) {
+        setSelectedCandidate(prev => prev ? { ...prev, hr_notes: noteText } : null);
+      }
+    }
+    setSavingNote(false);
   };
 
   const goToPage = (page: number) => {
@@ -631,10 +750,25 @@ export default function DashboardPage() {
                       <TableHead className="w-12">#</TableHead>
                       <TableHead>Name</TableHead>
                       <TableHead>Role</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>CV</TableHead>
+                      <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('created_at')}>
+                        <div className="flex items-center gap-1">
+                          Applied
+                          <SortIcon column="created_at" />
+                        </div>
+                      </TableHead>
+                      <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('jd_match_score')}>
+                        <div className="flex items-center gap-1">
+                          CV
+                          <SortIcon column="jd_match_score" />
+                        </div>
+                      </TableHead>
                       <TableHead>Stage</TableHead>
-                      <TableHead>Scores</TableHead>
+                      <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('rating')}>
+                        <div className="flex items-center gap-1">
+                          Scores
+                          <SortIcon column="rating" />
+                        </div>
+                      </TableHead>
                       <TableHead>Verdict</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
@@ -707,9 +841,11 @@ export default function DashboardPage() {
                           <TableCell>
                             {candidate.final_verdict ? (
                               <Badge className={`${
+                                candidate.final_verdict === 'Hired' ? 'bg-emerald-500/20 text-emerald-400' :
                                 candidate.final_verdict.includes('Strong') ? 'bg-emerald-500/20 text-emerald-400' :
                                 candidate.final_verdict === 'Hire' ? 'bg-blue-500/20 text-blue-400' :
                                 candidate.final_verdict.includes('Weak') ? 'bg-yellow-500/20 text-yellow-400' :
+                                candidate.final_verdict === 'Rejected' ? 'bg-red-500/20 text-red-400' :
                                 'bg-red-500/20 text-red-400'
                               }`}>
                                 {candidate.final_verdict}
@@ -896,12 +1032,43 @@ export default function DashboardPage() {
                 <CardContent className="pt-4">
                   <p className="text-muted-foreground text-sm mb-1">Final Verdict</p>
                   <p className={`text-2xl font-bold ${
+                    selectedCandidate.final_verdict === 'Hired' ? 'text-emerald-400' :
                     selectedCandidate.final_verdict.includes('Strong') ? 'text-emerald-400' :
                     selectedCandidate.final_verdict === 'Hire' ? 'text-blue-400' :
+                    selectedCandidate.final_verdict === 'Rejected' ? 'text-red-400' :
                     'text-yellow-400'
                   }`}>
                     {selectedCandidate.final_verdict}
                   </p>
+                  {/* Expanded verdict details from Round 2 */}
+                  {selectedCandidate.full_verdict && (
+                    <div className="mt-4 space-y-3 border-t border-border pt-3">
+                      <p className="text-sm">{selectedCandidate.full_verdict.summary}</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <p className="text-xs font-medium text-emerald-400 mb-1">Technical Strengths</p>
+                          <ul className="space-y-0.5">
+                            {selectedCandidate.full_verdict.technicalStrengths.map((s, i) => (
+                              <li key={i} className="text-xs flex items-start gap-1.5">
+                                <span className="text-emerald-400 mt-0.5">+</span>{s}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-red-400 mb-1">Technical Gaps</p>
+                          <ul className="space-y-0.5">
+                            {selectedCandidate.full_verdict.technicalGaps.map((g, i) => (
+                              <li key={i} className="text-xs flex items-start gap-1.5">
+                                <span className="text-red-400 mt-0.5">-</span>{g}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground"><span className="font-medium text-foreground">Recommendation:</span> {selectedCandidate.full_verdict.recommendation}</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -1139,6 +1306,128 @@ export default function DashboardPage() {
                     </p>
                   </CardContent>
                 </Card>
+              </div>
+            )}
+
+            {/* Suggested for Human Interview */}
+            {selectedCandidate?.rating !== null && (
+              interviewNotes?.followUpQuestions?.length ||
+              selectedCandidate?.round_1_full_dossier?.areasToProbe?.length ||
+              selectedCandidate?.full_verdict?.technicalGaps?.length
+            ) ? (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <UserCheck className="w-5 h-5 text-cyan-400" />
+                  <h3 className="text-lg font-semibold">Suggested for Human Interview</h3>
+                </div>
+                <Card className="border-cyan-500/30">
+                  <CardContent className="pt-4 space-y-4">
+                    {/* Dossier areas to probe */}
+                    {selectedCandidate?.round_1_full_dossier?.areasToProbe && selectedCandidate.round_1_full_dossier.areasToProbe.length > 0 && (
+                      <div>
+                        <p className="text-sm font-medium text-yellow-400 mb-2">Areas Needing Verification</p>
+                        <ul className="space-y-1">
+                          {selectedCandidate.round_1_full_dossier.areasToProbe.map((area, i) => (
+                            <li key={i} className="text-sm flex items-start gap-2">
+                              <span className="text-yellow-400 mt-0.5">!</span>
+                              {area}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {/* Probe questions from dossier */}
+                    {selectedCandidate?.round_1_full_dossier?.probeQuestions && selectedCandidate.round_1_full_dossier.probeQuestions.length > 0 && (
+                      <div>
+                        <p className="text-sm font-medium text-cyan-400 mb-2">Probe Questions</p>
+                        <ul className="space-y-2">
+                          {selectedCandidate.round_1_full_dossier.probeQuestions.map((pq, i) => (
+                            <li key={i} className="text-sm">
+                              <div className="flex items-start gap-2">
+                                <span className="text-cyan-400 mt-0.5 shrink-0">{i + 1}.</span>
+                                <div>
+                                  <p>{pq.question}</p>
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    Re: {pq.targetClaim} ({pq.probeType.replace(/_/g, ' ')})
+                                  </p>
+                                </div>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {/* Technical gaps from full verdict (after Round 2) */}
+                    {selectedCandidate?.full_verdict?.technicalGaps && selectedCandidate.full_verdict.technicalGaps.length > 0 && (
+                      <div>
+                        <p className="text-sm font-medium text-red-400 mb-2">Technical Gaps to Explore</p>
+                        <ul className="space-y-1">
+                          {selectedCandidate.full_verdict.technicalGaps.map((gap, i) => (
+                            <li key={i} className="text-sm flex items-start gap-2">
+                              <span className="text-red-400 mt-0.5">-</span>
+                              {gap}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            ) : null}
+
+            {/* HR Decision */}
+            {selectedCandidate?.rating !== null && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Trophy className="w-5 h-5 text-amber-400" />
+                  <h3 className="text-lg font-semibold">HR Decision</h3>
+                </div>
+
+                {/* Always-visible HR notes */}
+                <Card className="mb-3">
+                  <CardContent className="pt-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        HR Notes
+                      </p>
+                      {noteText !== (selectedCandidate?.hr_notes || '') && (
+                        <Button size="sm" variant="ghost" onClick={() => handleSaveNote(selectedCandidate!.id)} disabled={savingNote} className="h-7 text-xs">
+                          {savingNote ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                          Save
+                        </Button>
+                      )}
+                    </div>
+                    <textarea
+                      value={noteText}
+                      onChange={(e) => setNoteText(e.target.value)}
+                      placeholder="Add your notes about this candidate..."
+                      className="w-full bg-background border border-border rounded-lg p-3 text-sm min-h-[80px] resize-y focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </CardContent>
+                </Card>
+
+                {/* Action Buttons */}
+                <div className="flex items-center gap-3">
+                  <Button
+                    onClick={() => handleAdvance(selectedCandidate!.id)}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-500"
+                    disabled={savingDecision || selectedCandidate?.final_verdict === 'Hired'}
+                  >
+                    <CheckCircle2 className="w-4 h-4 mr-2" />
+                    {selectedCandidate?.final_verdict === 'Hired' ? 'Hired' : 'Advance'}
+                  </Button>
+                  <Button
+                    onClick={() => handleReject(selectedCandidate!.id)}
+                    variant="destructive"
+                    className="flex-1"
+                    disabled={savingDecision || selectedCandidate?.final_verdict === 'Rejected'}
+                  >
+                    <XCircle className="w-4 h-4 mr-2" />
+                    {selectedCandidate?.final_verdict === 'Rejected' ? 'Rejected' : 'Reject'}
+                  </Button>
+                </div>
               </div>
             )}
 

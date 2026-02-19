@@ -223,7 +223,7 @@ export async function sendInterviewInvite(candidateId: number): Promise<SendInvi
               </table>
 
               <p style="margin:0; color:#6b7280; font-size:13px; line-height:1.5;">
-                If you experience any issues, please email <a href="mailto:printerpix-recruitment@gmail.com" style="color:#c30361; text-decoration:underline;">printerpix-recruitment@gmail.com</a>
+                If you experience any issues, please email <a href="mailto:printerpix.recruitment@gmail.com" style="color:#c30361; text-decoration:underline;">printerpix.recruitment@gmail.com</a>
               </p>
 
             </td>
@@ -412,7 +412,7 @@ export async function inviteToRound2(candidateId: number): Promise<SendInviteRes
                 </tr>
               </table>
               <p style="margin:0; color:#6b7280; font-size:13px; line-height:1.5;">
-                If you experience any issues, please email <a href="mailto:printerpix-recruitment@gmail.com" style="color:#1e3a5f; text-decoration:underline;">printerpix-recruitment@gmail.com</a>
+                If you experience any issues, please email <a href="mailto:printerpix.recruitment@gmail.com" style="color:#1e3a5f; text-decoration:underline;">printerpix.recruitment@gmail.com</a>
               </p>
             </td>
           </tr>
