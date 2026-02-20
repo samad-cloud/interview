@@ -58,6 +58,50 @@ export async function POST(request: Request) {
       if (job) jobTitle = job.title || 'Unknown Position';
     }
 
+    // Guard: check for missing or suspicious candidate responses
+    const hasCandidateResponses = transcriptText.includes('(Candidate):');
+    if (!hasCandidateResponses) {
+      // Save transcript but don't advance — candidate can retake
+      await supabase
+        .from('candidates')
+        .update({ round_2_transcript: transcriptText })
+        .eq('id', candidateId);
+
+      console.log(`[End Interview Round 2] Incomplete transcript for candidate ${candidateId}: no candidate responses`);
+      return NextResponse.json({
+        success: true,
+        incomplete: true,
+        message: 'Interview incomplete — no candidate responses recorded. Candidate can retake.',
+      });
+    }
+
+    // Guard: check if candidate responses are too short (suspicious)
+    const candidateResponses = transcriptText.split('(Candidate):').slice(1);
+    const candidateWords = candidateResponses
+      .map((r: string) => {
+        const endIdx = r.search(/\(Wayne\):|\(Atlas\):|\(Interviewer\):/);
+        return endIdx > -1 ? r.substring(0, endIdx) : r;
+      })
+      .join(' ')
+      .trim()
+      .split(/\s+/)
+      .filter((w: string) => w.length > 0);
+
+    if (candidateWords.length < 15) {
+      // Save transcript but don't trigger notes or advance status
+      await supabase
+        .from('candidates')
+        .update({ round_2_transcript: transcriptText })
+        .eq('id', candidateId);
+
+      console.log(`[End Interview Round 2] Suspicious transcript for candidate ${candidateId}: only ${candidateWords.length} candidate words`);
+      return NextResponse.json({
+        success: true,
+        incomplete: true,
+        message: `Interview suspicious — only ${candidateWords.length} words from candidate. Candidate can retake.`,
+      });
+    }
+
     // Save Round 2 transcript to database
     const { error: updateError } = await supabase
       .from('candidates')

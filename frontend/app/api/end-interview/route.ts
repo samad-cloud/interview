@@ -166,23 +166,18 @@ export async function POST(request: Request) {
     // Guard: reject scoring if no candidate responses in transcript
     const hasCandidateResponses = transcriptText.includes('(Candidate):');
     if (!hasCandidateResponses) {
-      const { error: updateError } = await supabase
+      // Save transcript but don't advance status — candidate can retake
+      await supabase
         .from('candidates')
         .update({
           interview_transcript: transcriptText,
-          rating: 0,
-          ai_summary: 'Interview incomplete — no candidate responses recorded.',
-          status: 'INTERVIEW_INCOMPLETE',
+          ai_summary: 'Interview incomplete — no candidate responses recorded. Candidate can retake.',
         })
         .eq('id', candidateId);
 
-      if (updateError) {
-        console.error('Failed to update candidate:', updateError);
-        return NextResponse.json({ error: 'Failed to save interview data' }, { status: 500 });
-      }
-
       return NextResponse.json({
         success: true,
+        incomplete: true,
         analysis: {
           score: 0,
           decision: 'Reject',
@@ -190,6 +185,44 @@ export async function POST(request: Request) {
           top_weakness: 'Interview incomplete',
           red_flag: true,
           summary: 'Interview incomplete — no candidate responses were recorded.',
+        },
+      });
+    }
+
+    // Guard: reject scoring if candidate responses are too short (suspicious/empty interview)
+    const candidateResponses = transcriptText.split('(Candidate):').slice(1);
+    const candidateWords = candidateResponses
+      .map((r: string) => {
+        // Extract text up to the next speaker marker or end
+        const endIdx = r.search(/\(Wayne\):|\(Atlas\):|\(Interviewer\):/);
+        return endIdx > -1 ? r.substring(0, endIdx) : r;
+      })
+      .join(' ')
+      .trim()
+      .split(/\s+/)
+      .filter((w: string) => w.length > 0);
+
+    if (candidateWords.length < 15) {
+      console.log(`[End Interview] Suspicious transcript for candidate ${candidateId}: only ${candidateWords.length} candidate words`);
+      // Save transcript but don't advance status — candidate can retake
+      await supabase
+        .from('candidates')
+        .update({
+          interview_transcript: transcriptText,
+          ai_summary: `Interview suspicious — only ${candidateWords.length} words from candidate. Possible technical issue. Candidate can retake.`,
+        })
+        .eq('id', candidateId);
+
+      return NextResponse.json({
+        success: true,
+        incomplete: true,
+        analysis: {
+          score: 0,
+          decision: 'Reject',
+          top_strength: 'N/A',
+          top_weakness: 'Insufficient responses',
+          red_flag: true,
+          summary: `Interview suspicious — only ${candidateWords.length} words from candidate. Status unchanged so candidate can retake.`,
         },
       });
     }

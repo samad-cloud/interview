@@ -32,6 +32,7 @@ import {
   XCircle,
   MessageSquare,
   UserCheck,
+  RotateCcw,
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -206,6 +207,7 @@ export default function DashboardPage() {
 
   // Action states
   const [sendingInvite, setSendingInvite] = useState<number | null>(null);
+  const [revertingCandidate, setRevertingCandidate] = useState<number | null>(null);
   const router = useRouter();
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
@@ -604,6 +606,83 @@ export default function DashboardPage() {
     setSavingNote(false);
   };
 
+  const handleRevertStage = async (candidate: Candidate) => {
+    let updateFields: Record<string, unknown>;
+    let confirmMsg: string;
+
+    if (candidate.round_2_rating !== null) {
+      // R2 completed → revert to R2 invited (allow R2 retake)
+      confirmMsg = `Revert ${candidate.full_name} from R2 completed back to R2 Invited? This clears their Round 2 score and verdict so they can retake the technical interview.`;
+      updateFields = {
+        round_2_rating: null,
+        round_2_transcript: null,
+        round_2_video_url: null,
+        full_verdict: null,
+        final_verdict: null,
+        status: 'ROUND_2_INVITED',
+        current_stage: 'round_2',
+      };
+    } else if (candidate.current_stage === 'round_2' || candidate.status === 'ROUND_2_INVITED' || candidate.status === 'ROUND_2_APPROVED') {
+      // In R2 pipeline → revert to R1 invite sent (allow R1 retake)
+      confirmMsg = `Revert ${candidate.full_name} from R2 pipeline back to R1 Invite Sent? This clears their Round 1 score and all Round 2 data so they can retake the personality interview.`;
+      updateFields = {
+        rating: null,
+        interview_transcript: null,
+        video_url: null,
+        ai_summary: null,
+        interview_notes: null,
+        round_1_dossier: null,
+        round_1_full_dossier: null,
+        round_2_invite_after: null,
+        round_2_rating: null,
+        round_2_transcript: null,
+        round_2_video_url: null,
+        full_verdict: null,
+        final_verdict: null,
+        status: 'INVITE_SENT',
+        current_stage: null,
+      };
+    } else if (candidate.rating !== null) {
+      // R1 completed → revert to invite sent (allow R1 retake)
+      confirmMsg = `Revert ${candidate.full_name} from R1 completed back to R1 Invite Sent? This clears their Round 1 score so they can retake the personality interview.`;
+      updateFields = {
+        rating: null,
+        interview_transcript: null,
+        video_url: null,
+        ai_summary: null,
+        interview_notes: null,
+        round_1_dossier: null,
+        round_1_full_dossier: null,
+        round_2_invite_after: null,
+        status: 'INVITE_SENT',
+        current_stage: null,
+      };
+    } else {
+      return; // Nothing to revert
+    }
+
+    if (!window.confirm(confirmMsg)) return;
+
+    setRevertingCandidate(candidate.id);
+    const { error } = await supabase
+      .from('candidates')
+      .update(updateFields)
+      .eq('id', candidate.id);
+
+    if (error) {
+      alert('Failed to revert candidate stage: ' + error.message);
+    } else {
+      // Update local state
+      setCandidates(prev => prev.map(c =>
+        c.id === candidate.id ? { ...c, ...updateFields } as Candidate : c
+      ));
+      if (selectedCandidate?.id === candidate.id) {
+        setSelectedCandidate(prev => prev ? { ...prev, ...updateFields } as Candidate : null);
+      }
+    }
+    setRevertingCandidate(null);
+  };
+
   const goToPage = (page: number) => {
     if (page >= 1 && page <= totalPages) {
       setCurrentPage(page);
@@ -960,6 +1039,23 @@ export default function DashboardPage() {
                                   title={isR2Override ? "Override: Invite to Round 2" : "Invite to Round 2"}
                                 >
                                   <ArrowRight className="w-4 h-4" />
+                                </Button>
+                              )}
+
+                              {candidate.rating !== null && (
+                                <Button
+                                  variant="secondary"
+                                  size="icon"
+                                  onClick={() => handleRevertStage(candidate)}
+                                  disabled={revertingCandidate === candidate.id}
+                                  className="bg-orange-600/20 hover:bg-orange-600/30 text-orange-400"
+                                  title="Revert Stage (Allow Retake)"
+                                >
+                                  {revertingCandidate === candidate.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <RotateCcw className="w-4 h-4" />
+                                  )}
                                 </Button>
                               )}
                             </div>
