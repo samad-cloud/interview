@@ -58,16 +58,6 @@ export async function POST(request: Request) {
       return field.value?.toString() || '';
     };
 
-    // Extract visa answer (first question / kill question)
-    const visaField = data.fields.find(
-      (f: { label: string }) =>
-        f.label?.toLowerCase().includes('visa') ||
-        f.label?.toLowerCase().includes('work') ||
-        f.label?.toLowerCase().includes('uae')
-    );
-    const visaAnswer = visaField ? resolveFieldValue(visaField).toLowerCase() : '';
-    const hasValidVisa = visaAnswer.includes('yes');
-
     // Collect all form responses for audit (resolve option UUIDs to text)
     const formResponses: Record<string, string> = {};
     for (const field of data.fields) {
@@ -107,8 +97,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, status: candidate.status, resubmission: true });
     }
 
-    // Determine new status
-    const newStatus = hasValidVisa ? 'FORM_COMPLETED' : 'REJECTED_VISA';
+    // All form completions proceed forward regardless of visa status
+    const newStatus = 'FORM_COMPLETED';
 
     // Update candidate
     const { error: updateError } = await supabase
@@ -125,7 +115,7 @@ export async function POST(request: Request) {
     }
 
     console.log(
-      `[Tally Webhook] Candidate ${candidate.email} → ${newStatus} (visa answer: "${visaAnswer}", valid: ${hasValidVisa})`
+      `[Tally Webhook] Candidate ${candidate.email} → ${newStatus}`
     );
 
     return NextResponse.json({ success: true, status: newStatus });
