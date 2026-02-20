@@ -33,6 +33,7 @@ import {
   MessageSquare,
   UserCheck,
   RotateCcw,
+  Download,
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -109,6 +110,7 @@ interface Candidate {
   full_verdict: FullVerdict | null;
   round_1_full_dossier: FullDossier | null;
   hr_notes: string | null;
+  resume_url: string | null;
 }
 
 interface Job {
@@ -306,7 +308,7 @@ export default function DashboardPage() {
 
       let query = supabase
         .from('candidates')
-        .select('id, full_name, email, rating, round_2_rating, jd_match_score, ai_summary, interview_notes, status, current_stage, interview_transcript, round_2_transcript, resume_text, job_id, final_verdict, full_verdict, round_1_full_dossier, hr_notes, interview_token, created_at, video_url, round_2_video_url', { count: isBooleanActive ? undefined : 'exact' });
+        .select('id, full_name, email, rating, round_2_rating, jd_match_score, ai_summary, interview_notes, status, current_stage, interview_transcript, round_2_transcript, resume_text, resume_url, job_id, final_verdict, full_verdict, round_1_full_dossier, hr_notes, interview_token, created_at, video_url, round_2_video_url', { count: isBooleanActive ? undefined : 'exact' });
 
       if (searchQuery) {
         query = query.or(`full_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
@@ -1450,19 +1452,34 @@ export default function DashboardPage() {
             )}
 
             {/* Resume */}
-            {selectedCandidate?.resume_text && (
+            {(selectedCandidate?.resume_text || selectedCandidate?.resume_url) && (
               <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <Briefcase className="w-5 h-5 text-emerald-400" />
-                  <h3 className="text-lg font-semibold">Resume</h3>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Briefcase className="w-5 h-5 text-emerald-400" />
+                    <h3 className="text-lg font-semibold">Resume</h3>
+                  </div>
+                  {selectedCandidate?.resume_url && (
+                    <a
+                      href={selectedCandidate.resume_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+                    >
+                      <Download className="w-4 h-4" />
+                      Download Original
+                    </a>
+                  )}
                 </div>
-                <Card>
-                  <CardContent className="pt-4 max-h-48 overflow-y-auto">
-                    <p className="text-sm whitespace-pre-wrap">
-                      {selectedCandidate.resume_text}
-                    </p>
-                  </CardContent>
-                </Card>
+                {selectedCandidate?.resume_text && (
+                  <Card>
+                    <CardContent className="pt-4 max-h-48 overflow-y-auto">
+                      <p className="text-sm whitespace-pre-wrap">
+                        {selectedCandidate.resume_text}
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             )}
 
