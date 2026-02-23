@@ -26,73 +26,113 @@ DUBAI_EMAIL_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Application Received – {company_name}</title>
 </head>
-<body style="margin:0; padding:0; background-color:#f4f4f5; font-family:Arial, Helvetica, sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5; padding:32px 16px;">
+<body style="margin:0; padding:0; background-color:#faf5f7; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; -webkit-font-smoothing:antialiased;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#faf5f7; padding:40px 16px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:8px; overflow:hidden; max-width:600px;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:12px; overflow:hidden; max-width:600px; box-shadow:0 4px 24px rgba(195,3,97,0.08);">
+
           <!-- Header -->
           <tr>
-            <td style="background-color:#1e293b; padding:24px 32px;">
-              <h1 style="margin:0; color:#ffffff; font-size:20px; font-weight:600;">{company_name}</h1>
+            <td style="background-color:#c30361; padding:28px 36px;">
+              <h1 style="margin:0; color:#ffffff; font-size:22px; font-weight:700; letter-spacing:0.5px;">{company_name}</h1>
             </td>
           </tr>
+
+          <!-- Welcome heading -->
+          <tr>
+            <td style="padding:32px 36px 24px;">
+              <p style="margin:0; color:#c30361; font-size:22px; font-weight:700; line-height:1.4;">
+                Thanks for applying — let's get started
+              </p>
+            </td>
+          </tr>
+
           <!-- Body -->
           <tr>
-            <td style="padding:32px;">
-              <p style="margin:0 0 16px; color:#1e293b; font-size:16px; line-height:1.6;">
+            <td style="padding:8px 36px 32px;">
+
+              <p style="margin:0 0 18px; color:#1f2937; font-size:15px; line-height:1.7;">
                 Hi {full_name},
               </p>
-              <p style="margin:0 0 16px; color:#374151; font-size:15px; line-height:1.6;">
+              <p style="margin:0 0 18px; color:#374151; font-size:15px; line-height:1.7;">
                 Thank you for applying to {company_name}. We've received your application, and we're excited by the possibility of you joining our team in Dubai.
               </p>
-              <p style="margin:0 0 16px; color:#374151; font-size:15px; line-height:1.6;">
+              <p style="margin:0 0 18px; color:#374151; font-size:15px; line-height:1.7;">
                 Our goal is to create a hiring experience that is quick, respectful, and gives every candidate a fair opportunity to be heard. Our first step is a straightforward, two-part online process designed to get to know you better.
               </p>
-              <p style="margin:0 0 8px; color:#374151; font-size:15px; line-height:1.6;">
+
+              <!-- Divider -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+                <tr>
+                  <td style="border-top:2px solid #fce7f0;">&nbsp;</td>
+                </tr>
+              </table>
+
+              <p style="margin:0 0 8px; color:#374151; font-size:15px; line-height:1.7;">
                 <strong>Part 1:</strong> A few quick questions to align on logistics for our Dubai office.
               </p>
-              <p style="margin:0 0 16px; color:#374151; font-size:15px; line-height:1.6;">
+              <p style="margin:0 0 18px; color:#374151; font-size:15px; line-height:1.7;">
                 <strong>Part 2:</strong> An interactive AI-guided chat where you can share your experience in your own words.
               </p>
-              <p style="margin:0 0 16px; color:#374151; font-size:15px; line-height:1.6;">
+              <p style="margin:0 0 18px; color:#374151; font-size:15px; line-height:1.7;">
                 The entire first step takes about 20&ndash;30 minutes and can be completed on your own schedule. Please note that successful completion of this stage will be followed by a technical interview and a final conversation with the team.
               </p>
-              <p style="margin:0 0 16px; color:#374151; font-size:15px; line-height:1.6;">
+              <p style="margin:0 0 18px; color:#374151; font-size:15px; line-height:1.7;">
                 We're reviewing applications as they come in and moving quickly with strong candidates. Completing this within the next few days ensures your application gets full consideration and helps us move you forward faster.
               </p>
-              <p style="margin:0 0 24px; color:#374151; font-size:15px; line-height:1.6;">
+              <p style="margin:0 0 28px; color:#374151; font-size:15px; line-height:1.7;">
                 Before proceeding, please ensure you're comfortable with the salary range from the job description.
               </p>
-              <p style="margin:0 0 16px; color:#1e293b; font-size:15px; font-weight:600; line-height:1.6;">
-                Ready to begin?
-              </p>
+
               <!-- CTA Button -->
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 <tr>
-                  <td align="center" style="padding:8px 0 24px;">
-                    <a href="{tally_url}" target="_blank" style="display:inline-block; background-color:#1e3a5f; color:#ffffff; text-decoration:none; font-size:16px; font-weight:600; padding:14px 32px; border-radius:6px; min-height:44px; line-height:44px;">
-                      Let's Get Started
+                  <td align="center" style="padding:4px 0 28px;">
+                    <!--[if mso]>
+                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{tally_url}" style="height:52px;v-text-anchor:middle;width:280px;" arcsize="12%" strokecolor="#a00250" fillcolor="#c30361">
+                    <w:anchorlock/>
+                    <center style="color:#ffffff;font-family:'Segoe UI',Tahoma,sans-serif;font-size:16px;font-weight:bold;">Let's Get Started &rarr;</center>
+                    </v:roundrect>
+                    <![endif]-->
+                    <!--[if !mso]><!-->
+                    <a href="{tally_url}" target="_blank" style="display:inline-block; background-color:#c30361; color:#ffffff; text-decoration:none; font-size:16px; font-weight:700; padding:16px 40px; border-radius:8px; line-height:1; letter-spacing:0.3px; border-bottom:3px solid #a00250;">
+                      Let's Get Started &rarr;
                     </a>
+                    <!--<![endif]-->
                   </td>
                 </tr>
               </table>
               <p style="margin:0; color:#6b7280; font-size:13px; line-height:1.5;">
-                If you experience any issues, please email <a href="mailto:printerpix.recruitment@gmail.com" style="color:#1e3a5f; text-decoration:underline;">printerpix.recruitment@gmail.com</a>
+                If you experience any issues, please email <a href="mailto:printerpix.recruitment@gmail.com" style="color:#c30361; text-decoration:underline;">printerpix.recruitment@gmail.com</a>
               </p>
+
             </td>
           </tr>
+
           <!-- Footer -->
           <tr>
-            <td style="background-color:#f8fafc; padding:20px 32px; border-top:1px solid #e5e7eb;">
-              <p style="margin:0; color:#6b7280; font-size:13px; line-height:1.5;">
-                Best,<br>
-                {company_name} Recruiting<br>
-                John Poole, Recruitment Manager
-              </p>
+            <td style="background-color:#1f2937; padding:24px 36px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td>
+                    <p style="margin:0 0 6px; color:#ffffff; font-size:14px; font-weight:600;">
+                      Best,
+                    </p>
+                    <p style="margin:0 0 4px; color:rgba(255,255,255,0.85); font-size:13px; line-height:1.5;">
+                      {company_name} Recruiting
+                    </p>
+                    <p style="margin:0; color:rgba(255,255,255,0.6); font-size:13px; line-height:1.5;">
+                      John Poole, Recruitment Manager
+                    </p>
+                  </td>
+                </tr>
+              </table>
             </td>
           </tr>
+
         </table>
       </td>
     </tr>
@@ -349,71 +389,126 @@ ROUND2_EMAIL_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Round 2 Invitation – {company_name}</title>
 </head>
-<body style="margin:0; padding:0; background-color:#f4f4f5; font-family:Arial, Helvetica, sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5; padding:32px 16px;">
+<body style="margin:0; padding:0; background-color:#faf5f7; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; -webkit-font-smoothing:antialiased;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#faf5f7; padding:40px 16px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:8px; overflow:hidden; max-width:600px;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:12px; overflow:hidden; max-width:600px; box-shadow:0 4px 24px rgba(195,3,97,0.08);">
+
+          <!-- Header -->
           <tr>
-            <td style="background-color:#1e293b; padding:24px 32px;">
-              <h1 style="margin:0; color:#ffffff; font-size:20px; font-weight:600;">{company_name}</h1>
+            <td style="background-color:#c30361; padding:28px 36px;">
+              <h1 style="margin:0; color:#ffffff; font-size:22px; font-weight:700; letter-spacing:0.5px;">{company_name}</h1>
             </td>
           </tr>
+
+          <!-- Welcome heading -->
           <tr>
-            <td style="padding:32px;">
-              <p style="margin:0 0 16px; color:#1e293b; font-size:16px; line-height:1.6;">
+            <td style="padding:32px 36px 24px;">
+              <p style="margin:0; color:#c30361; font-size:22px; font-weight:700; line-height:1.4;">
+                You've been selected for the next round!
+              </p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:8px 36px 32px;">
+
+              <!-- Greeting -->
+              <p style="margin:0 0 18px; color:#1f2937; font-size:15px; line-height:1.7;">
                 Hi {full_name},
               </p>
-              <p style="margin:0 0 16px; color:#374151; font-size:15px; line-height:1.6;">
+
+              <p style="margin:0 0 18px; color:#374151; font-size:15px; line-height:1.7;">
                 Thank you for completing the first interview. We were impressed with your responses and would like to invite you to the next stage of our process.
               </p>
-              <p style="margin:0 0 16px; color:#374151; font-size:15px; line-height:1.6;">
+
+              <p style="margin:0 0 24px; color:#374151; font-size:15px; line-height:1.7;">
                 The next step is a technical AI interview. This conversation will dive deeper into the specific skills and expertise required for the <strong>{job_title}</strong> role. Like the first interview, it's designed to be completed on your own schedule and will give you the opportunity to demonstrate your technical capabilities in detail.
               </p>
-              <p style="margin:0 0 12px; color:#1e293b; font-size:15px; font-weight:600; line-height:1.6;">
-                What to expect:
-              </p>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
+
+              <!-- Divider -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
                 <tr>
-                  <td style="padding:4px 0 4px 16px; color:#374151; font-size:15px; line-height:1.6;">&bull;&nbsp; The format is similar to the first interview &mdash; an AI-guided conversation where you control the pace.</td>
-                </tr>
-                <tr>
-                  <td style="padding:4px 0 4px 16px; color:#374151; font-size:15px; line-height:1.6;">&bull;&nbsp; You'll be asked questions related to your approach to problem-solving, technical challenges you've faced, and your expertise relevant to the role.</td>
-                </tr>
-                <tr>
-                  <td style="padding:4px 0 4px 16px; color:#374151; font-size:15px; line-height:1.6;">&bull;&nbsp; Remember to click the button to start recording your response, and click it again when you're finished. Take your time to think through your answers.</td>
-                </tr>
-                <tr>
-                  <td style="padding:4px 0 4px 16px; color:#374151; font-size:15px; line-height:1.6;">&bull;&nbsp; The interview typically takes 15&ndash;20 minutes, depending on how detailed your responses are.</td>
+                  <td style="border-top:2px solid #fce7f0;">&nbsp;</td>
                 </tr>
               </table>
-              <p style="margin:0 0 24px; color:#374151; font-size:15px; line-height:1.6;">
+
+              <!-- What to expect -->
+              <p style="margin:0 0 16px; color:#c30361; font-size:16px; font-weight:700; line-height:1.5;">
+                What to expect
+              </p>
+
+              <!-- Bullet points -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
+                <tr>
+                  <td style="padding:4px 0 4px 16px; color:#374151; font-size:15px; line-height:1.7;">&bull;&nbsp; The format is similar to the first interview &mdash; an AI-guided conversation where you control the pace.</td>
+                </tr>
+                <tr>
+                  <td style="padding:4px 0 4px 16px; color:#374151; font-size:15px; line-height:1.7;">&bull;&nbsp; You'll be asked questions related to your approach to problem-solving, technical challenges you've faced, and your expertise relevant to the role.</td>
+                </tr>
+                <tr>
+                  <td style="padding:4px 0 4px 16px; color:#374151; font-size:15px; line-height:1.7;">&bull;&nbsp; Remember to click the button to start recording your response, and click it again when you're finished. Take your time to think through your answers.</td>
+                </tr>
+                <tr>
+                  <td style="padding:4px 0 4px 16px; color:#374151; font-size:15px; line-height:1.7;">&bull;&nbsp; The interview typically takes 15&ndash;20 minutes, depending on how detailed your responses are.</td>
+                </tr>
+              </table>
+
+              <p style="margin:0 0 28px; color:#374151; font-size:15px; line-height:1.7;">
                 If you perform well in this technical round, the final step is a conversation with our team, where we'll discuss the role in more depth and answer any questions you may have.
               </p>
+
+              <!-- CTA Button -->
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 <tr>
-                  <td align="center" style="padding:8px 0 24px;">
-                    <a href="{round2_link}" target="_blank" style="display:inline-block; background-color:#1e3a5f; color:#ffffff; text-decoration:none; font-size:16px; font-weight:600; padding:14px 32px; border-radius:6px; min-height:44px; line-height:44px;">
-                      Start Technical Interview
+                  <td align="center" style="padding:8px 0 28px;">
+                    <!--[if mso]>
+                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{round2_link}" style="height:52px;v-text-anchor:middle;width:280px;" arcsize="15%" strokecolor="#a00250" fillcolor="#c30361">
+                    <w:anchorlock/>
+                    <center style="color:#ffffff;font-family:'Segoe UI',Tahoma,sans-serif;font-size:16px;font-weight:bold;">Start Technical Interview &rarr;</center>
+                    </v:roundrect>
+                    <![endif]-->
+                    <!--[if !mso]><!-->
+                    <a href="{round2_link}" target="_blank" style="display:inline-block; background-color:#c30361; color:#ffffff; text-decoration:none; font-size:16px; font-weight:700; padding:16px 40px; border-radius:8px; line-height:1; letter-spacing:0.3px; border-bottom:3px solid #a00250;">
+                      Start Technical Interview &rarr;
                     </a>
+                    <!--<![endif]-->
                   </td>
                 </tr>
               </table>
+
               <p style="margin:0; color:#6b7280; font-size:13px; line-height:1.5;">
-                If you experience any issues, please email <a href="mailto:printerpix.recruitment@gmail.com" style="color:#1e3a5f; text-decoration:underline;">printerpix.recruitment@gmail.com</a>
+                If you experience any issues, please email <a href="mailto:printerpix.recruitment@gmail.com" style="color:#c30361; text-decoration:underline;">printerpix.recruitment@gmail.com</a>
               </p>
+
             </td>
           </tr>
+
+          <!-- Footer -->
           <tr>
-            <td style="background-color:#f8fafc; padding:20px 32px; border-top:1px solid #e5e7eb;">
-              <p style="margin:0; color:#6b7280; font-size:13px; line-height:1.5;">
-                Best,<br>
-                {company_name} Recruiting<br>
-                John Poole, Recruitment Manager
-              </p>
+            <td style="background-color:#1f2937; padding:24px 36px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td>
+                    <p style="margin:0 0 6px; color:#ffffff; font-size:14px; font-weight:600;">
+                      Best,
+                    </p>
+                    <p style="margin:0 0 4px; color:rgba(255,255,255,0.85); font-size:13px; line-height:1.5;">
+                      {company_name} Recruiting
+                    </p>
+                    <p style="margin:0; color:rgba(255,255,255,0.6); font-size:13px; line-height:1.5;">
+                      John Poole, Recruitment Manager
+                    </p>
+                  </td>
+                </tr>
+              </table>
             </td>
           </tr>
+
         </table>
       </td>
     </tr>

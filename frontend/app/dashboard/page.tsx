@@ -34,6 +34,8 @@ import {
   UserCheck,
   RotateCcw,
   Download,
+  Users,
+  Target,
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -42,6 +44,8 @@ import { useRouter } from 'next/navigation';
 // shadcn components
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -66,6 +70,16 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface FullVerdict {
   technicalScore: number;
@@ -119,10 +133,10 @@ interface Job {
 }
 
 interface Stats {
-  total: number;
-  round1Done: number;
-  round2Done: number;
-  completed: number;
+  applied: number;
+  round1: number;
+  round2: number;
+  successful: number;
 }
 
 const PAGE_SIZE = 25;
@@ -170,7 +184,36 @@ export default function DashboardPage() {
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const [stats, setStats] = useState<Stats>({ total: 0, round1Done: 0, round2Done: 0, completed: 0 });
+  const [stats, setStats] = useState<Stats>({ applied: 0, round1: 0, round2: 0, successful: 0 });
+
+  // Bulk selection
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+
+  // Unified bulk action modal: confirm → progress → done
+  const [bulkModal, setBulkModal] = useState<{
+    phase: 'confirm' | 'progress' | 'done';
+    title: string;
+    description: string;
+    variant?: 'default' | 'destructive';
+    onConfirm: () => void;
+    // progress state
+    processed: number;
+    total: number;
+    succeeded: number;
+    currentName?: string;
+    // done state
+    resultTitle?: string;
+    resultDescription?: string;
+    resultVariant?: 'success' | 'error';
+  } | null>(null);
+
+  // Simple toast for non-bulk single-action feedback
+  const [toastModal, setToastModal] = useState<{
+    title: string;
+    description: string;
+    variant?: 'success' | 'error';
+  } | null>(null);
 
   // Filters
   const [searchInput, setSearchInput] = useState('');
@@ -220,39 +263,46 @@ export default function DashboardPage() {
     router.refresh();
   };
 
-  // Fetch stats (runs once on mount)
+  // Fetch funnel stats (reactive to roleFilter, ignores stageFilter)
   const fetchStats = useCallback(async () => {
     try {
-      const { count: total } = await supabase
-        .from('candidates')
-        .select('*', { count: 'exact', head: true });
+      // Applied: total candidates (for this job role if filtered)
+      let appliedQuery = supabase.from('candidates').select('*', { count: 'exact', head: true });
+      if (roleFilter !== 'all') appliedQuery = appliedQuery.eq('job_id', roleFilter);
+      const { count: applied } = await appliedQuery;
 
-      const { count: round1Done } = await supabase
-        .from('candidates')
-        .select('*', { count: 'exact', head: true })
-        .not('rating', 'is', null)
-        .or('current_stage.is.null,current_stage.eq.round_1');
+      // Round 1: candidates who reached R1 or beyond
+      // = R1 Pending (INVITE_SENT, INTERVIEW_STARTED, FORM_COMPLETED) + anyone with a rating (R1 done or beyond)
+      let r1Query = supabase.from('candidates').select('*', { count: 'exact', head: true })
+        .or('status.in.("INVITE_SENT","INTERVIEW_STARTED","FORM_COMPLETED"),rating.not.is.null');
+      if (roleFilter !== 'all') r1Query = r1Query.eq('job_id', roleFilter);
+      const { count: round1 } = await r1Query;
 
-      const { count: round2Done } = await supabase
-        .from('candidates')
-        .select('*', { count: 'exact', head: true })
-        .or('current_stage.eq.round_2,current_stage.eq.completed');
+      // Round 2: candidates who reached R2 or beyond
+      // = R2 Pending (current_stage=round_2 OR status in ROUND_2_INVITED,ROUND_2_APPROVED OR rating>=70 with no round_2_rating)
+      // + anyone with round_2_rating (R2 done)
+      let r2Query = supabase.from('candidates').select('*', { count: 'exact', head: true })
+        .or('current_stage.eq.round_2,current_stage.eq.completed,status.eq.ROUND_2_INVITED,status.eq.ROUND_2_APPROVED,round_2_rating.not.is.null');
+      if (roleFilter !== 'all') r2Query = r2Query.eq('job_id', roleFilter);
+      const { count: round2 } = await r2Query;
 
-      const { count: completed } = await supabase
-        .from('candidates')
-        .select('*', { count: 'exact', head: true })
-        .eq('current_stage', 'completed');
+      // Successful: round_2_rating >= 70
+      let successQuery = supabase.from('candidates').select('*', { count: 'exact', head: true })
+        .not('round_2_rating', 'is', null)
+        .gte('round_2_rating', 70);
+      if (roleFilter !== 'all') successQuery = successQuery.eq('job_id', roleFilter);
+      const { count: successful } = await successQuery;
 
       setStats({
-        total: total || 0,
-        round1Done: round1Done || 0,
-        round2Done: round2Done || 0,
-        completed: completed || 0,
+        applied: applied || 0,
+        round1: round1 || 0,
+        round2: round2 || 0,
+        successful: successful || 0,
       });
     } catch (err) {
       console.error('Failed to fetch stats:', err);
     }
-  }, []);
+  }, [roleFilter]);
 
   // Fetch jobs (runs once on mount)
   const fetchJobs = useCallback(async () => {
@@ -396,9 +446,13 @@ export default function DashboardPage() {
   }, [currentPage, searchQuery, resumeSearchQuery, roleFilter, stageFilter, sortColumn, sortDirection, jobMap, matchesBooleanSearch]);
 
   useEffect(() => {
-    fetchStats();
     fetchJobs();
-  }, [fetchStats, fetchJobs]);
+  }, [fetchJobs]);
+
+  // Re-fetch stats when roleFilter changes (fetchStats has roleFilter in its deps)
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
 
   useEffect(() => {
     if (jobMap.size > 0 || jobs.length === 0) {
@@ -422,6 +476,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     setCurrentPage(1);
+    setSelectedIds(new Set());
   }, [searchQuery, resumeSearchQuery, roleFilter, stageFilter, sortColumn, sortDirection]);
 
   const getStageDisplay = (candidate: Candidate) => {
@@ -523,7 +578,7 @@ export default function DashboardPage() {
         c.id === candidateId ? { ...c, status: 'INVITE_SENT' } : c
       ));
     } else {
-      alert(result.error || 'Failed to send invite');
+      setToastModal({ title: 'Failed to Send Invite', description: result.error || 'An unexpected error occurred.', variant: 'error' });
     }
     setSendingInvite(null);
   };
@@ -536,7 +591,7 @@ export default function DashboardPage() {
         c.id === candidateId ? { ...c, current_stage: 'round_2', status: 'ROUND_2_INVITED' } : c
       ));
     } else {
-      alert(result.error || 'Failed to invite to round 2');
+      setToastModal({ title: 'Failed to Invite', description: result.error || 'An unexpected error occurred.', variant: 'error' });
     }
     setSendingInvite(null);
   };
@@ -608,12 +663,11 @@ export default function DashboardPage() {
     setSavingNote(false);
   };
 
-  const handleRevertStage = async (candidate: Candidate) => {
+  const handleRevertStage = (candidate: Candidate) => {
     let updateFields: Record<string, unknown>;
     let confirmMsg: string;
 
     if (candidate.round_2_rating !== null) {
-      // R2 completed → revert to R2 invited (allow R2 retake)
       confirmMsg = `Revert ${candidate.full_name} from R2 completed back to R2 Invited? This clears their Round 2 score and verdict so they can retake the technical interview.`;
       updateFields = {
         round_2_rating: null,
@@ -625,7 +679,6 @@ export default function DashboardPage() {
         current_stage: 'round_2',
       };
     } else if (candidate.current_stage === 'round_2' || candidate.status === 'ROUND_2_INVITED' || candidate.status === 'ROUND_2_APPROVED') {
-      // In R2 pipeline → revert to R1 invite sent (allow R1 retake)
       confirmMsg = `Revert ${candidate.full_name} from R2 pipeline back to R1 Invite Sent? This clears their Round 1 score and all Round 2 data so they can retake the personality interview.`;
       updateFields = {
         rating: null,
@@ -645,7 +698,6 @@ export default function DashboardPage() {
         current_stage: null,
       };
     } else if (candidate.rating !== null) {
-      // R1 completed → revert to invite sent (allow R1 retake)
       confirmMsg = `Revert ${candidate.full_name} from R1 completed back to R1 Invite Sent? This clears their Round 1 score so they can retake the personality interview.`;
       updateFields = {
         rating: null,
@@ -660,29 +712,37 @@ export default function DashboardPage() {
         current_stage: null,
       };
     } else {
-      return; // Nothing to revert
+      return;
     }
 
-    if (!window.confirm(confirmMsg)) return;
+    setBulkModal({
+      phase: 'confirm',
+      title: 'Revert Candidate Stage',
+      description: confirmMsg,
+      variant: 'destructive',
+      processed: 0, total: 1, succeeded: 0,
+      onConfirm: async () => {
+        setBulkModal(prev => prev ? { ...prev, phase: 'progress', currentName: candidate.full_name } : prev);
+        setRevertingCandidate(candidate.id);
+        const { error } = await supabase
+          .from('candidates')
+          .update(updateFields)
+          .eq('id', candidate.id);
 
-    setRevertingCandidate(candidate.id);
-    const { error } = await supabase
-      .from('candidates')
-      .update(updateFields)
-      .eq('id', candidate.id);
-
-    if (error) {
-      alert('Failed to revert candidate stage: ' + error.message);
-    } else {
-      // Update local state
-      setCandidates(prev => prev.map(c =>
-        c.id === candidate.id ? { ...c, ...updateFields } as Candidate : c
-      ));
-      if (selectedCandidate?.id === candidate.id) {
-        setSelectedCandidate(prev => prev ? { ...prev, ...updateFields } as Candidate : null);
-      }
-    }
-    setRevertingCandidate(null);
+        if (error) {
+          setBulkModal(prev => prev ? { ...prev, phase: 'done', processed: 1, resultTitle: 'Revert Failed', resultDescription: error.message, resultVariant: 'error' } : prev);
+        } else {
+          setCandidates(prev => prev.map(c =>
+            c.id === candidate.id ? { ...c, ...updateFields } as Candidate : c
+          ));
+          if (selectedCandidate?.id === candidate.id) {
+            setSelectedCandidate(prev => prev ? { ...prev, ...updateFields } as Candidate : null);
+          }
+          setBulkModal(prev => prev ? { ...prev, phase: 'done', processed: 1, succeeded: 1, resultTitle: 'Stage Reverted', resultDescription: `${candidate.full_name} has been reverted successfully.`, resultVariant: 'success' } : prev);
+        }
+        setRevertingCandidate(null);
+      },
+    });
   };
 
   const goToPage = (page: number) => {
@@ -715,6 +775,142 @@ export default function DashboardPage() {
       }
     }
     return pages;
+  };
+
+  // Bulk selection helpers
+  const toggleSelectAll = () => {
+    if (selectedIds.size === candidates.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(candidates.map(c => c.id)));
+    }
+  };
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectedCandidates = candidates.filter(c => selectedIds.has(c.id));
+
+  // Helper: run a bulk operation with progress tracking inside the modal
+  const runBulkWithProgress = async (
+    eligible: Candidate[],
+    title: string,
+    processFn: (candidate: Candidate) => Promise<boolean>,
+    doneTitle: string,
+  ) => {
+    setBulkActionLoading(true);
+    let succeeded = 0;
+    for (let i = 0; i < eligible.length; i++) {
+      const c = eligible[i];
+      setBulkModal(prev => prev ? { ...prev, phase: 'progress', processed: i, currentName: c.full_name } : prev);
+      try {
+        const ok = await processFn(c);
+        if (ok) succeeded++;
+      } catch (e) {
+        console.error(`Bulk action failed for ${c.email}:`, e);
+      }
+      setBulkModal(prev => prev ? { ...prev, processed: i + 1, succeeded } : prev);
+    }
+    setBulkActionLoading(false);
+    setSelectedIds(new Set());
+    setBulkModal(prev => prev ? {
+      ...prev,
+      phase: 'done',
+      resultTitle: doneTitle,
+      resultDescription: `${succeeded} of ${eligible.length} candidate(s) processed successfully.`,
+      resultVariant: succeeded > 0 ? 'success' : 'error',
+    } : prev);
+    fetchStats();
+    fetchCandidates();
+  };
+
+  // Bulk action handlers
+  const handleBulkSendR1 = () => {
+    const eligible = selectedCandidates.filter(c =>
+      c.rating === null && !['INVITE_SENT', 'INTERVIEW_STARTED', 'FORM_COMPLETED'].includes(c.status)
+    );
+    if (eligible.length === 0) {
+      setToastModal({ title: 'No Eligible Candidates', description: 'None of the selected candidates are eligible for an R1 invite.', variant: 'error' });
+      return;
+    }
+    setBulkModal({
+      phase: 'confirm',
+      title: 'Send Round 1 Invites',
+      description: `Send R1 interview invite to ${eligible.length} candidate(s)? This includes any overrides for CV Rejected / Eligibility statuses.`,
+      processed: 0, total: eligible.length, succeeded: 0,
+      onConfirm: () => runBulkWithProgress(eligible, 'Sending R1 Invites', async (c) => {
+        const result = await sendInterviewInvite(c.id);
+        return result.success;
+      }, 'R1 Invites Sent'),
+    });
+  };
+
+  const handleBulkSendR2 = () => {
+    const eligible = selectedCandidates.filter(c =>
+      c.rating !== null &&
+      c.round_2_rating === null &&
+      c.current_stage !== 'round_2' &&
+      c.current_stage !== 'completed' &&
+      c.status !== 'ROUND_2_INVITED' &&
+      c.status !== 'ROUND_2_APPROVED'
+    );
+    if (eligible.length === 0) {
+      setToastModal({ title: 'No Eligible Candidates', description: 'None of the selected candidates are eligible for an R2 invite.', variant: 'error' });
+      return;
+    }
+    setBulkModal({
+      phase: 'confirm',
+      title: 'Invite to Round 2',
+      description: `Invite ${eligible.length} candidate(s) to Round 2? This includes any overrides for R1 Failed candidates.`,
+      processed: 0, total: eligible.length, succeeded: 0,
+      onConfirm: () => runBulkWithProgress(eligible, 'Inviting to Round 2', async (c) => {
+        const result = await inviteToRound2(c.id);
+        return result.success;
+      }, 'R2 Invites Sent'),
+    });
+  };
+
+  const handleBulkAdvance = () => {
+    const eligible = selectedCandidates.filter(c => c.rating !== null && c.final_verdict !== 'Hired');
+    if (eligible.length === 0) {
+      setToastModal({ title: 'No Eligible Candidates', description: 'None of the selected candidates are eligible to advance.', variant: 'error' });
+      return;
+    }
+    setBulkModal({
+      phase: 'confirm',
+      title: 'Advance Candidates',
+      description: `Mark ${eligible.length} candidate(s) as Hired?`,
+      processed: 0, total: eligible.length, succeeded: 0,
+      onConfirm: () => runBulkWithProgress(eligible, 'Advancing Candidates', async (c) => {
+        const { error } = await supabase.from('candidates').update({ final_verdict: 'Hired', status: 'HIRED' }).eq('id', c.id);
+        return !error;
+      }, 'Candidates Advanced'),
+    });
+  };
+
+  const handleBulkReject = () => {
+    const eligible = selectedCandidates.filter(c => c.rating !== null && c.final_verdict !== 'Rejected');
+    if (eligible.length === 0) {
+      setToastModal({ title: 'No Eligible Candidates', description: 'None of the selected candidates are eligible to reject.', variant: 'error' });
+      return;
+    }
+    setBulkModal({
+      phase: 'confirm',
+      title: 'Reject Candidates',
+      description: `Mark ${eligible.length} candidate(s) as Rejected? This cannot be easily undone.`,
+      variant: 'destructive',
+      processed: 0, total: eligible.length, succeeded: 0,
+      onConfirm: () => runBulkWithProgress(eligible, 'Rejecting Candidates', async (c) => {
+        const { error } = await supabase.from('candidates').update({ final_verdict: 'Rejected', status: 'REJECTED' }).eq('id', c.id);
+        return !error;
+      }, 'Candidates Rejected'),
+    });
   };
 
   const startIndex = (currentPage - 1) * PAGE_SIZE + 1;
@@ -763,30 +959,42 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Stats Row */}
+        {/* Funnel Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <Card>
             <CardContent className="pt-4">
-              <p className="text-muted-foreground text-sm">Total Candidates</p>
-              <p className="text-2xl font-bold">{stats.total}</p>
+              <div className="flex items-center gap-2 mb-1">
+                <Users className="w-4 h-4 text-muted-foreground" />
+                <p className="text-muted-foreground text-sm">Applied</p>
+              </div>
+              <p className="text-2xl font-bold">{stats.applied}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4">
-              <p className="text-muted-foreground text-sm">Round 1 Complete</p>
-              <p className="text-2xl font-bold text-yellow-400">{stats.round1Done}</p>
+              <div className="flex items-center gap-2 mb-1">
+                <Send className="w-4 h-4 text-sky-400" />
+                <p className="text-muted-foreground text-sm">Round 1</p>
+              </div>
+              <p className="text-2xl font-bold text-sky-400">{stats.round1}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4">
-              <p className="text-muted-foreground text-sm">In Round 2</p>
-              <p className="text-2xl font-bold text-blue-400">{stats.round2Done}</p>
+              <div className="flex items-center gap-2 mb-1">
+                <ArrowRight className="w-4 h-4 text-blue-400" />
+                <p className="text-muted-foreground text-sm">Round 2</p>
+              </div>
+              <p className="text-2xl font-bold text-blue-400">{stats.round2}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4">
-              <p className="text-muted-foreground text-sm">Fully Completed</p>
-              <p className="text-2xl font-bold text-emerald-400">{stats.completed}</p>
+              <div className="flex items-center gap-2 mb-1">
+                <Target className="w-4 h-4 text-emerald-400" />
+                <p className="text-muted-foreground text-sm">Successful</p>
+              </div>
+              <p className="text-2xl font-bold text-emerald-400">{stats.successful}</p>
             </CardContent>
           </Card>
         </div>
@@ -875,9 +1083,48 @@ export default function DashboardPage() {
               </div>
             ) : (
               <>
+                {/* Bulk Action Bar */}
+                {selectedIds.size > 0 && (
+                  <div className="flex items-center gap-3 px-4 py-3 bg-muted/50 border-b">
+                    <span className="text-sm font-medium">{selectedIds.size} selected</span>
+                    <div className="w-px h-5 bg-border" />
+                    <Button size="sm" variant="outline" onClick={handleBulkSendR1} disabled={bulkActionLoading}
+                      className="bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border-blue-500/30">
+                      <Send className="w-3.5 h-3.5 mr-1.5" />
+                      Send R1 Invite
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={handleBulkSendR2} disabled={bulkActionLoading}
+                      className="bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border-emerald-500/30">
+                      <ArrowRight className="w-3.5 h-3.5 mr-1.5" />
+                      Invite to R2
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={handleBulkAdvance} disabled={bulkActionLoading}
+                      className="bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border-emerald-500/30">
+                      <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
+                      Advance
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={handleBulkReject} disabled={bulkActionLoading}
+                      className="bg-red-600/20 hover:bg-red-600/30 text-red-400 border-red-500/30">
+                      <XCircle className="w-3.5 h-3.5 mr-1.5" />
+                      Reject
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())} className="ml-auto text-muted-foreground">
+                      Clear
+                    </Button>
+                    {bulkActionLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+                  </div>
+                )}
+
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-10">
+                        <Checkbox
+                          checked={candidates.length > 0 && selectedIds.size === candidates.length}
+                          onCheckedChange={toggleSelectAll}
+                          aria-label="Select all"
+                        />
+                      </TableHead>
                       <TableHead className="w-12">#</TableHead>
                       <TableHead>Name</TableHead>
                       <TableHead>Role</TableHead>
@@ -923,7 +1170,14 @@ export default function DashboardPage() {
                       const rowNumber = startIndex + index;
 
                       return (
-                        <TableRow key={candidate.id}>
+                        <TableRow key={candidate.id} className={selectedIds.has(candidate.id) ? 'bg-muted/30' : ''}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedIds.has(candidate.id)}
+                              onCheckedChange={() => toggleSelect(candidate.id)}
+                              aria-label={`Select ${candidate.full_name}`}
+                            />
+                          </TableCell>
                           <TableCell className="text-muted-foreground font-medium">
                             {rowNumber}
                           </TableCell>
@@ -1617,6 +1871,126 @@ export default function DashboardPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setSelectedCandidate(null)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Unified Bulk Action Modal: confirm → progress → done */}
+      <Dialog
+        open={!!bulkModal}
+        onOpenChange={(open) => {
+          // Only allow closing in done phase
+          if (!open && bulkModal?.phase === 'done') setBulkModal(null);
+        }}
+      >
+        <DialogContent
+          className="max-w-md"
+          onPointerDownOutside={(e) => { if (bulkModal?.phase !== 'done') e.preventDefault(); }}
+          onEscapeKeyDown={(e) => { if (bulkModal?.phase !== 'done') e.preventDefault(); }}
+          // Hide the X button during confirm/progress by conditionally showing it
+          hideCloseButton={bulkModal?.phase !== 'done'}
+        >
+          {/* Phase: Confirm */}
+          {bulkModal?.phase === 'confirm' && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{bulkModal.title}</DialogTitle>
+                <p className="text-sm text-muted-foreground mt-2">{bulkModal.description}</p>
+              </DialogHeader>
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button variant="outline" onClick={() => setBulkModal(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={bulkModal.onConfirm}
+                  className={bulkModal.variant === 'destructive' ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}
+                >
+                  Confirm
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+
+          {/* Phase: Progress */}
+          {bulkModal?.phase === 'progress' && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{bulkModal.title}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <Progress value={bulkModal.total > 0 ? (bulkModal.processed / bulkModal.total) * 100 : 0} className="h-3" />
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    {bulkModal.currentName && (
+                      <span className="text-foreground">{bulkModal.currentName}</span>
+                    )}
+                  </span>
+                  <span className="text-muted-foreground font-medium tabular-nums">
+                    {bulkModal.processed} / {bulkModal.total}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Processing — please do not close this window
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Phase: Done */}
+          {bulkModal?.phase === 'done' && (
+            <>
+              <DialogHeader>
+                <div className="flex items-center gap-3">
+                  {bulkModal.resultVariant === 'success' ? (
+                    <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                    </div>
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center shrink-0">
+                      <XCircle className="w-5 h-5 text-red-400" />
+                    </div>
+                  )}
+                  <div>
+                    <DialogTitle>{bulkModal.resultTitle}</DialogTitle>
+                    <p className="text-sm text-muted-foreground mt-1">{bulkModal.resultDescription}</p>
+                  </div>
+                </div>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setBulkModal(null)}>
+                  Done
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Simple Toast Modal (for single-action feedback like failed invite) */}
+      <Dialog open={!!toastModal} onOpenChange={(open) => { if (!open) setToastModal(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              {toastModal?.variant === 'success' ? (
+                <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                </div>
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center shrink-0">
+                  <XCircle className="w-5 h-5 text-red-400" />
+                </div>
+              )}
+              <div>
+                <DialogTitle>{toastModal?.title}</DialogTitle>
+                <p className="text-sm text-muted-foreground mt-1">{toastModal?.description}</p>
+              </div>
+            </div>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setToastModal(null)}>
+              OK
             </Button>
           </DialogFooter>
         </DialogContent>

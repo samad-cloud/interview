@@ -641,8 +641,8 @@ export default function VoiceAvatar({
   // Stores promises — awaited when user clicks Start Interview
   useEffect(() => {
     const welcomeMessage = round === 2
-      ? `Welcome back, ${candidateName}! I'm Atlas, the technical interviewer for the ${jobTitle} role at Printerpix. I've reviewed your conversation with Wayne, and I was impressed. Now I'd like to dig into some of the technical details you mentioned. Same rules apply — take your time, think out loud if it helps, and ask me to repeat anything. Ready to dive in?`
-      : `Hi ${candidateName}, great to meet you! I'm Wayne, your interviewer for the ${jobTitle} role at Printerpix. It's completely normal to feel a few butterflies — this is a new experience for most people. Today we'll focus on concrete examples from your experience, because that's the best way to understand how you work. Take your time, think out loud if it helps, and ask me to repeat anything if you're unsure. When you're ready, let's jump in with the first question.`;
+      ? `Welcome back, ${candidateName}! I'm Atlas, the technical interviewer for the ${jobTitle} role at Printerpix. I've reviewed your conversation with Wayne, and I was impressed. Now I'd like to dig into some of the technical details you mentioned. Same rules apply — take your time, think out loud if it helps, and ask me to repeat anything. Before we begin, could you just confirm that you can hear me clearly? Once you reply, please click the green 'Done speaking' button to let me know!`
+      : `Hi ${candidateName}, great to meet you! I'm Wayne, your interviewer for the ${jobTitle} role at Printerpix. It's completely normal to feel a few butterflies — this is a new experience for most people. Today we'll focus on concrete examples from your experience, because that's the best way to understand how you work. Take your time, think out loud if it helps, and ask me to repeat anything if you're unsure. Before we jump into the questions, could you just confirm that you can hear me clearly? Once you reply, please click the green 'Done speaking' button to let me know!`;
 
     const chunks = splitIntoTTSChunks(welcomeMessage);
     welcomeAudioPromisesRef.current = chunks.map(chunk =>
@@ -864,8 +864,8 @@ export default function VoiceAvatar({
 
       // Welcome message - varies by round
       const welcomeMessage = round === 2
-        ? `Welcome back, ${candidateName}! I'm Atlas, the technical interviewer for the ${jobTitle} role at Printerpix. I've reviewed your conversation with Wayne, and I was impressed. Now I'd like to dig into some of the technical details you mentioned. Same rules apply — take your time, think out loud if it helps, and ask me to repeat anything. Ready to dive in?`
-        : `Hi ${candidateName}, great to meet you! I'm Wayne, your interviewer for the ${jobTitle} role at Printerpix. It's completely normal to feel a few butterflies — this is a new experience for most people. Today we'll focus on concrete examples from your experience, because that's the best way to understand how you work. Take your time, think out loud if it helps, and ask me to repeat anything if you're unsure. When you're ready, let's jump in with the first question.`;
+        ? `Welcome back, ${candidateName}! I'm Atlas, the technical interviewer for the ${jobTitle} role at Printerpix. I've reviewed your conversation with Wayne, and I was impressed. Now I'd like to dig into some of the technical details you mentioned. Same rules apply — take your time, think out loud if it helps, and ask me to repeat anything. Before we begin, could you just confirm that you can hear me clearly? Once you reply, please click the green 'Done speaking' button to let me know!`
+        : `Hi ${candidateName}, great to meet you! I'm Wayne, your interviewer for the ${jobTitle} role at Printerpix. It's completely normal to feel a few butterflies — this is a new experience for most people. Today we'll focus on concrete examples from your experience, because that's the best way to understand how you work. Take your time, think out loud if it helps, and ask me to repeat anything if you're unsure. Before we jump into the questions, could you just confirm that you can hear me clearly? Once you reply, please click the green 'Done speaking' button to let me know!`;
 
       addToConversation('interviewer', welcomeMessage);
 
@@ -1237,10 +1237,10 @@ Round: ${round}
         <div className="text-center max-w-md">
           <Loader2 className="w-16 h-16 text-cyan-500 animate-spin mx-auto mb-6" />
           <h2 className="text-2xl font-bold text-white mb-3">
-            Analyzing Your Interview
+            Submitting Your Interview
           </h2>
           <p className="text-slate-400">
-            Our AI is reviewing your responses. This usually takes about 10 seconds...
+            We&apos;re wrapping things up and submitting your responses. This should only take a moment...
           </p>
           {uploadProgress !== null && (
             <div className="mt-6">
