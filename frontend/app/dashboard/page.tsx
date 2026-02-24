@@ -36,6 +36,9 @@ import {
   Download,
   Users,
   Target,
+  SlidersHorizontal,
+  X,
+  Calendar,
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -97,7 +100,7 @@ interface FullDossier {
   overallAssessment: string;
 }
 
-type SortColumn = 'created_at' | 'jd_match_score' | 'rating';
+type SortColumn = 'created_at' | 'jd_match_score' | 'rating' | 'round_1_completed_at' | 'round_2_completed_at';
 type SortDirection = 'asc' | 'desc';
 
 interface Candidate {
@@ -125,6 +128,9 @@ interface Candidate {
   round_1_full_dossier: FullDossier | null;
   hr_notes: string | null;
   resume_url: string | null;
+  applied_at: string | null;
+  round_1_completed_at: string | null;
+  round_2_completed_at: string | null;
 }
 
 interface Job {
@@ -228,6 +234,21 @@ export default function DashboardPage() {
   // Sorting
   const [sortColumn, setSortColumn] = useState<SortColumn>('rating');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  // Advanced filters
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [cvScoreMin, setCvScoreMin] = useState('');
+  const [cvScoreMax, setCvScoreMax] = useState('');
+  const [r1ScoreMin, setR1ScoreMin] = useState('');
+  const [r1ScoreMax, setR1ScoreMax] = useState('');
+  const [r2ScoreMin, setR2ScoreMin] = useState('');
+  const [r2ScoreMax, setR2ScoreMax] = useState('');
+  const [appliedDateFrom, setAppliedDateFrom] = useState('');
+  const [appliedDateTo, setAppliedDateTo] = useState('');
+  const [r1DateFrom, setR1DateFrom] = useState('');
+  const [r1DateTo, setR1DateTo] = useState('');
+  const [r2DateFrom, setR2DateFrom] = useState('');
+  const [r2DateTo, setR2DateTo] = useState('');
 
   // Notes
   const [generatingNotes, setGeneratingNotes] = useState(false);
@@ -358,7 +379,7 @@ export default function DashboardPage() {
 
       let query = supabase
         .from('candidates')
-        .select('id, full_name, email, rating, round_2_rating, jd_match_score, ai_summary, interview_notes, status, current_stage, interview_transcript, round_2_transcript, resume_text, resume_url, job_id, final_verdict, full_verdict, round_1_full_dossier, hr_notes, interview_token, created_at, video_url, round_2_video_url', { count: isBooleanActive ? undefined : 'exact' });
+        .select('id, full_name, email, rating, round_2_rating, jd_match_score, ai_summary, interview_notes, status, current_stage, interview_transcript, round_2_transcript, resume_text, resume_url, job_id, final_verdict, full_verdict, round_1_full_dossier, hr_notes, interview_token, created_at, video_url, round_2_video_url, applied_at, round_1_completed_at, round_2_completed_at', { count: isBooleanActive ? undefined : 'exact' });
 
       if (searchQuery) {
         query = query.or(`full_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
@@ -402,6 +423,22 @@ export default function DashboardPage() {
         }
       }
 
+      // Advanced filters: score ranges
+      if (cvScoreMin) query = query.gte('jd_match_score', parseInt(cvScoreMin));
+      if (cvScoreMax) query = query.lte('jd_match_score', parseInt(cvScoreMax));
+      if (r1ScoreMin) query = query.gte('rating', parseInt(r1ScoreMin));
+      if (r1ScoreMax) query = query.lte('rating', parseInt(r1ScoreMax));
+      if (r2ScoreMin) query = query.gte('round_2_rating', parseInt(r2ScoreMin));
+      if (r2ScoreMax) query = query.lte('round_2_rating', parseInt(r2ScoreMax));
+
+      // Advanced filters: date ranges
+      if (appliedDateFrom) query = query.gte('applied_at', appliedDateFrom);
+      if (appliedDateTo) query = query.lte('applied_at', appliedDateTo + 'T23:59:59');
+      if (r1DateFrom) query = query.gte('round_1_completed_at', r1DateFrom);
+      if (r1DateTo) query = query.lte('round_1_completed_at', r1DateTo + 'T23:59:59');
+      if (r2DateFrom) query = query.gte('round_2_completed_at', r2DateFrom);
+      if (r2DateTo) query = query.lte('round_2_completed_at', r2DateTo + 'T23:59:59');
+
       const { data, error, count } = await query
         .order(sortColumn, { ascending: sortDirection === 'asc', nullsFirst: false })
         .range(from, to);
@@ -443,7 +480,7 @@ export default function DashboardPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentPage, searchQuery, resumeSearchQuery, roleFilter, stageFilter, sortColumn, sortDirection, jobMap, matchesBooleanSearch]);
+  }, [currentPage, searchQuery, resumeSearchQuery, roleFilter, stageFilter, sortColumn, sortDirection, jobMap, matchesBooleanSearch, cvScoreMin, cvScoreMax, r1ScoreMin, r1ScoreMax, r2ScoreMin, r2ScoreMax, appliedDateFrom, appliedDateTo, r1DateFrom, r1DateTo, r2DateFrom, r2DateTo]);
 
   useEffect(() => {
     fetchJobs();
@@ -477,7 +514,7 @@ export default function DashboardPage() {
   useEffect(() => {
     setCurrentPage(1);
     setSelectedIds(new Set());
-  }, [searchQuery, resumeSearchQuery, roleFilter, stageFilter, sortColumn, sortDirection]);
+  }, [searchQuery, resumeSearchQuery, roleFilter, stageFilter, sortColumn, sortDirection, cvScoreMin, cvScoreMax, r1ScoreMin, r1ScoreMax, r2ScoreMin, r2ScoreMax, appliedDateFrom, appliedDateTo, r1DateFrom, r1DateTo, r2DateFrom, r2DateTo]);
 
   const getStageDisplay = (candidate: Candidate) => {
     // Status-based stages (most specific first)
@@ -913,6 +950,17 @@ export default function DashboardPage() {
     });
   };
 
+  const activeAdvancedFilterCount = [cvScoreMin, cvScoreMax, r1ScoreMin, r1ScoreMax, r2ScoreMin, r2ScoreMax, appliedDateFrom, appliedDateTo, r1DateFrom, r1DateTo, r2DateFrom, r2DateTo].filter(Boolean).length;
+
+  const clearAdvancedFilters = () => {
+    setCvScoreMin(''); setCvScoreMax('');
+    setR1ScoreMin(''); setR1ScoreMax('');
+    setR2ScoreMin(''); setR2ScoreMax('');
+    setAppliedDateFrom(''); setAppliedDateTo('');
+    setR1DateFrom(''); setR1DateTo('');
+    setR2DateFrom(''); setR2DateTo('');
+  };
+
   const startIndex = (currentPage - 1) * PAGE_SIZE + 1;
   const endIndex = Math.min(currentPage * PAGE_SIZE, totalCount);
 
@@ -1048,7 +1096,117 @@ export default function DashboardPage() {
               <SelectItem value="successful">Successful</SelectItem>
             </SelectContent>
           </Select>
+
+          <Button
+            variant={showAdvancedFilters ? 'secondary' : 'outline'}
+            size="sm"
+            onClick={() => setShowAdvancedFilters(prev => !prev)}
+            className="ml-auto"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 mr-1.5" />
+            Advanced
+            {activeAdvancedFilterCount > 0 && (
+              <Badge className="ml-1.5 bg-emerald-500/20 text-emerald-400 px-1.5 py-0 text-xs">
+                {activeAdvancedFilterCount}
+              </Badge>
+            )}
+          </Button>
         </div>
+
+        {/* Advanced Filters Panel */}
+        {showAdvancedFilters && (
+          <div className="mb-6 space-y-4 p-4 border border-border rounded-lg bg-muted/30">
+            {/* Score Ranges */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Target className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-sm font-medium text-muted-foreground">Score Ranges</span>
+              </div>
+              <div className="flex items-center gap-4 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground w-6">CV</span>
+                  <Input type="number" placeholder="Min" value={cvScoreMin} onChange={e => setCvScoreMin(e.target.value)} className="w-20 h-8 text-sm" min={0} max={100} />
+                  <span className="text-xs text-muted-foreground">–</span>
+                  <Input type="number" placeholder="Max" value={cvScoreMax} onChange={e => setCvScoreMax(e.target.value)} className="w-20 h-8 text-sm" min={0} max={100} />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground w-6">R1</span>
+                  <Input type="number" placeholder="Min" value={r1ScoreMin} onChange={e => setR1ScoreMin(e.target.value)} className="w-20 h-8 text-sm" min={0} max={100} />
+                  <span className="text-xs text-muted-foreground">–</span>
+                  <Input type="number" placeholder="Max" value={r1ScoreMax} onChange={e => setR1ScoreMax(e.target.value)} className="w-20 h-8 text-sm" min={0} max={100} />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground w-6">R2</span>
+                  <Input type="number" placeholder="Min" value={r2ScoreMin} onChange={e => setR2ScoreMin(e.target.value)} className="w-20 h-8 text-sm" min={0} max={100} />
+                  <span className="text-xs text-muted-foreground">–</span>
+                  <Input type="number" placeholder="Max" value={r2ScoreMax} onChange={e => setR2ScoreMax(e.target.value)} className="w-20 h-8 text-sm" min={0} max={100} />
+                </div>
+              </div>
+            </div>
+
+            {/* Date Ranges */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-sm font-medium text-muted-foreground">Date Ranges</span>
+                <div className="flex items-center gap-1.5 ml-4">
+                  <Button variant="outline" size="sm" className="h-6 text-xs px-2"
+                    onClick={() => {
+                      const d = new Date(); d.setDate(d.getDate() - 7);
+                      setAppliedDateFrom(d.toISOString().split('T')[0]);
+                      setAppliedDateTo(new Date().toISOString().split('T')[0]);
+                    }}>
+                    Last 7d
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-6 text-xs px-2"
+                    onClick={() => {
+                      const d = new Date(); d.setDate(d.getDate() - 30);
+                      setAppliedDateFrom(d.toISOString().split('T')[0]);
+                      setAppliedDateTo(new Date().toISOString().split('T')[0]);
+                    }}>
+                    Last 30d
+                  </Button>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground w-14">Applied</span>
+                  <input type="date" value={appliedDateFrom} onChange={e => setAppliedDateFrom(e.target.value)}
+                    className="h-8 px-2 text-sm bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring" />
+                  <span className="text-xs text-muted-foreground">–</span>
+                  <input type="date" value={appliedDateTo} onChange={e => setAppliedDateTo(e.target.value)}
+                    className="h-8 px-2 text-sm bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring" />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground w-14">R1 Date</span>
+                  <input type="date" value={r1DateFrom} onChange={e => setR1DateFrom(e.target.value)}
+                    className="h-8 px-2 text-sm bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring" />
+                  <span className="text-xs text-muted-foreground">–</span>
+                  <input type="date" value={r1DateTo} onChange={e => setR1DateTo(e.target.value)}
+                    className="h-8 px-2 text-sm bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring" />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground w-14">R2 Date</span>
+                  <input type="date" value={r2DateFrom} onChange={e => setR2DateFrom(e.target.value)}
+                    className="h-8 px-2 text-sm bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring" />
+                  <span className="text-xs text-muted-foreground">–</span>
+                  <input type="date" value={r2DateTo} onChange={e => setR2DateTo(e.target.value)}
+                    className="h-8 px-2 text-sm bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring" />
+                </div>
+              </div>
+            </div>
+
+            {/* Clear All */}
+            {activeAdvancedFilterCount > 0 && (
+              <div className="flex justify-end">
+                <Button variant="ghost" size="sm" onClick={clearAdvancedFilters} className="text-muted-foreground h-7 text-xs">
+                  <X className="w-3 h-3 mr-1" />
+                  Clear Advanced Filters
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Boolean Resume Search */}
         <div className="mb-6">
@@ -1134,6 +1292,18 @@ export default function DashboardPage() {
                           <SortIcon column="created_at" />
                         </div>
                       </TableHead>
+                      <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('round_1_completed_at')}>
+                        <div className="flex items-center gap-1">
+                          R1 Date
+                          <SortIcon column="round_1_completed_at" />
+                        </div>
+                      </TableHead>
+                      <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('round_2_completed_at')}>
+                        <div className="flex items-center gap-1">
+                          R2 Date
+                          <SortIcon column="round_2_completed_at" />
+                        </div>
+                      </TableHead>
                       <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('jd_match_score')}>
                         <div className="flex items-center gap-1">
                           CV
@@ -1196,6 +1366,18 @@ export default function DashboardPage() {
                           <TableCell className="text-muted-foreground text-sm">
                             {candidate.created_at
                               ? new Date(candidate.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
+                              : '—'}
+                          </TableCell>
+
+                          <TableCell className="text-muted-foreground text-sm">
+                            {candidate.round_1_completed_at
+                              ? new Date(candidate.round_1_completed_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
+                              : '—'}
+                          </TableCell>
+
+                          <TableCell className="text-muted-foreground text-sm">
+                            {candidate.round_2_completed_at
+                              ? new Date(candidate.round_2_completed_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
                               : '—'}
                           </TableCell>
 

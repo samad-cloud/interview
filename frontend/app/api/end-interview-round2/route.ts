@@ -108,6 +108,7 @@ export async function POST(request: Request) {
       .from('candidates')
       .update({
         round_2_transcript: transcriptText,
+        round_2_completed_at: new Date().toISOString(),
       })
       .eq('id', candidateId);
 

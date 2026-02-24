@@ -273,6 +273,7 @@ NOTES INSTRUCTIONS:
         ai_summary: analysis.summary,
         interview_notes: analysis.notes,
         status: 'INTERVIEWED',
+        round_1_completed_at: new Date().toISOString(),
       })
       .eq('id', candidateId);
 
