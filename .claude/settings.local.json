@@ -37,7 +37,8 @@
       "Bash(bash -c \"ls -la frontend/ 2>&1 | head -20\")",
       "Bash(ls:*)",
       "Bash(cd:*)",
-      "mcp__supabase__apply_migration"
+      "mcp__supabase__apply_migration",
+      "Bash(head:*)"
     ]
   }
 }
