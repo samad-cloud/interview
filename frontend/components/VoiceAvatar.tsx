@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Mic, MicOff, Camera, CameraOff, PhoneOff, Loader2, Volume2, AlertCircle, Clock } from 'lucide-react';
+import { Mic, CameraOff, PhoneOff, Loader2, Volume2, AlertCircle, Clock } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 
 interface VoiceAvatarProps {
@@ -91,6 +91,9 @@ export default function VoiceAvatar({
 
   // Upload progress state
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+
+  // Submitting guard — prevents browser close during upload
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Silence detection for "Done Speaking" nudge
   const [showDoneHint, setShowDoneHint] = useState(false);
@@ -709,7 +712,6 @@ export default function VoiceAvatar({
     } catch (err) {
       console.error('Failed to access camera:', err);
       setIsCameraOn(false);
-      // Camera is optional for voice interview
     }
   };
 
@@ -792,17 +794,6 @@ export default function VoiceAvatar({
     }
 
     setMediaCheckDone(true);
-  };
-
-  // Toggle camera
-  const toggleCamera = () => {
-    if (userStreamRef.current) {
-      const videoTrack = userStreamRef.current.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = !videoTrack.enabled;
-        setIsCameraOn(videoTrack.enabled);
-      }
-    }
   };
 
   // Toggle microphone
@@ -937,6 +928,7 @@ Round: ${round}
   // End interview and save transcript
   const endInterview = async () => {
     setCallStatus('analyzing');
+    setIsSubmitting(true);
 
     // Stop Deepgram and any playing audio
     stopDeepgramListening();
@@ -980,7 +972,57 @@ Round: ${round}
       userStreamRef.current.getTracks().forEach(track => track.stop());
     }
 
-    // --- Phase 2: Save transcript (primary, must succeed) ---
+    // --- Phase 2: Upload recording FIRST (fast, protects against tab close) ---
+    if (recordingBlob && recordingBlob.size > 0) {
+      try {
+        setUploadProgress(0);
+        const timestamp = Date.now();
+        const folder = round === 2 ? 'round2' : 'round1';
+        const ext = recordingBlob.type.startsWith('video/') ? 'webm' : 'webm';
+        const filePath = `${folder}/${candidateId}-${timestamp}.${ext}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('interview-recordings')
+          .upload(filePath, recordingBlob, {
+            contentType: recordingBlob.type,
+            upsert: false,
+          });
+
+        if (uploadError) {
+          throw uploadError;
+        }
+
+        setUploadProgress(100);
+        console.log('[Recording] Uploaded to:', filePath);
+
+        // Get public URL and save to DB
+        const { data: urlData } = supabase.storage
+          .from('interview-recordings')
+          .getPublicUrl(filePath);
+
+        const publicUrl = urlData?.publicUrl;
+
+        if (publicUrl) {
+          const videoColumn = round === 2 ? 'round_2_video_url' : 'video_url';
+          const { error: dbError } = await supabase
+            .from('candidates')
+            .update({ [videoColumn]: publicUrl })
+            .eq('id', parseInt(candidateId));
+
+          if (dbError) {
+            console.error('[Recording] Failed to save video URL to DB:', dbError);
+          } else {
+            console.log(`[Recording] Saved ${videoColumn}:`, publicUrl);
+          }
+        }
+      } catch (err) {
+        console.error('[Recording] Upload failed:', err);
+      } finally {
+        setUploadProgress(null);
+      }
+    }
+
+    // --- Phase 3: Save transcript via API (slow — triggers Gemini scoring) ---
     try {
       const transcriptText = formatTranscript();
       console.log('Final transcript:', transcriptText);
@@ -1007,61 +1049,20 @@ Round: ${round}
       setError('Failed to save interview data');
     }
 
-    // --- Phase 3: Upload recording (secondary, non-fatal) ---
-    if (recordingBlob && recordingBlob.size > 0) {
-      try {
-        setUploadProgress(0);
-        const timestamp = Date.now();
-        const folder = round === 2 ? 'round2' : 'round1';
-        const ext = recordingBlob.type.startsWith('video/') ? 'webm' : 'webm';
-        const filePath = `${folder}/${candidateId}-${timestamp}.${ext}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from('interview-recordings')
-          .upload(filePath, recordingBlob, {
-            contentType: recordingBlob.type,
-            upsert: false,
-          });
-
-        if (uploadError) {
-          throw uploadError;
-        }
-
-        setUploadProgress(100);
-        console.log('[Recording] Uploaded to:', filePath);
-
-        // Get public URL
-        const { data: urlData } = supabase.storage
-          .from('interview-recordings')
-          .getPublicUrl(filePath);
-
-        const publicUrl = urlData?.publicUrl;
-
-        if (publicUrl) {
-          const videoColumn = round === 2 ? 'round_2_video_url' : 'video_url';
-          const { error: dbError } = await supabase
-            .from('candidates')
-            .update({ [videoColumn]: publicUrl })
-            .eq('id', parseInt(candidateId));
-
-          if (dbError) {
-            console.error('[Recording] Failed to save video URL to DB:', dbError);
-          } else {
-            console.log(`[Recording] Saved ${videoColumn}:`, publicUrl);
-          }
-        }
-      } catch (err) {
-        console.error('[Recording] Upload failed (transcript already saved):', err);
-      } finally {
-        setUploadProgress(null);
-      }
-    }
-
+    setIsSubmitting(false);
     setCallStatus('ended');
   };
 
   // Keep endInterview ref in sync (defined after the function so it's not used before declaration)
   useEffect(() => { endInterviewRef.current = endInterview; }, [endInterview]);
+
+  // Warn user before closing tab during submission
+  useEffect(() => {
+    if (!isSubmitting) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isSubmitting]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -1124,9 +1125,10 @@ Round: ${round}
               {/* Camera preview */}
               <div className="mx-auto w-64 h-48 rounded-xl overflow-hidden border-2 border-slate-700 bg-slate-900 flex items-center justify-center">
                 {cameraError ? (
-                  <div className="text-center text-slate-500">
+                  <div className="text-center text-red-400">
                     <CameraOff className="w-10 h-10 mx-auto mb-2" />
-                    <p className="text-sm">No camera detected</p>
+                    <p className="text-sm font-medium">Camera is required for this interview</p>
+                    <p className="text-xs text-slate-500 mt-1">Please allow camera access and reload</p>
                   </div>
                 ) : (
                   <video
@@ -1200,13 +1202,13 @@ Round: ${round}
             ) : (
               <button
                 onClick={startInterview}
-                disabled={micError}
+                disabled={micError || cameraError}
                 className={`px-8 py-4 text-white text-lg font-semibold rounded-xl transition-all transform shadow-lg ${
-                  micError
+                  micError || cameraError
                     ? 'bg-slate-700 cursor-not-allowed opacity-50'
                     : 'bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 hover:scale-105 shadow-cyan-500/25'
                 }`}
-                title={micError ? 'Microphone is required to start the interview' : ''}
+                title={micError ? 'Microphone is required' : cameraError ? 'Camera is required' : ''}
               >
                 Start Interview
               </button>

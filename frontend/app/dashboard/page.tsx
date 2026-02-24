@@ -275,13 +275,24 @@ export default function DashboardPage() {
   const [sendingInvite, setSendingInvite] = useState<number | null>(null);
   const [revertingCandidate, setRevertingCandidate] = useState<number | null>(null);
   const router = useRouter();
+  const [authChecked, setAuthChecked] = useState(false);
+
+  // Client-side auth guard — catches cases where middleware is bypassed (e.g. client-side nav cache)
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) {
+        router.replace('/login?redirect=/dashboard');
+      } else {
+        setAuthChecked(true);
+      }
+    });
+  }, [router]);
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    router.push('/login');
-    router.refresh();
+    router.replace('/login');
   };
 
   // Fetch funnel stats (reactive to roleFilter, ignores stageFilter)
@@ -963,6 +974,15 @@ export default function DashboardPage() {
 
   const startIndex = (currentPage - 1) * PAGE_SIZE + 1;
   const endIndex = Math.min(currentPage * PAGE_SIZE, totalCount);
+
+  // Don't render until auth is confirmed
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background p-8">
