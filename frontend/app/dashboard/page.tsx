@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import { createClient as createBrowserSupabase } from '@/lib/supabase-browser';
 import { sendInterviewInvite, inviteToRound2 } from '@/app/actions/sendInvite';
 import { generateInterviewNotes, type InterviewNotes } from '@/app/actions/generateNotes';
 import {
@@ -277,9 +278,13 @@ export default function DashboardPage() {
   const router = useRouter();
   const [authChecked, setAuthChecked] = useState(false);
 
+  // SSR-aware client for auth operations (properly handles cookies)
+  const authSupabase = createBrowserSupabase();
+
   // Client-side auth guard — catches cases where middleware is bypassed (e.g. client-side nav cache)
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    const sb = createBrowserSupabase();
+    sb.auth.getUser().then(({ data: { user } }) => {
       if (!user) {
         router.replace('/login?redirect=/dashboard');
       } else {
@@ -291,7 +296,7 @@ export default function DashboardPage() {
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await authSupabase.auth.signOut();
     router.replace('/login');
   };
 
