@@ -14,7 +14,7 @@ interface CandidateData {
   resume_text: string | null;
   status: string;
   current_stage: string | null;
-  round_1_dossier: string[] | null;
+  round_1_dossier: string | string[] | null;
   round_2_rating: number | null;
 }
 
@@ -169,6 +169,21 @@ export default function Round2Page() {
     );
   }
 
+  // Parse dossier: DB column is text type containing a JSON array string
+  let parsedDossier: string[] | undefined;
+  if (candidate.round_1_dossier) {
+    if (Array.isArray(candidate.round_1_dossier)) {
+      parsedDossier = candidate.round_1_dossier;
+    } else {
+      try {
+        const parsed = JSON.parse(candidate.round_1_dossier);
+        parsedDossier = Array.isArray(parsed) ? parsed : undefined;
+      } catch {
+        parsedDossier = undefined;
+      }
+    }
+  }
+
   // Success - Render Round 2 Voice Interview with Atlas persona
   return (
     <VoiceAvatar
@@ -178,7 +193,7 @@ export default function Round2Page() {
       jobDescription={candidate.job_description || 'Software Engineer at Printerpix'}
       resumeText={candidate.resume_text || 'No resume provided'}
       round={2}
-      dossier={candidate.round_1_dossier || undefined}
+      dossier={parsedDossier}
     />
   );
 }
