@@ -278,11 +278,11 @@ export default function DashboardPage() {
       if (roleFilter !== 'all') r1Query = r1Query.eq('job_id', roleFilter);
       const { count: round1 } = await r1Query;
 
-      // Round 2: candidates who reached R2 or beyond
-      // = R2 Pending (current_stage=round_2 OR status in ROUND_2_INVITED,ROUND_2_APPROVED OR rating>=70 with no round_2_rating)
-      // + anyone with round_2_rating (R2 done)
+      // Round 2 Pending: candidates awaiting R2 (no round_2_rating yet, but passed R1)
       let r2Query = supabase.from('candidates').select('*', { count: 'exact', head: true })
-        .or('current_stage.eq.round_2,current_stage.eq.completed,status.eq.ROUND_2_INVITED,status.eq.ROUND_2_APPROVED,round_2_rating.not.is.null');
+        .is('round_2_rating', null)
+        .not('rating', 'is', null)
+        .or('current_stage.eq.round_2,status.eq.ROUND_2_APPROVED,status.eq.ROUND_2_INVITED,rating.gte.70');
       if (roleFilter !== 'all') r2Query = r2Query.eq('job_id', roleFilter);
       const { count: round2 } = await r2Query;
 

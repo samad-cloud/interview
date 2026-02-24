@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { generateInterviewNotes } from '@/app/actions/generateNotes';
+import { generateFinalVerdict } from '@/app/actions/generateFinalVerdict';
 
 export async function POST(request: Request) {
   try {
@@ -120,6 +121,19 @@ export async function POST(request: Request) {
 
     console.log(`[End Interview Round 2] Saved transcript for candidate ${candidateId}`);
 
+    // Generate final verdict — scores R2, updates round_2_rating, status, and current_stage
+    let verdictResult = null;
+    try {
+      verdictResult = await generateFinalVerdict(String(candidateId));
+      if (verdictResult.success) {
+        console.log(`[End Interview Round 2] Final verdict for candidate ${candidateId}: ${verdictResult.verdict?.verdict} (Score: ${verdictResult.verdict?.score}/100)`);
+      } else {
+        console.error(`[End Interview Round 2] Verdict generation failed for ${candidateId}: ${verdictResult.error}`);
+      }
+    } catch (err) {
+      console.error(`[End Interview Round 2] Verdict error for candidate ${candidateId}:`, err);
+    }
+
     // Auto-generate interview notes with both transcripts (fire-and-forget)
     generateInterviewNotes({
       candidateId,
@@ -135,6 +149,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
+      verdict: verdictResult?.success ? verdictResult.verdict : undefined,
     });
 
   } catch (error) {
@@ -145,6 +160,3 @@ export async function POST(request: Request) {
     );
   }
 }
-
-
-

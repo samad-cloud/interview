@@ -12,6 +12,7 @@ interface CandidateData {
   job_id: number | null;
   job_description: string | null;
   resume_text: string | null;
+  status: string;
   current_stage: string | null;
   round_1_dossier: string[] | null;
   round_2_rating: number | null;
@@ -38,7 +39,7 @@ export default function Round2Page() {
       try {
         const { data, error: supabaseError } = await supabase
           .from('candidates')
-          .select('id, full_name, job_id, job_description, resume_text, current_stage, round_1_dossier, round_2_rating')
+          .select('id, full_name, job_id, job_description, resume_text, status, current_stage, round_1_dossier, round_2_rating')
           .eq('interview_token', token)
           .single();
 
@@ -54,7 +55,8 @@ export default function Round2Page() {
         }
 
         // Check if candidate is in Round 2 stage
-        if (data.current_stage !== 'round_2') {
+        // Allow access if current_stage is 'round_2' OR status indicates R2 invitation
+        if (data.current_stage !== 'round_2' && data.status !== 'ROUND_2_INVITED' && data.status !== 'ROUND_2_APPROVED') {
           setAccessDenied(true);
           return;
         }
