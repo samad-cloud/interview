@@ -3,8 +3,11 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase-browser';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Shield } from 'lucide-react';
 import Image from 'next/image';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
 
 function LoginForm() {
   const [email, setEmail] = useState('');
@@ -38,35 +41,31 @@ function LoginForm() {
   };
 
   return (
-    <form onSubmit={handleLogin} className="space-y-4">
-      <div>
-        <label htmlFor="email" className="block text-sm font-medium text-slate-400 mb-1">
-          Email
-        </label>
-        <input
+    <form onSubmit={handleLogin} className="space-y-5">
+      <div className="space-y-2">
+        <Label htmlFor="email">Email</Label>
+        <Input
           id="email"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
           autoFocus
-          className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
           placeholder="you@company.com"
+          className="h-11"
         />
       </div>
 
-      <div>
-        <label htmlFor="password" className="block text-sm font-medium text-slate-400 mb-1">
-          Password
-        </label>
-        <input
+      <div className="space-y-2">
+        <Label htmlFor="password">Password</Label>
+        <Input
           id="password"
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
-          className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
           placeholder="Enter your password"
+          className="h-11"
         />
       </div>
 
@@ -76,53 +75,75 @@ function LoginForm() {
         </div>
       )}
 
-      <button
+      <Button
         type="submit"
         disabled={loading}
-        className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+        className="w-full h-11 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold"
       >
         {loading ? (
           <>
-            <Loader2 className="w-4 h-4 animate-spin" />
+            <Loader2 className="w-4 h-4 animate-spin mr-2" />
             Signing in...
           </>
         ) : (
           'Sign In'
         )}
-      </button>
+      </Button>
     </form>
   );
 }
 
 function LoginFormFallback() {
   return (
-    <div className="space-y-4">
-      <div className="h-[74px] bg-slate-800/50 rounded-lg animate-pulse" />
-      <div className="h-[74px] bg-slate-800/50 rounded-lg animate-pulse" />
-      <div className="h-[52px] bg-slate-800/50 rounded-lg animate-pulse" />
+    <div className="space-y-5">
+      <div className="space-y-2">
+        <div className="h-4 w-12 bg-muted rounded animate-pulse" />
+        <div className="h-11 bg-muted rounded-md animate-pulse" />
+      </div>
+      <div className="space-y-2">
+        <div className="h-4 w-16 bg-muted rounded animate-pulse" />
+        <div className="h-11 bg-muted rounded-md animate-pulse" />
+      </div>
+      <div className="h-11 bg-muted rounded-md animate-pulse" />
     </div>
   );
 }
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-      <div className="w-full max-w-sm">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Subtle radial gradient background */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-900/20 via-background to-background" />
+
+      {/* Noise texture overlay */}
+      <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noise\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.65\' numOctaves=\'3\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noise)\'/%3E%3C/svg%3E")' }} />
+
+      <div className="w-full max-w-sm relative z-10">
+        {/* Logo + Branding */}
         <div className="text-center mb-8">
           <Image
             src="/logo.jpg"
             alt="Printerpix"
             width={64}
             height={64}
-            className="rounded-2xl mx-auto mb-4"
+            className="rounded-2xl mx-auto mb-4 ring-2 ring-emerald-500/20 ring-offset-2 ring-offset-background"
           />
-          <h1 className="text-2xl font-bold text-white">Recruiter Login</h1>
-          <p className="text-slate-400 text-sm mt-1">Sign in to access the dashboard</p>
+          <h1 className="text-2xl font-extrabold text-foreground">Recruiter Login</h1>
+          <p className="text-muted-foreground text-sm mt-1">AI-powered hiring pipeline for Printerpix</p>
         </div>
 
-        <Suspense fallback={<LoginFormFallback />}>
-          <LoginForm />
-        </Suspense>
+        {/* Login Card */}
+        <div className="rounded-xl border border-border bg-card/80 backdrop-blur-sm p-6 shadow-xl shadow-black/20">
+          <Suspense fallback={<LoginFormFallback />}>
+            <LoginForm />
+          </Suspense>
+        </div>
+
+        {/* Security note */}
+        <div className="flex items-center justify-center gap-1.5 mt-6 text-xs text-muted-foreground">
+          <Shield className="w-3 h-3" />
+          <span>Secured with Supabase Auth</span>
+        </div>
       </div>
     </div>
   );

@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import VoiceAvatar from '@/components/VoiceAvatar';
-import { Loader2, AlertCircle, CheckCircle, ArrowRight } from 'lucide-react';
+import { Loader2, AlertCircle, CheckCircle, ArrowRight, Mic, MessageSquare, UserCheck, Clock } from 'lucide-react';
+import Image from 'next/image';
+import { Button } from '@/components/ui/button';
 
 interface CandidateData {
   id: number;
@@ -80,10 +82,10 @@ export default function VoiceInterviewPage() {
   // Loading State
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 text-cyan-500 animate-spin mx-auto mb-4" />
-          <p className="text-white text-lg">Loading interview...</p>
+          <Loader2 className="w-12 h-12 text-emerald-500 animate-spin mx-auto mb-4" />
+          <p className="text-foreground text-lg">Loading interview...</p>
         </div>
       </div>
     );
@@ -92,20 +94,20 @@ export default function VoiceInterviewPage() {
   // Error State
   if (error || !candidate) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center max-w-md mx-auto p-8">
           <div className="w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
             <AlertCircle className="w-10 h-10 text-red-500" />
           </div>
-          <h1 className="text-2xl font-bold text-white mb-3">
+          <h1 className="text-2xl font-bold text-foreground mb-3">
             Interview Link Invalid
           </h1>
-          <p className="text-slate-400 mb-6">
+          <p className="text-muted-foreground mb-6">
             {error || 'This interview link is no longer valid. Please contact the recruiter for a new link.'}
           </p>
           <a
             href="https://printerpix.com"
-            className="inline-block px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors"
+            className="inline-block px-6 py-3 bg-card hover:bg-muted text-foreground rounded-lg transition-colors border border-border"
           >
             Return to Printerpix
           </a>
@@ -115,24 +117,24 @@ export default function VoiceInterviewPage() {
   }
 
   // Already Completed State - Prevent re-taking
-  const isAlreadyCompleted = 
-    candidate.status?.toLowerCase() === 'interviewed' || 
+  const isAlreadyCompleted =
+    candidate.status?.toLowerCase() === 'interviewed' ||
     candidate.rating !== null;
 
   if (isAlreadyCompleted) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="bg-slate-900 rounded-2xl p-10 max-w-md mx-auto text-center border border-slate-800 shadow-2xl">
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="rounded-2xl p-10 max-w-md mx-auto text-center border border-border bg-card shadow-xl">
           <div className="w-20 h-20 bg-gradient-to-br from-emerald-400 to-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
             <CheckCircle className="w-12 h-12 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-white mb-3">
+          <h1 className="text-2xl font-bold text-foreground mb-3">
             Interview Completed
           </h1>
-          <p className="text-slate-400 mb-2">
+          <p className="text-muted-foreground mb-2">
             Thank you for your time, {candidate.full_name}.
           </p>
-          <p className="text-slate-500 text-sm">
+          <p className="text-muted-foreground/70 text-sm">
             Your response has been submitted to the recruiting team. We&apos;ll be in touch soon.
           </p>
         </div>
@@ -156,63 +158,100 @@ export default function VoiceInterviewPage() {
   // Landing Page
   const firstName = candidate.full_name?.split(' ')[0] || candidate.full_name;
 
+  const steps = [
+    {
+      icon: Mic,
+      title: 'Speak naturally',
+      description: 'Our AI interviewer will ask you questions — just talk like you would in a normal conversation.',
+    },
+    {
+      icon: Clock,
+      title: '15–20 minutes',
+      description: 'The session is brief and focused. Take your time with each answer.',
+    },
+    {
+      icon: MessageSquare,
+      title: 'Submit when ready',
+      description: 'Click "Done Speaking" after each answer. Each response is final, so share all the details you\'d like.',
+    },
+    {
+      icon: UserCheck,
+      title: 'Human reviewed',
+      description: 'Our HR team personally reviews every response to get to know the person behind the resume.',
+    },
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4 py-12">
-      <div className="max-w-2xl w-full">
+    <div className="min-h-screen bg-background flex items-center justify-center px-4 py-12 relative overflow-hidden">
+      {/* Subtle gradient background */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-900/20 via-background to-background" />
+
+      <div className="max-w-2xl w-full relative z-10">
         {/* Header */}
         <div className="text-center mb-10">
-          <p className="text-cyan-400 text-sm font-medium tracking-wide uppercase mb-3">
+          <Image
+            src="/logo.jpg"
+            alt="Printerpix"
+            width={56}
+            height={56}
+            className="rounded-xl mx-auto mb-4 ring-2 ring-emerald-500/20 ring-offset-2 ring-offset-background"
+          />
+          <p className="text-emerald-400 text-sm font-medium tracking-wide uppercase mb-3">
             Printerpix Recruiting
           </p>
-          <h1 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-            Welcome, <span className="text-cyan-400">{firstName}</span>!
+          <h1 className="text-3xl sm:text-4xl font-extrabold text-foreground mb-2">
+            Welcome, <span className="text-emerald-400">{firstName}</span>!
           </h1>
+          <p className="text-muted-foreground">
+            Round 1: Personality & Drive Interview
+          </p>
         </div>
 
         {/* Content Card */}
-        <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl p-8 sm:p-10">
-          <p className="text-slate-300 text-base leading-relaxed mb-6">
+        <div className="rounded-2xl border border-border bg-card/80 backdrop-blur-sm shadow-xl shadow-black/20 p-8 sm:p-10">
+          <p className="text-muted-foreground text-base leading-relaxed mb-8">
             We&apos;re excited to hear your story. This AI-powered conversation is your opportunity to share your experiences with the Printerpix team in a comfortable, pressure-free setting.
           </p>
 
-          {/* How it works */}
-          <h2 className="text-white font-semibold text-base mb-3">
+          {/* Numbered Steps */}
+          <h2 className="text-foreground font-semibold text-base mb-4">
             How it works
           </h2>
-          <p className="text-slate-300 text-sm leading-relaxed mb-6">
-            This session typically takes 15&ndash;20 minutes. The AI will ask a few questions about how you&apos;ve handled specific situations in your career. Remember, while an AI is guiding the chat, our HR team will personally review your responses to get to know the person behind the resume.
-          </p>
-
-          {/* Your Interview, Your Pace */}
-          <div className="bg-slate-800/50 rounded-xl p-5 mb-6 border border-slate-700/50">
-            <h2 className="text-white font-semibold text-base mb-2">
-              Your Interview, Your Pace
-            </h2>
-            <p className="text-slate-300 text-sm leading-relaxed">
-              This conversation is designed for you to feel focused and in control. Once the AI finishes asking a question, feel free to pause and collect your thoughts before you begin speaking. When you are satisfied with your response, simply click the &quot;Done Speaking&quot; button to submit it and move to the next question. Since each answer is final once submitted, please ensure you&apos;ve shared all the details you&apos;d like the team to hear.
-            </p>
+          <div className="space-y-4 mb-8">
+            {steps.map((step, index) => (
+              <div key={index} className="flex items-start gap-4">
+                <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 shrink-0">
+                  <step.icon className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div className="pt-0.5">
+                  <p className="text-foreground font-medium text-sm">{step.title}</p>
+                  <p className="text-muted-foreground text-sm mt-0.5">{step.description}</p>
+                </div>
+              </div>
+            ))}
           </div>
 
           {/* Encouragement */}
-          <p className="text-slate-300 text-base leading-relaxed mb-8">
+          <p className="text-muted-foreground text-base leading-relaxed mb-8">
             Take a deep breath and be yourself &mdash; you&apos;ve got this. Good luck!
           </p>
 
           {/* CTA Button */}
-          <button
+          <Button
             onClick={() => setHasStarted(true)}
-            className="w-full flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold text-lg py-4 rounded-xl transition-colors cursor-pointer"
+            size="lg"
+            className="w-full h-14 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-lg rounded-xl transition-all hover:shadow-lg hover:shadow-emerald-500/25 cursor-pointer"
           >
             Start Interview
-            <ArrowRight className="w-5 h-5" />
-          </button>
+            <ArrowRight className="w-5 h-5 ml-2" />
+          </Button>
 
           {/* Support */}
-          <p className="text-center text-slate-500 text-xs mt-5">
+          <p className="text-center text-muted-foreground/70 text-xs mt-5">
             Having trouble? Contact{' '}
             <a
               href="mailto:printerpix.recruitment@gmail.com"
-              className="text-cyan-400 hover:text-cyan-300 underline"
+              className="text-emerald-400 hover:text-emerald-300 underline"
             >
               printerpix.recruitment@gmail.com
             </a>

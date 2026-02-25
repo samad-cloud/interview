@@ -40,6 +40,8 @@ import {
   SlidersHorizontal,
   X,
   Calendar,
+  MoreHorizontal,
+  SearchX,
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -53,6 +55,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
 import {
   Select,
   SelectContent,
@@ -75,6 +78,19 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -994,22 +1010,22 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-background p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-8 pb-6 border-b border-border">
           <div className="flex items-center gap-4">
             <Image
               src="/logo.jpg"
               alt="Printerpix"
               width={48}
               height={48}
-              className="rounded-xl"
+              className="rounded-xl ring-1 ring-border"
             />
             <div>
-              <h1 className="text-3xl font-bold">Talent Pipeline</h1>
-              <p className="text-muted-foreground">2-Round AI Interview Leaderboard</p>
+              <h1 className="text-3xl font-extrabold tracking-tight">Talent Pipeline</h1>
+              <p className="text-muted-foreground text-sm">2-Round AI Interview Leaderboard</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <Button asChild>
+          <div className="flex items-center gap-2">
+            <Button asChild className="bg-emerald-600 hover:bg-emerald-500 text-white">
               <Link href="/gen-job">
                 <Plus className="w-4 h-4 mr-2" />
                 Create Job
@@ -1021,21 +1037,29 @@ export default function DashboardPage() {
                 Manage Jobs
               </Link>
             </Button>
-            <Button variant="outline" asChild className="bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 border-yellow-500/30">
+            <Button variant="outline" asChild className="bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 border-yellow-500/30">
               <Link href="/screener">
                 <Zap className="w-4 h-4 mr-2" />
                 Bulk Screener
               </Link>
             </Button>
-            <Button variant="ghost" size="icon" onClick={handleLogout} title="Sign out">
-              <LogOut className="w-4 h-4" />
-            </Button>
+            <Separator orientation="vertical" className="h-8 mx-1" />
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" onClick={handleLogout}>
+                    <LogOut className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Sign out</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </div>
 
         {/* Funnel Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <Card>
+          <Card className="border-l-4 border-l-muted-foreground/40">
             <CardContent className="pt-4">
               <div className="flex items-center gap-2 mb-1">
                 <Users className="w-4 h-4 text-muted-foreground" />
@@ -1044,31 +1068,46 @@ export default function DashboardPage() {
               <p className="text-2xl font-bold">{stats.applied}</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="border-l-4 border-l-sky-500">
             <CardContent className="pt-4">
               <div className="flex items-center gap-2 mb-1">
                 <Send className="w-4 h-4 text-sky-400" />
                 <p className="text-muted-foreground text-sm">Round 1</p>
               </div>
-              <p className="text-2xl font-bold text-sky-400">{stats.round1}</p>
+              <div className="flex items-baseline gap-2">
+                <p className="text-2xl font-bold text-sky-400">{stats.round1}</p>
+                {stats.applied > 0 && (
+                  <span className="text-xs text-muted-foreground">{Math.round((stats.round1 / stats.applied) * 100)}% of applied</span>
+                )}
+              </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="border-l-4 border-l-blue-500">
             <CardContent className="pt-4">
               <div className="flex items-center gap-2 mb-1">
                 <ArrowRight className="w-4 h-4 text-blue-400" />
                 <p className="text-muted-foreground text-sm">Round 2</p>
               </div>
-              <p className="text-2xl font-bold text-blue-400">{stats.round2}</p>
+              <div className="flex items-baseline gap-2">
+                <p className="text-2xl font-bold text-blue-400">{stats.round2}</p>
+                {stats.round1 > 0 && (
+                  <span className="text-xs text-muted-foreground">{Math.round((stats.round2 / stats.round1) * 100)}% pass R1</span>
+                )}
+              </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="border-l-4 border-l-emerald-500">
             <CardContent className="pt-4">
               <div className="flex items-center gap-2 mb-1">
                 <Target className="w-4 h-4 text-emerald-400" />
                 <p className="text-muted-foreground text-sm">Successful</p>
               </div>
-              <p className="text-2xl font-bold text-emerald-400">{stats.successful}</p>
+              <div className="flex items-baseline gap-2">
+                <p className="text-2xl font-bold text-emerald-400">{stats.successful}</p>
+                {stats.applied > 0 && (
+                  <span className="text-xs text-muted-foreground">{Math.round((stats.successful / stats.applied) * 100)}% overall</span>
+                )}
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -1262,8 +1301,53 @@ export default function DashboardPage() {
         <Card>
           <CardContent className="p-0">
             {isLoading ? (
-              <div className="flex items-center justify-center p-12">
-                <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+              <div className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10"><div className="h-4 w-4 bg-muted rounded animate-pulse" /></TableHead>
+                      <TableHead className="w-12"><div className="h-4 w-6 bg-muted rounded animate-pulse" /></TableHead>
+                      <TableHead><div className="h-4 w-24 bg-muted rounded animate-pulse" /></TableHead>
+                      <TableHead><div className="h-4 w-20 bg-muted rounded animate-pulse" /></TableHead>
+                      <TableHead><div className="h-4 w-14 bg-muted rounded animate-pulse" /></TableHead>
+                      <TableHead><div className="h-4 w-14 bg-muted rounded animate-pulse" /></TableHead>
+                      <TableHead><div className="h-4 w-14 bg-muted rounded animate-pulse" /></TableHead>
+                      <TableHead><div className="h-4 w-8 bg-muted rounded animate-pulse" /></TableHead>
+                      <TableHead><div className="h-4 w-16 bg-muted rounded animate-pulse" /></TableHead>
+                      <TableHead><div className="h-4 w-20 bg-muted rounded animate-pulse" /></TableHead>
+                      <TableHead><div className="h-4 w-14 bg-muted rounded animate-pulse" /></TableHead>
+                      <TableHead><div className="h-4 w-16 bg-muted rounded animate-pulse" /></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {Array.from({ length: 8 }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell><div className="h-4 w-4 bg-muted rounded animate-pulse" /></TableCell>
+                        <TableCell><div className="h-4 w-6 bg-muted rounded animate-pulse" /></TableCell>
+                        <TableCell>
+                          <div className="space-y-1.5">
+                            <div className="h-4 w-32 bg-muted rounded animate-pulse" />
+                            <div className="h-3 w-40 bg-muted/60 rounded animate-pulse" />
+                          </div>
+                        </TableCell>
+                        <TableCell><div className="h-4 w-24 bg-muted rounded animate-pulse" /></TableCell>
+                        <TableCell><div className="h-4 w-12 bg-muted rounded animate-pulse" /></TableCell>
+                        <TableCell><div className="h-4 w-12 bg-muted rounded animate-pulse" /></TableCell>
+                        <TableCell><div className="h-4 w-12 bg-muted rounded animate-pulse" /></TableCell>
+                        <TableCell><div className="h-5 w-8 bg-muted rounded-full animate-pulse" /></TableCell>
+                        <TableCell><div className="h-5 w-16 bg-muted rounded-full animate-pulse" /></TableCell>
+                        <TableCell>
+                          <div className="space-y-1.5">
+                            <div className="h-2 w-20 bg-muted rounded-full animate-pulse" />
+                            <div className="h-2 w-20 bg-muted rounded-full animate-pulse" />
+                          </div>
+                        </TableCell>
+                        <TableCell><div className="h-5 w-14 bg-muted rounded-full animate-pulse" /></TableCell>
+                        <TableCell><div className="h-8 w-8 bg-muted rounded-md animate-pulse" /></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
             ) : (
               <>
@@ -1366,7 +1450,7 @@ export default function DashboardPage() {
                       const rowNumber = startIndex + index;
 
                       return (
-                        <TableRow key={candidate.id} className={selectedIds.has(candidate.id) ? 'bg-muted/30' : ''}>
+                        <TableRow key={candidate.id} className={`transition-colors duration-150 ${selectedIds.has(candidate.id) ? 'bg-muted/30' : ''}`}>
                           <TableCell>
                             <Checkbox
                               checked={selectedIds.has(candidate.id)}
@@ -1460,68 +1544,76 @@ export default function DashboardPage() {
                           </TableCell>
 
                           <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                variant="secondary"
-                                size="icon"
-                                onClick={() => setSelectedCandidate(candidate)}
-                                title="View Details"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </Button>
+                            <div className="flex items-center gap-1.5">
+                              <TooltipProvider delayDuration={300}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="secondary"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      onClick={() => setSelectedCandidate(candidate)}
+                                    >
+                                      <Eye className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>View Details</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
 
                               {(candidate.video_url || candidate.round_2_video_url) && (
-                                <Button
-                                  variant="secondary"
-                                  size="icon"
-                                  onClick={() => setSelectedCandidate(candidate)}
-                                  className="bg-purple-600/20 hover:bg-purple-600/30 text-purple-400"
-                                  title="Has Video Recording"
-                                >
-                                  <Video className="w-4 h-4" />
-                                </Button>
+                                <span className="w-2 h-2 rounded-full bg-purple-400 shrink-0" title="Has recording" />
                               )}
 
-                              {canSendInvite && (
-                                <Button
-                                  size="icon"
-                                  onClick={() => handleSendInvite(candidate.id)}
-                                  disabled={sendingInvite === candidate.id}
-                                  className={isR1Override ? "bg-amber-600 hover:bg-amber-500" : "bg-blue-600 hover:bg-blue-500"}
-                                  title={isR1Override ? "Override: Send Interview Invite" : "Send Interview Invite"}
-                                >
-                                  <Send className="w-4 h-4" />
-                                </Button>
-                              )}
-
-                              {canInviteR2 && (
-                                <Button
-                                  size="icon"
-                                  onClick={() => handleInviteRound2(candidate.id)}
-                                  disabled={sendingInvite === candidate.id}
-                                  className={isR2Override ? "bg-amber-600 hover:bg-amber-500" : "bg-emerald-600 hover:bg-emerald-500"}
-                                  title={isR2Override ? "Override: Invite to Round 2" : "Invite to Round 2"}
-                                >
-                                  <ArrowRight className="w-4 h-4" />
-                                </Button>
-                              )}
-
-                              {candidate.rating !== null && (
-                                <Button
-                                  variant="secondary"
-                                  size="icon"
-                                  onClick={() => handleRevertStage(candidate)}
-                                  disabled={revertingCandidate === candidate.id}
-                                  className="bg-orange-600/20 hover:bg-orange-600/30 text-orange-400"
-                                  title="Revert Stage (Allow Retake)"
-                                >
-                                  {revertingCandidate === candidate.id ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                  ) : (
-                                    <RotateCcw className="w-4 h-4" />
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                                    <MoreHorizontal className="w-3.5 h-3.5" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-48">
+                                  {canSendInvite && (
+                                    <DropdownMenuItem
+                                      onClick={() => handleSendInvite(candidate.id)}
+                                      disabled={sendingInvite === candidate.id}
+                                      className={isR1Override ? 'text-amber-400' : 'text-blue-400'}
+                                    >
+                                      <Send className="w-3.5 h-3.5 mr-2" />
+                                      {isR1Override ? 'Override: Send R1 Invite' : 'Send R1 Invite'}
+                                    </DropdownMenuItem>
                                   )}
-                                </Button>
-                              )}
+
+                                  {canInviteR2 && (
+                                    <DropdownMenuItem
+                                      onClick={() => handleInviteRound2(candidate.id)}
+                                      disabled={sendingInvite === candidate.id}
+                                      className={isR2Override ? 'text-amber-400' : 'text-emerald-400'}
+                                    >
+                                      <ArrowRight className="w-3.5 h-3.5 mr-2" />
+                                      {isR2Override ? 'Override: Invite to R2' : 'Invite to Round 2'}
+                                    </DropdownMenuItem>
+                                  )}
+
+                                  {(canSendInvite || canInviteR2) && candidate.rating !== null && (
+                                    <DropdownMenuSeparator />
+                                  )}
+
+                                  {candidate.rating !== null && (
+                                    <DropdownMenuItem
+                                      onClick={() => handleRevertStage(candidate)}
+                                      disabled={revertingCandidate === candidate.id}
+                                      className="text-orange-400"
+                                    >
+                                      {revertingCandidate === candidate.id ? (
+                                        <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />
+                                      ) : (
+                                        <RotateCcw className="w-3.5 h-3.5 mr-2" />
+                                      )}
+                                      Revert Stage
+                                    </DropdownMenuItem>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -1531,8 +1623,10 @@ export default function DashboardPage() {
                 </Table>
 
                 {candidates.length === 0 && (
-                  <div className="p-8 text-center text-muted-foreground">
-                    No candidates found matching your filters.
+                  <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                    <SearchX className="w-12 h-12 mb-4 opacity-40" />
+                    <p className="font-medium">No candidates found</p>
+                    <p className="text-sm mt-1">Try adjusting your filters or search terms</p>
                   </div>
                 )}
               </>
@@ -1605,47 +1699,95 @@ export default function DashboardPage() {
 
       {/* Detail Modal */}
       <Dialog open={!!selectedCandidate} onOpenChange={(open) => { if (!open) { setSelectedCandidate(null); setInterviewNotes(null); } }}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center">
-                <span className="text-emerald-400 font-bold text-lg">
-                  {selectedCandidate?.full_name.charAt(0)}
-                </span>
-              </div>
-              <div>
-                <DialogTitle className="text-xl">{selectedCandidate?.full_name}</DialogTitle>
-                <p className="text-muted-foreground">{selectedCandidate?.job_title || 'No role specified'}</p>
-              </div>
-            </div>
-          </DialogHeader>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col p-0">
+          {/* Status color bar at top */}
+          {(() => {
+            const stage = selectedCandidate ? getStageDisplay(selectedCandidate) : null;
+            const barColor = stage?.className?.includes('emerald') ? 'bg-emerald-500' :
+              stage?.className?.includes('blue') ? 'bg-blue-500' :
+              stage?.className?.includes('sky') ? 'bg-sky-500' :
+              stage?.className?.includes('red') ? 'bg-red-500' :
+              stage?.className?.includes('orange') ? 'bg-orange-500' :
+              'bg-muted-foreground';
+            return <div className={`h-1 w-full ${barColor} rounded-t-lg shrink-0`} />;
+          })()}
 
-          <div className="overflow-y-auto flex-1 space-y-6 pr-2">
-            {/* Scores */}
+          <div className="px-6 pt-5 pb-0">
+            <DialogHeader>
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center ring-2 ring-emerald-500/30">
+                  <span className="text-emerald-400 font-bold text-lg">
+                    {selectedCandidate?.full_name.charAt(0)}
+                  </span>
+                </div>
+                <div className="flex-1">
+                  <DialogTitle className="text-xl">{selectedCandidate?.full_name}</DialogTitle>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <p className="text-muted-foreground text-sm">{selectedCandidate?.job_title || 'No role specified'}</p>
+                    {selectedCandidate && (
+                      <Badge variant={getStageDisplay(selectedCandidate).variant} className={`text-[10px] px-1.5 py-0 ${getStageDisplay(selectedCandidate).className}`}>
+                        {getStageDisplay(selectedCandidate).label}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </DialogHeader>
+          </div>
+
+          <div className="overflow-y-auto flex-1 space-y-6 px-6 pb-6 pt-4">
+            {/* Radial Score Gauges */}
             <div className="grid grid-cols-2 gap-4">
-              <Card>
-                <CardContent className="pt-4">
-                  <p className="text-muted-foreground text-sm mb-1">Round 1: Hunger</p>
-                  <p className={`text-3xl font-bold ${
-                    selectedCandidate?.rating && selectedCandidate.rating >= 70 ? 'text-emerald-400' :
-                    selectedCandidate?.rating ? 'text-yellow-400' : 'text-muted-foreground'
-                  }`}>
-                    {selectedCandidate?.rating !== null ? `${selectedCandidate?.rating}/100` : 'Pending'}
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-4">
-                  <p className="text-muted-foreground text-sm mb-1">Round 2: Skills</p>
-                  <p className={`text-3xl font-bold ${
-                    selectedCandidate?.round_2_rating && selectedCandidate.round_2_rating >= 70 ? 'text-blue-400' :
-                    selectedCandidate?.round_2_rating ? 'text-yellow-400' : 'text-muted-foreground'
-                  }`}>
-                    {selectedCandidate?.round_2_rating !== null ? `${selectedCandidate?.round_2_rating}/100` : 'Pending'}
-                  </p>
-                </CardContent>
-              </Card>
+              {[
+                { label: 'Round 1: Hunger', score: selectedCandidate?.rating ?? null, color: 'emerald' },
+                { label: 'Round 2: Skills', score: selectedCandidate?.round_2_rating ?? null, color: 'blue' },
+              ].map(({ label, score, color }) => {
+                const pct = score !== null ? score : 0;
+                const circumference = 2 * Math.PI * 40;
+                const strokeDashoffset = circumference - (pct / 100) * circumference;
+                const strokeColor = score === null ? 'stroke-muted' :
+                  score >= 70 ? (color === 'blue' ? 'stroke-blue-500' : 'stroke-emerald-500') :
+                  score >= 50 ? 'stroke-yellow-500' : 'stroke-red-500';
+                const textColor = score === null ? 'text-muted-foreground' :
+                  score >= 70 ? (color === 'blue' ? 'text-blue-400' : 'text-emerald-400') :
+                  score >= 50 ? 'text-yellow-400' : 'text-red-400';
+
+                return (
+                  <Card key={label}>
+                    <CardContent className="pt-4 flex items-center gap-4">
+                      <div className="relative w-20 h-20 shrink-0">
+                        <svg className="w-20 h-20 -rotate-90" viewBox="0 0 96 96">
+                          <circle cx="48" cy="48" r="40" fill="none" strokeWidth="6" className="stroke-muted" />
+                          {score !== null && (
+                            <circle
+                              cx="48" cy="48" r="40" fill="none" strokeWidth="6"
+                              className={strokeColor}
+                              strokeLinecap="round"
+                              strokeDasharray={circumference}
+                              strokeDashoffset={strokeDashoffset}
+                              style={{ transition: 'stroke-dashoffset 0.5s ease' }}
+                            />
+                          )}
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className={`text-lg font-bold ${textColor}`}>
+                            {score !== null ? score : '—'}
+                          </span>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-sm">{label}</p>
+                        <p className={`text-sm font-medium mt-0.5 ${textColor}`}>
+                          {score !== null ? (score >= 70 ? 'Passed' : score >= 50 ? 'Borderline' : 'Below threshold') : 'Pending'}
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
+
+            <Separator />
 
             {/* Final Verdict */}
             {selectedCandidate?.final_verdict && (
@@ -1695,6 +1837,7 @@ export default function DashboardPage() {
             )}
 
             {/* Interview Notes */}
+            {(selectedCandidate?.interview_transcript || selectedCandidate?.round_2_transcript) && <Separator />}
             {(selectedCandidate?.interview_transcript || selectedCandidate?.round_2_transcript) && (
               <div>
                 <div className="flex items-center justify-between mb-3">
@@ -1812,6 +1955,7 @@ export default function DashboardPage() {
             )}
 
             {/* Video Recordings */}
+            {(selectedCandidate?.video_url || selectedCandidate?.round_2_video_url) && <Separator />}
             {(selectedCandidate?.video_url || selectedCandidate?.round_2_video_url) && (
               <div>
                 <div className="flex items-center gap-2 mb-3">
@@ -1844,6 +1988,7 @@ export default function DashboardPage() {
             )}
 
             {/* Round 1 Transcript */}
+            {selectedCandidate?.interview_transcript && <Separator />}
             {selectedCandidate?.interview_transcript && (
               <div>
                 <div className="flex items-center gap-2 mb-3">
@@ -1861,6 +2006,7 @@ export default function DashboardPage() {
             )}
 
             {/* Round 2 Transcript */}
+            {selectedCandidate?.round_2_transcript && <Separator />}
             {selectedCandidate?.round_2_transcript && (
               <div>
                 <div className="flex items-center gap-2 mb-3">
@@ -1878,6 +2024,7 @@ export default function DashboardPage() {
             )}
 
             {/* Resume Download */}
+            {selectedCandidate?.resume_url && <Separator />}
             {selectedCandidate?.resume_url && (
               <div>
                 <div className="flex items-center gap-2 mb-3">
@@ -1902,6 +2049,7 @@ export default function DashboardPage() {
             )}
 
             {/* Suggested for Human Interview */}
+            {selectedCandidate?.rating !== null && <Separator />}
             {selectedCandidate?.rating !== null && (
               interviewNotes?.followUpQuestions?.length ||
               selectedCandidate?.round_1_full_dossier?.areasToProbe?.length ||
@@ -1969,6 +2117,7 @@ export default function DashboardPage() {
             ) : null}
 
             {/* HR Decision */}
+            {selectedCandidate?.rating !== null && <Separator />}
             {selectedCandidate?.rating !== null && (
               <div>
                 <div className="flex items-center gap-2 mb-3">
@@ -2032,11 +2181,13 @@ export default function DashboardPage() {
             )}
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSelectedCandidate(null)}>
-              Close
-            </Button>
-          </DialogFooter>
+          <div className="px-6 pb-4 pt-2 border-t border-border shrink-0">
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSelectedCandidate(null)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 

@@ -36,6 +36,7 @@ export default function VoiceAvatar({
 }: VoiceAvatarProps) {
   // Call state
   const [callStatus, setCallStatus] = useState<CallStatus>('idle');
+  const callStatusRef = useRef<CallStatus>('idle');
   const [error, setError] = useState<string | null>(null);
 
   // Media state
@@ -804,6 +805,7 @@ export default function VoiceAvatar({
   // Start the interview
   const startInterview = async () => {
     setCallStatus('connecting');
+    callStatusRef.current = 'connecting';
     setError(null);
 
     try {
@@ -829,6 +831,7 @@ export default function VoiceAvatar({
       setIsMicOn(true);
 
       setCallStatus('active');
+      callStatusRef.current = 'active';
 
       // Welcome message - varies by round
       const welcomeMessage = round === 2
@@ -866,6 +869,7 @@ export default function VoiceAvatar({
       console.error('Failed to start interview:', err);
       setError(err instanceof Error ? err.message : 'Failed to start interview');
       setCallStatus('idle');
+      callStatusRef.current = 'idle';
     }
   };
 
@@ -905,6 +909,7 @@ Round: ${round}
   // End interview and save transcript
   const endInterview = async () => {
     setCallStatus('analyzing');
+    callStatusRef.current = 'analyzing';
     setIsSubmitting(true);
 
     // Stop Deepgram and any playing audio
@@ -1049,18 +1054,76 @@ Round: ${round}
 
     setIsSubmitting(false);
     setCallStatus('ended');
+    callStatusRef.current = 'ended';
   };
 
   // Keep endInterview ref in sync (defined after the function so it's not used before declaration)
   useEffect(() => { endInterviewRef.current = endInterview; }, [endInterview]);
 
-  // Warn user before closing tab during submission
+  // Warn user before closing tab during active interview or submission
   useEffect(() => {
-    if (!isSubmitting) return;
+    if (callStatus !== 'active' && callStatus !== 'analyzing') return;
     const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
-  }, [isSubmitting]);
+  }, [callStatus]);
+
+  // If user confirms leaving during active interview, save transcript + recording via sendBeacon
+  useEffect(() => {
+    const handlePageHide = () => {
+      // Only fire if interview is active (not already analyzing/ended)
+      if (callStatusRef.current !== 'active') return;
+
+      // Build transcript from refs (no React state dependency)
+      const now = new Date();
+      const entries = conversationHistoryRef.current;
+      if (entries.length === 0) return;
+
+      let transcript = `INTERVIEW TRANSCRIPT\n${'='.repeat(80)}\nCandidate: ${candidateName}\nPosition: ${jobDescription}\nDate: ${now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\nTime: ${now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}\nRound: ${round}\nNote: Interview ended early — candidate left the page\n${'='.repeat(80)}\n\n`;
+      for (const entry of entries) {
+        const role = entry.role === 'interviewer'
+          ? `${round === 2 ? 'Atlas' : 'Wayne'} (Interviewer)`
+          : `${candidateName} (Candidate)`;
+        transcript += `${role}:\n${entry.text}\n\n`;
+      }
+
+      // Send transcript via sendBeacon (survives page unload)
+      const endpoint = round === 2 ? '/api/end-interview-round2' : '/api/end-interview';
+      const payload = new Blob(
+        [JSON.stringify({ candidateId: parseInt(candidateId), transcript })],
+        { type: 'application/json' }
+      );
+      navigator.sendBeacon(endpoint, payload);
+
+      // Best-effort: try to upload whatever recording data exists
+      if (sessionRecorderRef.current && isRecordingRef.current) {
+        try {
+          const blob = sessionRecorderRef.current.getBlob();
+          if (blob && blob.size > 0) {
+            const folder = round === 2 ? 'round2' : 'round1';
+            const filePath = `${folder}/${candidateId}-${Date.now()}.webm`;
+            const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/interview-recordings/${filePath}`;
+            const formData = new FormData();
+            formData.append('', blob, filePath);
+            // keepalive fetch survives page close for small payloads
+            fetch(url, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+              },
+              body: formData,
+              keepalive: true,
+            }).catch(() => {});
+          }
+        } catch {
+          // Recording may not be available — transcript is the priority
+        }
+      }
+    };
+
+    window.addEventListener('pagehide', handlePageHide);
+    return () => window.removeEventListener('pagehide', handlePageHide);
+  }, [candidateId, candidateName, jobDescription, round]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -1100,33 +1163,33 @@ Round: ${round}
   // Idle State - Start Screen
   if (callStatus === 'idle') {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="text-center max-w-lg w-full">
           {!mediaCheckDone && (
             <div className="w-32 h-32 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full mx-auto mb-8 flex items-center justify-center">
               <Volume2 className="w-16 h-16 text-white" />
             </div>
           )}
-          <h1 className="text-3xl font-bold text-white mb-4">
+          <h1 className="text-3xl font-bold text-foreground mb-4">
             Voice Interview
           </h1>
-          <p className="text-xl text-white mb-2">
-            Welcome, <span className="text-cyan-400 font-semibold">{candidateName}</span>! 👋
+          <p className="text-xl text-foreground mb-2">
+            Welcome, <span className="text-cyan-400 font-semibold">{candidateName}</span>!
           </p>
-          <p className="text-slate-400 mb-6">
-            You&apos;re interviewing for <span className="text-white font-medium">{jobTitle}</span> at Printerpix.
+          <p className="text-muted-foreground mb-6">
+            You&apos;re interviewing for <span className="text-foreground font-medium">{jobTitle}</span> at Printerpix.
           </p>
 
           {/* Camera preview + mic level (shown after media check) */}
           {mediaCheckDone && (
             <div className="mb-6 space-y-4">
               {/* Camera preview */}
-              <div className="mx-auto w-64 h-48 rounded-xl overflow-hidden border-2 border-slate-700 bg-slate-900 flex items-center justify-center">
+              <div className="mx-auto w-64 h-48 rounded-xl overflow-hidden border-2 border-border bg-card flex items-center justify-center">
                 {cameraError ? (
                   <div className="text-center text-red-400">
                     <CameraOff className="w-10 h-10 mx-auto mb-2" />
                     <p className="text-sm font-medium">Camera is required for this interview</p>
-                    <p className="text-xs text-slate-500 mt-1">Please allow camera access and reload</p>
+                    <p className="text-xs text-muted-foreground mt-1">Please allow camera access and reload</p>
                   </div>
                 ) : (
                   <video
@@ -1147,8 +1210,8 @@ Round: ${round}
                 </div>
               ) : (
                 <div className="flex items-center gap-3 max-w-xs mx-auto">
-                  <Mic className="w-5 h-5 text-slate-400 shrink-0" />
-                  <div className="flex-1 h-3 bg-slate-800 rounded-full overflow-hidden">
+                  <Mic className="w-5 h-5 text-muted-foreground shrink-0" />
+                  <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden">
                     <div
                       className="h-full bg-emerald-500 rounded-full transition-all duration-75"
                       style={{ width: `${micLevel}%` }}
@@ -1163,22 +1226,22 @@ Round: ${round}
           )}
 
           {!mediaCheckDone && (
-            <p className="text-slate-500 text-sm mb-6">
+            <p className="text-muted-foreground text-sm mb-6">
               This will be a {round === 2 ? '40' : '15'}-minute conversation with our AI interviewer.<br />
               Just relax and be yourself.
             </p>
           )}
 
-          <div className="bg-slate-900/50 rounded-xl p-4 mb-8 text-left inline-block">
-            <p className="text-slate-400 text-sm font-medium mb-2">Tips:</p>
-            <ul className="text-slate-500 text-sm space-y-1">
+          <div className="bg-card/50 rounded-xl p-4 mb-8 text-left inline-block">
+            <p className="text-muted-foreground text-sm font-medium mb-2">Tips:</p>
+            <ul className="text-muted-foreground text-sm space-y-1">
               <li>• Find a quiet spot</li>
               <li>• Speak clearly</li>
               <li>• There are no wrong answers!</li>
             </ul>
-            <div className="mt-3 pt-3 border-t border-slate-800">
+            <div className="mt-3 pt-3 border-t border-border">
               <p className="text-cyan-400 text-sm font-medium">
-                Important: After finishing each answer, click the <span className="bg-slate-800 px-2 py-0.5 rounded text-white font-semibold">Done Speaking</span> button so the interviewer knows you&apos;re ready for the next question.
+                Important: After finishing each answer, click the <span className="bg-muted px-2 py-0.5 rounded text-white font-semibold">Done Speaking</span> button so the interviewer knows you&apos;re ready for the next question.
               </p>
             </div>
           </div>
@@ -1203,7 +1266,7 @@ Round: ${round}
                 disabled={micError || cameraError}
                 className={`px-8 py-4 text-white text-lg font-semibold rounded-xl transition-all transform shadow-lg ${
                   micError || cameraError
-                    ? 'bg-slate-700 cursor-not-allowed opacity-50'
+                    ? 'bg-muted cursor-not-allowed opacity-50'
                     : 'bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 hover:scale-105 shadow-cyan-500/25'
                 }`}
                 title={micError ? 'Microphone is required' : cameraError ? 'Camera is required' : ''}
@@ -1220,11 +1283,11 @@ Round: ${round}
   // Connecting State
   if (callStatus === 'connecting') {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-16 h-16 text-cyan-500 animate-spin mx-auto mb-6" />
-          <p className="text-white text-xl">Connecting...</p>
-          <p className="text-slate-500 text-sm mt-2">Preparing your interview</p>
+          <p className="text-foreground text-xl">Connecting...</p>
+          <p className="text-muted-foreground text-sm mt-2">Preparing your interview</p>
         </div>
       </div>
     );
@@ -1233,24 +1296,24 @@ Round: ${round}
   // Analyzing State
   if (callStatus === 'analyzing') {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center max-w-md">
           <Loader2 className="w-16 h-16 text-cyan-500 animate-spin mx-auto mb-6" />
-          <h2 className="text-2xl font-bold text-white mb-3">
+          <h2 className="text-2xl font-bold text-foreground mb-3">
             Submitting Your Interview
           </h2>
-          <p className="text-slate-400">
+          <p className="text-muted-foreground">
             We&apos;re wrapping things up and submitting your responses. This should only take a moment...
           </p>
           {uploadProgress !== null && (
             <div className="mt-6">
-              <div className="h-2 bg-slate-800 rounded-full overflow-hidden max-w-xs mx-auto">
+              <div className="h-2 bg-muted rounded-full overflow-hidden max-w-xs mx-auto">
                 <div
                   className="h-full bg-cyan-500 rounded-full transition-all duration-300"
                   style={{ width: `${uploadProgress}%` }}
                 />
               </div>
-              <p className="text-slate-500 text-sm mt-2">Uploading recording...</p>
+              <p className="text-muted-foreground text-sm mt-2">Uploading recording...</p>
             </div>
           )}
         </div>
@@ -1261,24 +1324,24 @@ Round: ${round}
   // Ended State
   if (callStatus === 'ended') {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="bg-slate-900 rounded-2xl p-10 max-w-md mx-auto text-center border border-slate-800">
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="bg-card rounded-2xl p-10 max-w-md mx-auto text-center border border-border shadow-xl">
           <div className="w-20 h-20 bg-gradient-to-br from-emerald-400 to-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
             <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-white mb-3">
+          <h1 className="text-2xl font-bold text-foreground mb-3">
             Interview Complete!
           </h1>
-          <p className="text-slate-400 mb-2">
+          <p className="text-muted-foreground mb-2">
             Thank you for your time, {candidateName}.
           </p>
-          <p className="text-slate-500 text-sm">
+          <p className="text-muted-foreground text-sm">
             Your responses have been recorded and sent to our team. We&apos;ll be in touch soon!
           </p>
-          <div className="mt-6 pt-4 border-t border-slate-800">
-            <p className="text-slate-500 text-xs">
+          <div className="mt-6 pt-4 border-t border-border">
+            <p className="text-muted-foreground text-xs">
               Experienced a technical issue? Contact us at{' '}
               <a href="mailto:printerpix.recruitment@gmail.com" className="text-cyan-400 hover:text-cyan-300 underline">
                 printerpix.recruitment@gmail.com
@@ -1297,7 +1360,7 @@ Round: ${round}
   const timerUrgent = elapsedSeconds >= wrapUpAt;
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col">
       {/* Timer - fixed top right */}
       <div className="fixed top-4 right-4 z-20">
         <div className={`flex items-center gap-2 px-4 py-2 rounded-lg backdrop-blur-sm border ${
@@ -1305,7 +1368,7 @@ Round: ${round}
             ? 'bg-red-500/30 border-red-500/50 text-red-300'
             : timerUrgent
               ? 'bg-red-500/20 border-red-500/40 text-red-400'
-              : 'bg-slate-900/80 border-slate-700 text-slate-300'
+              : 'bg-card/80 border-border text-muted-foreground'
         }`}>
           <Clock className="w-4 h-4" />
           <span className={`font-mono text-lg font-semibold ${timerUrgent ? 'animate-pulse' : ''}`}>
@@ -1335,15 +1398,15 @@ Round: ${round}
               <div className={`absolute inset-4 rounded-full flex items-center justify-center transition-all duration-300 ${
                 isSpeaking 
                   ? 'bg-gradient-to-br from-cyan-400 to-blue-600 shadow-lg shadow-cyan-500/50' 
-                  : 'bg-gradient-to-br from-slate-700 to-slate-800'
+                  : 'bg-gradient-to-br from-muted to-muted/80'
               }`}>
-                <Volume2 className={`w-16 h-16 transition-colors ${isSpeaking ? 'text-white' : 'text-slate-500'}`} />
+                <Volume2 className={`w-16 h-16 transition-colors ${isSpeaking ? 'text-white' : 'text-muted-foreground'}`} />
               </div>
             </div>
 
             {/* Interviewer Name */}
-            <h2 className="text-2xl font-bold text-white mb-2">{interviewerName}</h2>
-            <p className="text-slate-500 text-sm mb-8">
+            <h2 className="text-2xl font-bold text-foreground mb-2">{interviewerName}</h2>
+            <p className="text-muted-foreground text-sm mb-8">
               {round === 2 ? 'Technical Interviewer' : 'Talent Scout'}
             </p>
           </div>
@@ -1353,7 +1416,7 @@ Round: ${round}
 
       {/* User Camera (fixed, bottom right above subtitle + control bars) */}
       {isCameraOn && (
-        <div className="fixed bottom-[16rem] right-6 w-36 h-28 rounded-lg overflow-hidden border-2 border-slate-700 shadow-xl z-10">
+        <div className="fixed bottom-[16rem] right-6 w-36 h-28 rounded-lg overflow-hidden border-2 border-border shadow-xl z-10">
           <video
             ref={userVideoRef}
             autoPlay
@@ -1365,10 +1428,10 @@ Round: ${round}
       )}
 
       {/* Subtitle Area */}
-      <div className="min-h-24 max-h-48 bg-slate-900/80 backdrop-blur-sm border-t border-slate-800 flex items-end justify-center px-8 py-4 overflow-y-auto">
+      <div className="min-h-24 max-h-48 bg-card/80 backdrop-blur-sm border-t border-border flex items-end justify-center px-8 py-4 overflow-y-auto">
         <div className="max-w-3xl w-full text-center">
           {isSpeaking && subtitle && (
-            <p className="text-white text-base font-medium leading-relaxed">
+            <p className="text-foreground text-base font-medium leading-relaxed">
               {subtitle}
             </p>
           )}
@@ -1378,7 +1441,7 @@ Round: ${round}
             </p>
           )}
           {!isSpeaking && !transcript && isListening && (
-            <p className="text-slate-500 text-lg">
+            <p className="text-muted-foreground text-lg">
               Listening...
             </p>
           )}
@@ -1386,7 +1449,7 @@ Round: ${round}
       </div>
 
       {/* Control Bar */}
-      <div className="h-24 bg-slate-900 border-t border-slate-800 flex items-center justify-center gap-6">
+      <div className="h-24 bg-card border-t border-border flex items-center justify-center gap-6">
         {/* Done Speaking Button */}
         {!isSpeaking && (
           <div className="relative">
@@ -1405,7 +1468,7 @@ Round: ${round}
               className={`px-6 h-14 rounded-full text-white font-semibold flex items-center justify-center gap-2 transition-all ${
                 transcript.trim()
                   ? 'bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-500/25'
-                  : 'bg-slate-700 opacity-50 cursor-not-allowed'
+                  : 'bg-muted opacity-50 cursor-not-allowed'
               }`}
               title="Send your response"
             >

@@ -337,36 +337,36 @@ export default function ScreenerPage() {
   const rejected = processed.filter(r => r.status === 'REJECT');
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
-      <div className="border-b border-slate-800 bg-slate-900/50">
+      <div className="border-b border-border bg-card/50">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Link href="/dashboard" className="p-2 hover:bg-slate-800 rounded-lg transition-colors">
-                <ArrowLeft className="w-5 h-5 text-slate-400" />
+              <Link href="/dashboard" className="p-2 hover:bg-muted rounded-lg transition-colors">
+                <ArrowLeft className="w-5 h-5 text-muted-foreground" />
               </Link>
               <div>
                 <h1 className="text-2xl font-bold flex items-center gap-2">
                   <Zap className="w-6 h-6 text-yellow-500" />
                   The War Room
                 </h1>
-                <p className="text-slate-400 text-sm">Bulk AI Resume Screening</p>
+                <p className="text-muted-foreground text-sm">Bulk AI Resume Screening</p>
               </div>
             </div>
             {processed.length > 0 && (
               <div className="flex gap-6 text-sm">
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-white">{processed.length}</p>
-                  <p className="text-slate-400">Processed</p>
+                  <p className="text-2xl font-bold text-foreground">{processed.length}</p>
+                  <p className="text-muted-foreground">Processed</p>
                 </div>
                 <div className="text-center">
                   <p className="text-2xl font-bold text-emerald-400">{recommended.length}</p>
-                  <p className="text-slate-400">Recommended</p>
+                  <p className="text-muted-foreground">Recommended</p>
                 </div>
                 <div className="text-center">
                   <p className="text-2xl font-bold text-red-400">{rejected.length}</p>
-                  <p className="text-slate-400">Rejected</p>
+                  <p className="text-muted-foreground">Rejected</p>
                 </div>
               </div>
             )}
@@ -378,11 +378,11 @@ export default function ScreenerPage() {
         {/* Step 1: Job + Mode */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Step 1: Select Job Position</label>
+            <label className="block text-sm font-medium text-muted-foreground mb-2">Step 1: Select Job Position</label>
             <select
               value={selectedJobId}
               onChange={(e) => setSelectedJobId(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-yellow-500"
+              className="w-full px-4 py-3 bg-card border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-yellow-500"
             >
               {jobs.length === 0 && <option value="">No active jobs found</option>}
               {jobs.map(job => (
@@ -391,12 +391,12 @@ export default function ScreenerPage() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Upload Mode</label>
+            <label className="block text-sm font-medium text-muted-foreground mb-2">Upload Mode</label>
             <div className="flex gap-2">
               <Button
                 variant={uploadMode === 'csv' ? 'default' : 'outline'}
                 onClick={() => { setUploadMode('csv'); setResults([]); }}
-                className={uploadMode === 'csv' ? 'bg-yellow-600 hover:bg-yellow-500' : 'border-slate-700 text-slate-300 hover:bg-slate-800'}
+                className={uploadMode === 'csv' ? 'bg-yellow-600 hover:bg-yellow-500' : 'border-border text-muted-foreground hover:bg-muted'}
               >
                 <Table2 className="w-4 h-4 mr-2" />
                 CSV (BetterTeam)
@@ -404,7 +404,7 @@ export default function ScreenerPage() {
               <Button
                 variant={uploadMode === 'pdf' ? 'default' : 'outline'}
                 onClick={() => { setUploadMode('pdf'); setCsvRows([]); setCsvFileName(''); setResults([]); }}
-                className={uploadMode === 'pdf' ? 'bg-yellow-600 hover:bg-yellow-500' : 'border-slate-700 text-slate-300 hover:bg-slate-800'}
+                className={uploadMode === 'pdf' ? 'bg-yellow-600 hover:bg-yellow-500' : 'border-border text-muted-foreground hover:bg-muted'}
               >
                 <FileUp className="w-4 h-4 mr-2" />
                 PDF Resumes
@@ -415,7 +415,7 @@ export default function ScreenerPage() {
 
         {/* Step 2: Upload Zone */}
         <div className="mb-8">
-          <label className="block text-sm font-medium text-slate-300 mb-2">
+          <label className="block text-sm font-medium text-muted-foreground mb-2">
             Step 2: {uploadMode === 'csv' ? 'Upload BetterTeam CSV' : 'Upload Resumes'}
           </label>
           <div
@@ -424,7 +424,7 @@ export default function ScreenerPage() {
             onDragOver={handleDrag}
             onDrop={handleDrop}
             className={`relative border-2 border-dashed rounded-xl p-12 text-center transition-all ${
-              dragActive ? 'border-yellow-500 bg-yellow-500/10' : 'border-slate-700 hover:border-slate-600 bg-slate-900/50'
+              dragActive ? 'border-yellow-500 bg-yellow-500/10' : 'border-border hover:border-muted-foreground/40 bg-card/50'
             }`}
           >
             <input
@@ -435,11 +435,11 @@ export default function ScreenerPage() {
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               disabled={isProcessing}
             />
-            <Upload className={`w-12 h-12 mx-auto mb-4 ${dragActive ? 'text-yellow-500' : 'text-slate-500'}`} />
-            <p className="text-lg font-medium text-slate-300">
+            <Upload className={`w-12 h-12 mx-auto mb-4 ${dragActive ? 'text-yellow-500' : 'text-muted-foreground'}`} />
+            <p className="text-lg font-medium text-muted-foreground">
               {isProcessing ? 'Processing...' : uploadMode === 'csv' ? 'Drop BetterTeam CSV here or click to upload' : 'Drop PDF resumes here or click to upload'}
             </p>
-            <p className="text-sm text-slate-500 mt-2">
+            <p className="text-sm text-muted-foreground mt-2">
               {uploadMode === 'csv' ? 'Single .csv file from BetterTeam export' : 'Supports multiple files • PDF only'}
             </p>
           </div>
@@ -451,12 +451,12 @@ export default function ScreenerPage() {
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <Filter className="w-5 h-5 text-yellow-500" />
-                <h2 className="text-lg font-semibold text-slate-300">
+                <h2 className="text-lg font-semibold text-muted-foreground">
                   Step 3: Filter Candidates
                 </h2>
               </div>
               <div className="flex items-center gap-3">
-                <Badge variant="secondary" className="bg-slate-800 text-slate-300">
+                <Badge variant="secondary" className="bg-muted text-muted-foreground">
                   {csvFileName}
                 </Badge>
                 <Badge className="bg-yellow-500/20 text-yellow-400">
@@ -466,7 +466,7 @@ export default function ScreenerPage() {
                   variant="ghost"
                   size="sm"
                   onClick={() => { setCsvRows([]); setCsvFileName(''); }}
-                  className="text-slate-400 hover:text-white"
+                  className="text-muted-foreground hover:text-foreground"
                 >
                   <X className="w-4 h-4 mr-1" />
                   Clear
@@ -477,9 +477,9 @@ export default function ScreenerPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {/* Status Filter */}
               {statusOptions.length > 0 && (
-                <Card className="bg-slate-900 border-slate-800">
+                <Card className="bg-card border-border">
                   <CardContent className="pt-4">
-                    <Label className="text-slate-300 text-sm mb-2 block">Status</Label>
+                    <Label className="text-muted-foreground text-sm mb-2 block">Status</Label>
                     <div className="flex flex-wrap gap-1.5">
                       {statusOptions.map(s => (
                         <button
@@ -488,7 +488,7 @@ export default function ScreenerPage() {
                           className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
                             filterStatuses.size === 0 || filterStatuses.has(s)
                               ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
-                              : 'bg-slate-800 text-slate-500 border border-slate-700'
+                              : 'bg-muted text-muted-foreground border border-border'
                           }`}
                         >
                           {s} ({csvRows.filter(r => r.status === s).length})
@@ -496,7 +496,7 @@ export default function ScreenerPage() {
                       ))}
                     </div>
                     {filterStatuses.size > 0 && (
-                      <button onClick={() => setFilterStatuses(new Set())} className="text-xs text-slate-500 mt-2 hover:text-slate-300">
+                      <button onClick={() => setFilterStatuses(new Set())} className="text-xs text-muted-foreground mt-2 hover:text-muted-foreground">
                         Clear filter
                       </button>
                     )}
@@ -506,9 +506,9 @@ export default function ScreenerPage() {
 
               {/* Source Filter */}
               {sourceOptions.length > 0 && (
-                <Card className="bg-slate-900 border-slate-800">
+                <Card className="bg-card border-border">
                   <CardContent className="pt-4">
-                    <Label className="text-slate-300 text-sm mb-2 block">Source</Label>
+                    <Label className="text-muted-foreground text-sm mb-2 block">Source</Label>
                     <div className="flex flex-wrap gap-1.5">
                       {sourceOptions.map(s => (
                         <button
@@ -517,7 +517,7 @@ export default function ScreenerPage() {
                           className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
                             filterSources.size === 0 || filterSources.has(s)
                               ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                              : 'bg-slate-800 text-slate-500 border border-slate-700'
+                              : 'bg-muted text-muted-foreground border border-border'
                           }`}
                         >
                           {s} ({csvRows.filter(r => r.source === s).length})
@@ -525,7 +525,7 @@ export default function ScreenerPage() {
                       ))}
                     </div>
                     {filterSources.size > 0 && (
-                      <button onClick={() => setFilterSources(new Set())} className="text-xs text-slate-500 mt-2 hover:text-slate-300">
+                      <button onClick={() => setFilterSources(new Set())} className="text-xs text-muted-foreground mt-2 hover:text-muted-foreground">
                         Clear filter
                       </button>
                     )}
@@ -535,9 +535,9 @@ export default function ScreenerPage() {
 
               {/* Campaign Filter */}
               {campaignOptions.length > 0 && (
-                <Card className="bg-slate-900 border-slate-800">
+                <Card className="bg-card border-border">
                   <CardContent className="pt-4">
-                    <Label className="text-slate-300 text-sm mb-2 block">Campaign</Label>
+                    <Label className="text-muted-foreground text-sm mb-2 block">Campaign</Label>
                     <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
                       {campaignOptions.map(c => (
                         <button
@@ -546,7 +546,7 @@ export default function ScreenerPage() {
                           className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
                             filterCampaigns.size === 0 || filterCampaigns.has(c)
                               ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
-                              : 'bg-slate-800 text-slate-500 border border-slate-700'
+                              : 'bg-muted text-muted-foreground border border-border'
                           }`}
                         >
                           {c} ({csvRows.filter(r => r.campaign === c).length})
@@ -554,7 +554,7 @@ export default function ScreenerPage() {
                       ))}
                     </div>
                     {filterCampaigns.size > 0 && (
-                      <button onClick={() => setFilterCampaigns(new Set())} className="text-xs text-slate-500 mt-2 hover:text-slate-300">
+                      <button onClick={() => setFilterCampaigns(new Set())} className="text-xs text-muted-foreground mt-2 hover:text-muted-foreground">
                         Clear filter
                       </button>
                     )}
@@ -563,9 +563,9 @@ export default function ScreenerPage() {
               )}
 
               {/* Date Range */}
-              <Card className="bg-slate-900 border-slate-800">
+              <Card className="bg-card border-border">
                 <CardContent className="pt-4">
-                  <Label className="text-slate-300 text-sm mb-2 flex items-center gap-1.5">
+                  <Label className="text-muted-foreground text-sm mb-2 flex items-center gap-1.5">
                     <Calendar className="w-3.5 h-3.5" />
                     Application Date Range
                   </Label>
@@ -574,38 +574,38 @@ export default function ScreenerPage() {
                       type="date"
                       value={filterDateFrom}
                       onChange={(e) => setFilterDateFrom(e.target.value)}
-                      className="bg-slate-800 border-slate-700 text-white text-sm"
+                      className="bg-muted border-border text-foreground text-sm"
                     />
-                    <span className="text-slate-500 self-center">to</span>
+                    <span className="text-muted-foreground self-center">to</span>
                     <Input
                       type="date"
                       value={filterDateTo}
                       onChange={(e) => setFilterDateTo(e.target.value)}
-                      className="bg-slate-800 border-slate-700 text-white text-sm"
+                      className="bg-muted border-border text-foreground text-sm"
                     />
                   </div>
                 </CardContent>
               </Card>
 
               {/* Toggles */}
-              <Card className="bg-slate-900 border-slate-800">
+              <Card className="bg-card border-border">
                 <CardContent className="pt-4 space-y-4">
                   <div className="flex items-center justify-between">
-                    <Label className="text-slate-300 text-sm flex items-center gap-1.5">
+                    <Label className="text-muted-foreground text-sm flex items-center gap-1.5">
                       <Link2 className="w-3.5 h-3.5" />
                       Has Resume URL
                     </Label>
                     <Switch checked={filterHasResume} onCheckedChange={setFilterHasResume} />
                   </div>
                   <div className="flex items-center justify-between">
-                    <Label className="text-slate-300 text-sm flex items-center gap-1.5">
+                    <Label className="text-muted-foreground text-sm flex items-center gap-1.5">
                       <XCircle className="w-3.5 h-3.5" />
                       Skip Duplicates
                     </Label>
                     <Switch checked={filterSkipDuplicates} onCheckedChange={setFilterSkipDuplicates} />
                   </div>
                   {filterSkipDuplicates && existingEmails.size > 0 && (
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-muted-foreground">
                       {existingEmails.size} email{existingEmails.size !== 1 ? 's' : ''} already in system
                     </p>
                   )}
@@ -616,7 +616,7 @@ export default function ScreenerPage() {
             {/* Preview Table */}
             <div className="mt-6">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-medium text-slate-300">
+                <h3 className="text-sm font-medium text-muted-foreground">
                   Preview — {filteredCsvRows.length} candidate{filteredCsvRows.length !== 1 ? 's' : ''} to screen
                 </h3>
                 <Button
@@ -630,26 +630,26 @@ export default function ScreenerPage() {
               </div>
 
               {filteredCsvRows.length > 0 && (
-                <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden max-h-80 overflow-y-auto">
+                <div className="bg-card rounded-xl border border-border overflow-hidden max-h-80 overflow-y-auto">
                   <table className="w-full">
-                    <thead className="sticky top-0 bg-slate-800">
+                    <thead className="sticky top-0 bg-muted">
                       <tr>
-                        <th className="text-left text-slate-400 font-medium px-4 py-2 text-xs">#</th>
-                        <th className="text-left text-slate-400 font-medium px-4 py-2 text-xs">Name</th>
-                        <th className="text-left text-slate-400 font-medium px-4 py-2 text-xs">Email</th>
-                        <th className="text-left text-slate-400 font-medium px-4 py-2 text-xs">Source</th>
-                        <th className="text-left text-slate-400 font-medium px-4 py-2 text-xs">Date</th>
-                        <th className="text-left text-slate-400 font-medium px-4 py-2 text-xs">Resume</th>
+                        <th className="text-left text-muted-foreground font-medium px-4 py-2 text-xs">#</th>
+                        <th className="text-left text-muted-foreground font-medium px-4 py-2 text-xs">Name</th>
+                        <th className="text-left text-muted-foreground font-medium px-4 py-2 text-xs">Email</th>
+                        <th className="text-left text-muted-foreground font-medium px-4 py-2 text-xs">Source</th>
+                        <th className="text-left text-muted-foreground font-medium px-4 py-2 text-xs">Date</th>
+                        <th className="text-left text-muted-foreground font-medium px-4 py-2 text-xs">Resume</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredCsvRows.slice(0, 50).map((row, i) => (
-                        <tr key={i} className="border-t border-slate-800/50 hover:bg-slate-800/30">
-                          <td className="px-4 py-2 text-xs text-slate-500">{i + 1}</td>
-                          <td className="px-4 py-2 text-sm text-white">{row.name || '—'}</td>
-                          <td className="px-4 py-2 text-sm text-slate-400">{row.email || '—'}</td>
-                          <td className="px-4 py-2 text-xs text-slate-500">{row.source || '—'}</td>
-                          <td className="px-4 py-2 text-xs text-slate-500">{row.applicationDate || '—'}</td>
+                        <tr key={i} className="border-t border-border/50 hover:bg-muted/30">
+                          <td className="px-4 py-2 text-xs text-muted-foreground">{i + 1}</td>
+                          <td className="px-4 py-2 text-sm text-foreground">{row.name || '—'}</td>
+                          <td className="px-4 py-2 text-sm text-muted-foreground">{row.email || '—'}</td>
+                          <td className="px-4 py-2 text-xs text-muted-foreground">{row.source || '—'}</td>
+                          <td className="px-4 py-2 text-xs text-muted-foreground">{row.applicationDate || '—'}</td>
                           <td className="px-4 py-2">
                             {row.resumeUrl ? (
                               <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
@@ -662,7 +662,7 @@ export default function ScreenerPage() {
                     </tbody>
                   </table>
                   {filteredCsvRows.length > 50 && (
-                    <div className="text-center py-2 text-xs text-slate-500 border-t border-slate-800">
+                    <div className="text-center py-2 text-xs text-muted-foreground border-t border-border">
                       Showing first 50 of {filteredCsvRows.length} candidates
                     </div>
                   )}
@@ -675,42 +675,42 @@ export default function ScreenerPage() {
         {/* Results Leaderboard */}
         {results.length > 0 && (
           <div>
-            <h2 className="text-lg font-semibold text-slate-300 mb-4">
+            <h2 className="text-lg font-semibold text-muted-foreground mb-4">
               {csvRows.length > 0 ? 'Step 4' : 'Step 3'}: Live Leaderboard
             </h2>
-            <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
+            <div className="bg-card rounded-xl border border-border overflow-hidden">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-slate-800 bg-slate-800/50">
-                    <th className="text-left text-slate-400 font-medium px-4 py-3">Name</th>
-                    <th className="text-left text-slate-400 font-medium px-4 py-3">Email</th>
-                    <th className="text-left text-slate-400 font-medium px-4 py-3">Score</th>
-                    <th className="text-left text-slate-400 font-medium px-4 py-3">Status</th>
-                    <th className="text-left text-slate-400 font-medium px-4 py-3">Reasoning</th>
+                  <tr className="border-b border-border bg-muted/50">
+                    <th className="text-left text-muted-foreground font-medium px-4 py-3">Name</th>
+                    <th className="text-left text-muted-foreground font-medium px-4 py-3">Email</th>
+                    <th className="text-left text-muted-foreground font-medium px-4 py-3">Score</th>
+                    <th className="text-left text-muted-foreground font-medium px-4 py-3">Status</th>
+                    <th className="text-left text-muted-foreground font-medium px-4 py-3">Reasoning</th>
                   </tr>
                 </thead>
                 <tbody>
                   {sortedResults.map((result, idx) => (
-                    <tr key={idx} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
+                    <tr key={idx} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
                       <td className="px-4 py-3">
                         {result.processing ? (
                           <div className="flex items-center gap-2">
                             <Loader2 className="w-4 h-4 text-yellow-500 animate-spin" />
-                            <span className="text-slate-400">{result.name || '...'}</span>
+                            <span className="text-muted-foreground">{result.name || '...'}</span>
                           </div>
                         ) : (
-                          <span className="text-white">{result.name || '—'}</span>
+                          <span className="text-foreground">{result.name || '—'}</span>
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <span className="text-slate-400 text-sm">{result.email || '—'}</span>
+                        <span className="text-muted-foreground text-sm">{result.email || '—'}</span>
                       </td>
                       <td className="px-4 py-3">
                         {result.processing ? (
-                          <span className="text-slate-500">...</span>
+                          <span className="text-muted-foreground">...</span>
                         ) : result.score !== undefined ? (
                           <div className="flex items-center gap-2">
-                            <div className="w-16 h-2 bg-slate-700 rounded-full overflow-hidden">
+                            <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
                               <div
                                 className={`h-full rounded-full ${result.score >= 70 ? 'bg-emerald-500' : result.score >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
                                 style={{ width: `${result.score}%` }}
@@ -726,9 +726,9 @@ export default function ScreenerPage() {
                       </td>
                       <td className="px-4 py-3">
                         {result.processing ? (
-                          <span className="text-slate-500">Processing...</span>
+                          <span className="text-muted-foreground">Processing...</span>
                         ) : result.skipped ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-slate-700 text-slate-300 rounded-full text-xs">Duplicate</span>
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-muted text-muted-foreground rounded-full text-xs">Duplicate</span>
                         ) : result.status === 'RECOMMENDED' ? (
                           <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded-full text-xs">
                             <CheckCircle className="w-3 h-3" /> Interview
@@ -742,7 +742,7 @@ export default function ScreenerPage() {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <span className="text-slate-400 text-sm">{result.reasoning || result.error || '—'}</span>
+                        <span className="text-muted-foreground text-sm">{result.reasoning || result.error || '—'}</span>
                       </td>
                     </tr>
                   ))}
