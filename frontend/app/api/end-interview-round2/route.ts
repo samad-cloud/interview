@@ -122,6 +122,14 @@ export async function POST(request: Request) {
 
     console.log(`[End Interview Round 2] Saved transcript for candidate ${candidateId}`);
 
+    // Check if recording was stored for this candidate
+    const { data: recCheck } = await supabase
+      .from('candidates')
+      .select('round_2_video_url')
+      .eq('id', candidateId)
+      .single();
+    console.log(`[End Interview Round 2] Recording stored for candidate ${candidateId}: ${recCheck?.round_2_video_url ? 'YES — ' + recCheck.round_2_video_url : 'NO — round_2_video_url is null'}`);
+
     // Generate final verdict — scores R2, updates round_2_rating, status, and current_stage
     let verdictResult = null;
     try {

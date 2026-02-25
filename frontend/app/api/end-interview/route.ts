@@ -285,6 +285,14 @@ NOTES INSTRUCTIONS:
       );
     }
 
+    // Check if recording was stored for this candidate
+    const { data: recCheck } = await supabase
+      .from('candidates')
+      .select('video_url')
+      .eq('id', candidateId)
+      .single();
+    console.log(`[End Interview] Recording stored for candidate ${candidateId}: ${recCheck?.video_url ? 'YES' : 'NO — video_url is null'}`);
+
     console.log(`[End Interview] Candidate ${candidateId} scored ${analysis.score}/100 - ${analysis.decision}`);
 
     // Step 6: If score qualifies, generate dossier now and schedule Round 2 invite for next day 10 AM UTC
