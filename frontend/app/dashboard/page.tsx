@@ -43,6 +43,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import VideoPlayer from '@/components/VideoPlayer';
 import { useRouter } from 'next/navigation';
 
 // shadcn components
@@ -1847,30 +1848,20 @@ export default function DashboardPage() {
                   {selectedCandidate?.video_url && (
                     <Card>
                       <CardContent className="pt-4">
-                        <p className="text-muted-foreground text-sm mb-2">Round 1 Recording</p>
-                        <video
+                        <VideoPlayer
                           src={selectedCandidate.video_url}
-                          controls
-                          className="w-full rounded-lg max-h-80"
-                          preload="metadata"
-                        >
-                          Your browser does not support video playback.
-                        </video>
+                          title="Round 1 Recording"
+                        />
                       </CardContent>
                     </Card>
                   )}
                   {selectedCandidate?.round_2_video_url && (
                     <Card>
                       <CardContent className="pt-4">
-                        <p className="text-muted-foreground text-sm mb-2">Round 2 Recording</p>
-                        <video
+                        <VideoPlayer
                           src={selectedCandidate.round_2_video_url}
-                          controls
-                          className="w-full rounded-lg max-h-80"
-                          preload="metadata"
-                        >
-                          Your browser does not support video playback.
-                        </video>
+                          title="Round 2 Recording"
+                        />
                       </CardContent>
                     </Card>
                   )}
