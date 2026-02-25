@@ -1726,11 +1726,13 @@ export default function DashboardPage() {
 
                 {interviewNotes && (
                   <div className="space-y-4">
-                    {/* Overall Impression */}
-                    <Card>
+                    {/* Summary — combined impression + recommendation */}
+                    <Card className="border-emerald-500/30">
                       <CardContent className="pt-4">
-                        <p className="text-sm font-medium text-muted-foreground mb-1">Overall Impression</p>
-                        <p className="text-sm">{interviewNotes.overallImpression}</p>
+                        <p className="text-sm font-medium text-emerald-400 mb-2">Summary</p>
+                        <p className="text-sm leading-relaxed">
+                          {interviewNotes.overallImpression} {interviewNotes.recommendation}
+                        </p>
                       </CardContent>
                     </Card>
 
@@ -1764,26 +1766,6 @@ export default function DashboardPage() {
                       </Card>
                     </div>
 
-                    {/* Key Moments */}
-                    <Card>
-                      <CardContent className="pt-4">
-                        <p className="text-sm font-medium text-muted-foreground mb-2">Key Moments</p>
-                        <div className="space-y-2">
-                          {interviewNotes.keyMoments.map((m, i) => (
-                            <div key={i} className="flex items-start gap-2 text-sm">
-                              <span className={`mt-0.5 ${
-                                m.significance === 'positive' ? 'text-emerald-400' :
-                                m.significance === 'negative' ? 'text-red-400' : 'text-muted-foreground'
-                              }`}>
-                                {m.significance === 'positive' ? '+' : m.significance === 'negative' ? '-' : '~'}
-                              </span>
-                              {m.moment}
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-
                     {/* Technical + Culture */}
                     <div className="grid grid-cols-2 gap-4">
                       {interviewNotes.technicalAssessment && (
@@ -1801,14 +1783,6 @@ export default function DashboardPage() {
                         </CardContent>
                       </Card>
                     </div>
-
-                    {/* Recommendation */}
-                    <Card className="border-emerald-500/30">
-                      <CardContent className="pt-4">
-                        <p className="text-sm font-medium text-emerald-400 mb-1">Recommendation</p>
-                        <p className="text-sm font-medium">{interviewNotes.recommendation}</p>
-                      </CardContent>
-                    </Card>
 
                     {/* Follow-up Questions */}
                     <Card>
@@ -1877,7 +1851,7 @@ export default function DashboardPage() {
                   <h3 className="text-lg font-semibold">Round 1 Transcript</h3>
                 </div>
                 <Card>
-                  <CardContent className="pt-4 max-h-48 overflow-y-auto">
+                  <CardContent className="pt-4 max-h-[600px] overflow-y-auto">
                     <pre className="text-sm whitespace-pre-wrap font-mono">
                       {selectedCandidate.interview_transcript}
                     </pre>
@@ -1894,7 +1868,7 @@ export default function DashboardPage() {
                   <h3 className="text-lg font-semibold">Round 2 Transcript</h3>
                 </div>
                 <Card>
-                  <CardContent className="pt-4 max-h-48 overflow-y-auto">
+                  <CardContent className="pt-4 max-h-[600px] overflow-y-auto">
                     <pre className="text-sm whitespace-pre-wrap font-mono">
                       {selectedCandidate.round_2_transcript}
                     </pre>
@@ -1903,35 +1877,27 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* Resume */}
-            {(selectedCandidate?.resume_text || selectedCandidate?.resume_url) && (
+            {/* Resume Download */}
+            {selectedCandidate?.resume_url && (
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <Briefcase className="w-5 h-5 text-emerald-400" />
-                    <h3 className="text-lg font-semibold">Resume</h3>
-                  </div>
-                  {selectedCandidate?.resume_url && (
+                <div className="flex items-center gap-2 mb-3">
+                  <Briefcase className="w-5 h-5 text-emerald-400" />
+                  <h3 className="text-lg font-semibold">Resume</h3>
+                </div>
+                <Card className="border-emerald-500/30">
+                  <CardContent className="pt-4 flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground">Original resume uploaded by the candidate</p>
                     <a
                       href={selectedCandidate.resume_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 transition-colors text-sm font-medium"
                     >
                       <Download className="w-4 h-4" />
-                      Download Original
+                      Download PDF
                     </a>
-                  )}
-                </div>
-                {selectedCandidate?.resume_text && (
-                  <Card>
-                    <CardContent className="pt-4 max-h-48 overflow-y-auto">
-                      <p className="text-sm whitespace-pre-wrap">
-                        {selectedCandidate.resume_text}
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
+                  </CardContent>
+                </Card>
               </div>
             )}
 
