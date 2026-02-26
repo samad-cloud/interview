@@ -58,6 +58,14 @@ interface Company {
   culture: string | null;
 }
 
+interface LocationRow {
+  id: string;
+  country: string;
+  city: string | null;
+  currency_code: string;
+  currency_name: string;
+}
+
 // Skill tag input component
 function SkillInput({
   skills,
@@ -145,6 +153,32 @@ export default function GenJobPage() {
   const [newCompanyCulture, setNewCompanyCulture] = useState('');
   const [isSavingCompany, setIsSavingCompany] = useState(false);
 
+  // Locations from DB
+  const [locations, setLocations] = useState<LocationRow[]>([]);
+  const [isSavingLocation, setIsSavingLocation] = useState(false);
+
+  // Derived: unique currencies from locations
+  const currencies = Array.from(
+    new Map(locations.map(l => [l.currency_code, l.currency_name])).entries()
+  ).map(([code, name]) => ({ code, label: `${code} - ${name}` }));
+
+  // Derived: location options for the select (city, country, or "Country (no city)")
+  const locationOptions = locations.map(l => ({
+    id: l.id,
+    label: l.city ? `${l.city}, ${l.country}` : l.country,
+    currency: l.currency_code,
+  }));
+
+  // Add location/currency dialog state
+  const [showAddLocation, setShowAddLocation] = useState(false);
+  const [newCountry, setNewCountry] = useState('');
+  const [newCity, setNewCity] = useState('');
+  const [newCurrencyCode, setNewCurrencyCode] = useState('');
+  const [newCurrencyName, setNewCurrencyName] = useState('');
+  const [showAddCurrency, setShowAddCurrency] = useState(false);
+  const [addCurrencyCode, setAddCurrencyCode] = useState('');
+  const [addCurrencyName, setAddCurrencyName] = useState('');
+
   // Step 1: Core Details
   const [title, setTitle] = useState('');
   const [department, setDepartment] = useState('');
@@ -183,10 +217,21 @@ export default function GenJobPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [activeStep, setActiveStep] = useState(1);
 
-  // Fetch companies on mount
+  // Fetch companies and locations on mount
   useEffect(() => {
     supabase.from('companies').select('*').order('name').then(({ data }) => {
       if (data) setCompanies(data as Company[]);
+    });
+    supabase.from('locations').select('*').order('country').order('city').then(({ data }) => {
+      if (data) {
+        setLocations(data as LocationRow[]);
+        // Default to first location's label if nothing selected
+        if (!location && data.length > 0) {
+          const first = data[0] as LocationRow;
+          setLocation(first.city ? `${first.city}, ${first.country}` : first.country);
+          setSalaryCurrency(first.currency_code);
+        }
+      }
     });
   }, []);
 
@@ -222,6 +267,80 @@ export default function GenJobPage() {
 
     return () => { cancelled = true; };
   }, [activeStep, title]);
+
+  const handleLocationChange = (val: string) => {
+    setLocation(val);
+    const match = locationOptions.find(l => l.label === val);
+    if (match) setSalaryCurrency(match.currency);
+  };
+
+  const handleAddLocation = async () => {
+    const country = newCountry.trim();
+    const city = newCity.trim() || null;
+    const code = newCurrencyCode.trim().toUpperCase();
+    const name = newCurrencyName.trim();
+    if (!country || !code || !name) return;
+
+    setIsSavingLocation(true);
+    try {
+      const { data, error } = await supabase.from('locations').insert({
+        country,
+        city,
+        currency_code: code,
+        currency_name: name,
+      }).select().single();
+
+      if (error) throw error;
+
+      const row = data as LocationRow;
+      setLocations(prev => [...prev, row]);
+      const label = row.city ? `${row.city}, ${row.country}` : row.country;
+      setLocation(label);
+      setSalaryCurrency(row.currency_code);
+
+      setNewCountry('');
+      setNewCity('');
+      setNewCurrencyCode('');
+      setNewCurrencyName('');
+      setShowAddLocation(false);
+    } catch (err) {
+      console.error('Failed to save location:', err);
+      setMessage({ type: 'error', text: 'Failed to save location. It may already exist.' });
+    } finally {
+      setIsSavingLocation(false);
+    }
+  };
+
+  const handleAddCurrency = async () => {
+    const code = addCurrencyCode.trim().toUpperCase();
+    const name = addCurrencyName.trim();
+    if (!code || !name) return;
+    if (currencies.some(c => c.code === code)) return;
+
+    // Add a country-less location row for this currency
+    setIsSavingLocation(true);
+    try {
+      const { data, error } = await supabase.from('locations').insert({
+        country: name,
+        city: null,
+        currency_code: code,
+        currency_name: name,
+      }).select().single();
+
+      if (error) throw error;
+
+      setLocations(prev => [...prev, data as LocationRow]);
+      setSalaryCurrency(code);
+      setAddCurrencyCode('');
+      setAddCurrencyName('');
+      setShowAddCurrency(false);
+    } catch (err) {
+      console.error('Failed to save currency:', err);
+      setMessage({ type: 'error', text: 'Failed to save currency. It may already exist.' });
+    } finally {
+      setIsSavingLocation(false);
+    }
+  };
 
   const handleGenerate = async () => {
     if (!title || !location) {
@@ -467,15 +586,27 @@ export default function GenJobPage() {
 
                 <div className="space-y-2">
                   <Label>Location <span className="text-destructive">*</span></Label>
-                  <Select value={location} onValueChange={setLocation}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Dubai">Dubai</SelectItem>
-                      <SelectItem value="London">London</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="flex gap-2">
+                    <Select value={location} onValueChange={handleLocationChange}>
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Select location..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {locationOptions.map(loc => (
+                          <SelectItem key={loc.id} value={loc.label}>{loc.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setShowAddLocation(true)}
+                      title="Add new location"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -535,17 +666,27 @@ export default function GenJobPage() {
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="space-y-2">
                   <Label>Currency</Label>
-                  <Select value={salaryCurrency} onValueChange={setSalaryCurrency}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="AED">AED</SelectItem>
-                      <SelectItem value="USD">USD</SelectItem>
-                      <SelectItem value="GBP">GBP</SelectItem>
-                      <SelectItem value="EUR">EUR</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="flex gap-2">
+                    <Select value={salaryCurrency} onValueChange={setSalaryCurrency}>
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Select currency..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {currencies.map(cur => (
+                          <SelectItem key={cur.code} value={cur.code}>{cur.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setShowAddCurrency(true)}
+                      title="Add new currency"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -910,6 +1051,130 @@ export default function GenJobPage() {
         )}
 
       </div>
+
+      {/* Add Location Dialog */}
+      <Dialog open={showAddLocation} onOpenChange={setShowAddLocation}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add New Location</DialogTitle>
+            <DialogDescription>Add a country and optionally a city with its currency.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Country <span className="text-destructive">*</span></Label>
+              <Input
+                value={newCountry}
+                onChange={(e) => setNewCountry(e.target.value)}
+                placeholder="e.g., Indonesia"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>City <span className="text-muted-foreground font-normal">(optional)</span></Label>
+              <Input
+                value={newCity}
+                onChange={(e) => setNewCity(e.target.value)}
+                placeholder="e.g., Jakarta"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Currency Code <span className="text-destructive">*</span></Label>
+                <Input
+                  value={newCurrencyCode}
+                  onChange={(e) => setNewCurrencyCode(e.target.value.toUpperCase())}
+                  placeholder="e.g., IDR"
+                  maxLength={3}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Currency Name <span className="text-destructive">*</span></Label>
+                <Input
+                  value={newCurrencyName}
+                  onChange={(e) => setNewCurrencyName(e.target.value)}
+                  placeholder="e.g., Indonesian Rupiah"
+                />
+              </div>
+            </div>
+            {currencies.length > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-2">Or pick an existing currency:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {currencies.map(c => (
+                    <Badge
+                      key={c.code}
+                      variant="outline"
+                      className="cursor-pointer hover:bg-muted"
+                      onClick={() => {
+                        setNewCurrencyCode(c.code);
+                        const match = locations.find(l => l.currency_code === c.code);
+                        if (match) setNewCurrencyName(match.currency_name);
+                      }}
+                    >
+                      {c.code}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddLocation(false)}>Cancel</Button>
+            <Button
+              onClick={handleAddLocation}
+              disabled={!newCountry.trim() || !newCurrencyCode.trim() || !newCurrencyName.trim() || isSavingLocation}
+            >
+              {isSavingLocation ? (
+                <><Loader2 className="w-4 h-4 animate-spin mr-2" />Saving...</>
+              ) : (
+                'Add Location'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Currency Dialog */}
+      <Dialog open={showAddCurrency} onOpenChange={setShowAddCurrency}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Add New Currency</DialogTitle>
+            <DialogDescription>Add a currency not in the list. This will also create a location entry.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Currency Code <span className="text-destructive">*</span></Label>
+              <Input
+                value={addCurrencyCode}
+                onChange={(e) => setAddCurrencyCode(e.target.value.toUpperCase())}
+                placeholder="e.g., IDR"
+                maxLength={3}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Currency Name <span className="text-destructive">*</span></Label>
+              <Input
+                value={addCurrencyName}
+                onChange={(e) => setAddCurrencyName(e.target.value)}
+                placeholder="e.g., Indonesian Rupiah"
+                onKeyDown={(e) => e.key === 'Enter' && handleAddCurrency()}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddCurrency(false)}>Cancel</Button>
+            <Button
+              onClick={handleAddCurrency}
+              disabled={!addCurrencyCode.trim() || !addCurrencyName.trim() || isSavingLocation}
+            >
+              {isSavingLocation ? (
+                <><Loader2 className="w-4 h-4 animate-spin mr-2" />Saving...</>
+              ) : (
+                'Add Currency'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Company Dialog */}
       <Dialog open={showAddCompany} onOpenChange={setShowAddCompany}>

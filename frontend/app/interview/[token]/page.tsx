@@ -4,9 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import VoiceAvatar from '@/components/VoiceAvatar';
-import { Loader2, AlertCircle, CheckCircle, ArrowRight, Mic, MessageSquare, UserCheck, Clock } from 'lucide-react';
-import Image from 'next/image';
-import { Button } from '@/components/ui/button';
+import { Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 
 interface CandidateData {
   id: number;
@@ -26,7 +24,6 @@ export default function VoiceInterviewPage() {
   const [jobTitle, setJobTitle] = useState<string>('Open Position');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [hasStarted, setHasStarted] = useState(false);
 
   useEffect(() => {
     const fetchCandidate = async () => {
@@ -142,122 +139,14 @@ export default function VoiceInterviewPage() {
     );
   }
 
-  // Started - Render Voice Interview
-  if (hasStarted) {
-    return (
-      <VoiceAvatar
-        candidateId={String(candidate.id)}
-        candidateName={candidate.full_name}
-        jobTitle={jobTitle}
-        jobDescription={candidate.job_description || 'Software Engineer at Printerpix'}
-        resumeText={candidate.resume_text || 'No resume provided'}
-      />
-    );
-  }
-
-  // Landing Page
-  const firstName = candidate.full_name?.split(' ')[0] || candidate.full_name;
-
-  const steps = [
-    {
-      icon: Mic,
-      title: 'Speak naturally',
-      description: 'Our AI interviewer will ask you questions — just talk like you would in a normal conversation.',
-    },
-    {
-      icon: Clock,
-      title: '15–20 minutes',
-      description: 'The session is brief and focused. Take your time with each answer.',
-    },
-    {
-      icon: MessageSquare,
-      title: 'Submit when ready',
-      description: 'Click "Done Speaking" after each answer. Each response is final, so share all the details you\'d like.',
-    },
-    {
-      icon: UserCheck,
-      title: 'Human reviewed',
-      description: 'Our HR team personally reviews every response to get to know the person behind the resume.',
-    },
-  ];
-
+  // Go directly to VoiceAvatar (camera/mic check is handled inside)
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4 py-12 relative overflow-hidden">
-      {/* Subtle gradient background */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-900/20 via-background to-background" />
-
-      <div className="max-w-2xl w-full relative z-10">
-        {/* Header */}
-        <div className="text-center mb-10">
-          <Image
-            src="/logo.jpg"
-            alt="Printerpix"
-            width={56}
-            height={56}
-            className="rounded-xl mx-auto mb-4 ring-2 ring-emerald-500/20 ring-offset-2 ring-offset-background"
-          />
-          <p className="text-emerald-400 text-sm font-medium tracking-wide uppercase mb-3">
-            Printerpix Recruiting
-          </p>
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-foreground mb-2">
-            Welcome, <span className="text-emerald-400">{firstName}</span>!
-          </h1>
-          <p className="text-muted-foreground">
-            Round 1: Personality & Drive Interview
-          </p>
-        </div>
-
-        {/* Content Card */}
-        <div className="rounded-2xl border border-border bg-card/80 backdrop-blur-sm shadow-xl shadow-black/20 p-8 sm:p-10">
-          <p className="text-muted-foreground text-base leading-relaxed mb-8">
-            We&apos;re excited to hear your story. This AI-powered conversation is your opportunity to share your experiences with the Printerpix team in a comfortable, pressure-free setting.
-          </p>
-
-          {/* Numbered Steps */}
-          <h2 className="text-foreground font-semibold text-base mb-4">
-            How it works
-          </h2>
-          <div className="space-y-4 mb-8">
-            {steps.map((step, index) => (
-              <div key={index} className="flex items-start gap-4">
-                <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 shrink-0">
-                  <step.icon className="w-5 h-5 text-emerald-400" />
-                </div>
-                <div className="pt-0.5">
-                  <p className="text-foreground font-medium text-sm">{step.title}</p>
-                  <p className="text-muted-foreground text-sm mt-0.5">{step.description}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Encouragement */}
-          <p className="text-muted-foreground text-base leading-relaxed mb-8">
-            Take a deep breath and be yourself &mdash; you&apos;ve got this. Good luck!
-          </p>
-
-          {/* CTA Button */}
-          <Button
-            onClick={() => setHasStarted(true)}
-            size="lg"
-            className="w-full h-14 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-lg rounded-xl transition-all hover:shadow-lg hover:shadow-emerald-500/25 cursor-pointer"
-          >
-            Start Interview
-            <ArrowRight className="w-5 h-5 ml-2" />
-          </Button>
-
-          {/* Support */}
-          <p className="text-center text-muted-foreground/70 text-xs mt-5">
-            Having trouble? Contact{' '}
-            <a
-              href="mailto:printerpix.recruitment@gmail.com"
-              className="text-emerald-400 hover:text-emerald-300 underline"
-            >
-              printerpix.recruitment@gmail.com
-            </a>
-          </p>
-        </div>
-      </div>
-    </div>
+    <VoiceAvatar
+      candidateId={String(candidate.id)}
+      candidateName={candidate.full_name}
+      jobTitle={jobTitle}
+      jobDescription={candidate.job_description || 'Software Engineer at Printerpix'}
+      resumeText={candidate.resume_text || 'No resume provided'}
+    />
   );
 }

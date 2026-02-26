@@ -19,11 +19,8 @@ export async function POST(request: Request) {
         { status: 500 }
       );
     }
-    // Amercan Women Aurora = aura-2-aurora-en
-    // British Man: aura-2-draco-en
-    // British Woman: aura-2-pandora-en
-    // Call Deepgram Aura TTS API (male voice)
-    const response = await fetch('https://api.deepgram.com/v1/speak?model=aura-2-draco-en', {
+    // Call Deepgram Aura TTS API (Thalia female voice)
+    const response = await fetch('https://api.deepgram.com/v1/speak?model=aura-2-thalia-en', {
       method: 'POST',
       headers: {
         'Authorization': `Token ${apiKey}`,

@@ -158,8 +158,11 @@ interface Job {
 
 interface Stats {
   applied: number;
-  round1: number;
-  round2: number;
+  passedCvFilter: number;
+  invitedR1: number;
+  completedR1: number;
+  invitedR2: number;
+  completedR2: number;
   successful: number;
 }
 
@@ -208,7 +211,7 @@ export default function DashboardPage() {
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const [stats, setStats] = useState<Stats>({ applied: 0, round1: 0, round2: 0, successful: 0 });
+  const [stats, setStats] = useState<Stats>({ applied: 0, passedCvFilter: 0, invitedR1: 0, completedR1: 0, invitedR2: 0, completedR2: 0, successful: 0 });
 
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -320,27 +323,46 @@ export default function DashboardPage() {
   // Fetch funnel stats (reactive to roleFilter, ignores stageFilter)
   const fetchStats = useCallback(async () => {
     try {
-      // Applied: total candidates (for this job role if filtered)
+      // 1. Applied: total candidates
       let appliedQuery = supabase.from('candidates').select('*', { count: 'exact', head: true });
       if (roleFilter !== 'all') appliedQuery = appliedQuery.eq('job_id', roleFilter);
       const { count: applied } = await appliedQuery;
 
-      // Round 1: candidates who reached R1 or beyond
-      // = R1 Pending (INVITE_SENT, INTERVIEW_STARTED, FORM_COMPLETED) + anyone with a rating (R1 done or beyond)
-      let r1Query = supabase.from('candidates').select('*', { count: 'exact', head: true })
+      // 2. Passed CV Filter: all applied minus CV_REJECTED
+      let cvRejectedQuery = supabase.from('candidates').select('*', { count: 'exact', head: true })
+        .eq('status', 'CV_REJECTED');
+      if (roleFilter !== 'all') cvRejectedQuery = cvRejectedQuery.eq('job_id', roleFilter);
+      const { count: cvRejected } = await cvRejectedQuery;
+
+      // 3. Invited to R1: candidates who got an invite or beyond
+      // = R1 Pending + R1 Failed + R2 Pending + R2 Failed + Successful
+      let invitedR1Query = supabase.from('candidates').select('*', { count: 'exact', head: true })
         .or('status.in.("INVITE_SENT","INTERVIEW_STARTED","FORM_COMPLETED"),rating.not.is.null');
-      if (roleFilter !== 'all') r1Query = r1Query.eq('job_id', roleFilter);
-      const { count: round1 } = await r1Query;
+      if (roleFilter !== 'all') invitedR1Query = invitedR1Query.eq('job_id', roleFilter);
+      const { count: invitedR1 } = await invitedR1Query;
 
-      // Round 2 Pending: candidates awaiting R2 (no round_2_rating yet, but passed R1)
-      let r2Query = supabase.from('candidates').select('*', { count: 'exact', head: true })
-        .is('round_2_rating', null)
-        .not('rating', 'is', null)
-        .or('current_stage.eq.round_2,status.eq.ROUND_2_APPROVED,status.eq.ROUND_2_INVITED,rating.gte.70');
-      if (roleFilter !== 'all') r2Query = r2Query.eq('job_id', roleFilter);
-      const { count: round2 } = await r2Query;
+      // 4. Completed R1: candidates who finished R1 (have a rating)
+      // = R1 Failed + R2 Pending + R2 Failed + Successful
+      let completedR1Query = supabase.from('candidates').select('*', { count: 'exact', head: true })
+        .not('rating', 'is', null);
+      if (roleFilter !== 'all') completedR1Query = completedR1Query.eq('job_id', roleFilter);
+      const { count: completedR1 } = await completedR1Query;
 
-      // Successful: round_2_rating >= 70
+      // 5. Invited to R2: candidates who were invited to or completed R2
+      // = R2 Pending + R2 Failed + Successful
+      let invitedR2Query = supabase.from('candidates').select('*', { count: 'exact', head: true })
+        .or('status.in.("ROUND_2_APPROVED","ROUND_2_INVITED"),current_stage.eq.round_2,round_2_rating.not.is.null');
+      if (roleFilter !== 'all') invitedR2Query = invitedR2Query.eq('job_id', roleFilter);
+      const { count: invitedR2 } = await invitedR2Query;
+
+      // 6. Completed R2: candidates who finished R2 (have round_2_rating)
+      // = R2 Failed + Successful
+      let completedR2Query = supabase.from('candidates').select('*', { count: 'exact', head: true })
+        .not('round_2_rating', 'is', null);
+      if (roleFilter !== 'all') completedR2Query = completedR2Query.eq('job_id', roleFilter);
+      const { count: completedR2 } = await completedR2Query;
+
+      // 7. Successful: round_2_rating >= 70
       let successQuery = supabase.from('candidates').select('*', { count: 'exact', head: true })
         .not('round_2_rating', 'is', null)
         .gte('round_2_rating', 70);
@@ -349,8 +371,11 @@ export default function DashboardPage() {
 
       setStats({
         applied: applied || 0,
-        round1: round1 || 0,
-        round2: round2 || 0,
+        passedCvFilter: (applied || 0) - (cvRejected || 0),
+        invitedR1: invitedR1 || 0,
+        completedR1: completedR1 || 0,
+        invitedR2: invitedR2 || 0,
+        completedR2: completedR2 || 0,
         successful: successful || 0,
       });
     } catch (err) {
@@ -1043,6 +1068,12 @@ export default function DashboardPage() {
                 Bulk Screener
               </Link>
             </Button>
+            <Button variant="outline" asChild>
+              <Link href="/prompts">
+                <SlidersHorizontal className="w-4 h-4 mr-2" />
+                AI Prompts
+              </Link>
+            </Button>
             <Separator orientation="vertical" className="h-8 mx-1" />
             <TooltipProvider>
               <Tooltip>
@@ -1058,54 +1089,96 @@ export default function DashboardPage() {
         </div>
 
         {/* Funnel Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
           <Card className="border-l-4 border-l-muted-foreground/40">
-            <CardContent className="pt-4">
-              <div className="flex items-center gap-2 mb-1">
-                <Users className="w-4 h-4 text-muted-foreground" />
-                <p className="text-muted-foreground text-sm">Applied</p>
+            <CardContent className="pt-4 pb-3">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Users className="w-3.5 h-3.5 text-muted-foreground" />
+                <p className="text-muted-foreground text-xs">Applied</p>
               </div>
               <p className="text-2xl font-bold">{stats.applied}</p>
             </CardContent>
           </Card>
-          <Card className="border-l-4 border-l-sky-500">
-            <CardContent className="pt-4">
-              <div className="flex items-center gap-2 mb-1">
-                <Send className="w-4 h-4 text-sky-400" />
-                <p className="text-muted-foreground text-sm">Round 1</p>
+          <Card className="border-l-4 border-l-violet-500">
+            <CardContent className="pt-4 pb-3">
+              <div className="flex items-center gap-1.5 mb-1">
+                <FileText className="w-3.5 h-3.5 text-violet-400" />
+                <p className="text-muted-foreground text-xs">Passed CV Filter</p>
               </div>
-              <div className="flex items-baseline gap-2">
-                <p className="text-2xl font-bold text-sky-400">{stats.round1}</p>
+              <div className="flex items-baseline gap-1.5">
+                <p className="text-2xl font-bold text-violet-400">{stats.passedCvFilter}</p>
                 {stats.applied > 0 && (
-                  <span className="text-xs text-muted-foreground">{Math.round((stats.round1 / stats.applied) * 100)}% of applied</span>
+                  <span className="text-[10px] text-muted-foreground">{Math.round((stats.passedCvFilter / stats.applied) * 100)}%</span>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-l-4 border-l-sky-500">
+            <CardContent className="pt-4 pb-3">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Send className="w-3.5 h-3.5 text-sky-400" />
+                <p className="text-muted-foreground text-xs">Invited to R1</p>
+              </div>
+              <div className="flex items-baseline gap-1.5">
+                <p className="text-2xl font-bold text-sky-400">{stats.invitedR1}</p>
+                {stats.applied > 0 && (
+                  <span className="text-[10px] text-muted-foreground">{Math.round((stats.invitedR1 / stats.applied) * 100)}%</span>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-l-4 border-l-cyan-500">
+            <CardContent className="pt-4 pb-3">
+              <div className="flex items-center gap-1.5 mb-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400" />
+                <p className="text-muted-foreground text-xs">Completed R1</p>
+              </div>
+              <div className="flex items-baseline gap-1.5">
+                <p className="text-2xl font-bold text-cyan-400">{stats.completedR1}</p>
+                {stats.applied > 0 && (
+                  <span className="text-[10px] text-muted-foreground">{Math.round((stats.completedR1 / stats.applied) * 100)}%</span>
                 )}
               </div>
             </CardContent>
           </Card>
           <Card className="border-l-4 border-l-blue-500">
-            <CardContent className="pt-4">
-              <div className="flex items-center gap-2 mb-1">
-                <ArrowRight className="w-4 h-4 text-blue-400" />
-                <p className="text-muted-foreground text-sm">Round 2</p>
+            <CardContent className="pt-4 pb-3">
+              <div className="flex items-center gap-1.5 mb-1">
+                <ArrowRight className="w-3.5 h-3.5 text-blue-400" />
+                <p className="text-muted-foreground text-xs">Invited to R2</p>
               </div>
-              <div className="flex items-baseline gap-2">
-                <p className="text-2xl font-bold text-blue-400">{stats.round2}</p>
-                {stats.round1 > 0 && (
-                  <span className="text-xs text-muted-foreground">{Math.round((stats.round2 / stats.round1) * 100)}% pass R1</span>
+              <div className="flex items-baseline gap-1.5">
+                <p className="text-2xl font-bold text-blue-400">{stats.invitedR2}</p>
+                {stats.applied > 0 && (
+                  <span className="text-[10px] text-muted-foreground">{Math.round((stats.invitedR2 / stats.applied) * 100)}%</span>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-l-4 border-l-indigo-500">
+            <CardContent className="pt-4 pb-3">
+              <div className="flex items-center gap-1.5 mb-1">
+                <UserCheck className="w-3.5 h-3.5 text-indigo-400" />
+                <p className="text-muted-foreground text-xs">Completed R2</p>
+              </div>
+              <div className="flex items-baseline gap-1.5">
+                <p className="text-2xl font-bold text-indigo-400">{stats.completedR2}</p>
+                {stats.applied > 0 && (
+                  <span className="text-[10px] text-muted-foreground">{Math.round((stats.completedR2 / stats.applied) * 100)}%</span>
                 )}
               </div>
             </CardContent>
           </Card>
           <Card className="border-l-4 border-l-emerald-500">
-            <CardContent className="pt-4">
-              <div className="flex items-center gap-2 mb-1">
-                <Target className="w-4 h-4 text-emerald-400" />
-                <p className="text-muted-foreground text-sm">Successful</p>
+            <CardContent className="pt-4 pb-3">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Target className="w-3.5 h-3.5 text-emerald-400" />
+                <p className="text-muted-foreground text-xs">Successful</p>
               </div>
-              <div className="flex items-baseline gap-2">
+              <div className="flex items-baseline gap-1.5">
                 <p className="text-2xl font-bold text-emerald-400">{stats.successful}</p>
                 {stats.applied > 0 && (
-                  <span className="text-xs text-muted-foreground">{Math.round((stats.successful / stats.applied) * 100)}% overall</span>
+                  <span className="text-[10px] text-muted-foreground">{Math.round((stats.successful / stats.applied) * 100)}%</span>
                 )}
               </div>
             </CardContent>

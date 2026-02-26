@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Mic, CameraOff, PhoneOff, Loader2, Volume2, AlertCircle, Clock } from 'lucide-react';
+import { Mic, CameraOff, Loader2, Volume2, AlertCircle, Clock, Monitor, X } from 'lucide-react';
+import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
 import RecordRTC from 'recordrtc';
 
@@ -88,6 +89,9 @@ export default function VoiceAvatar({
   const isRecordingRef = useRef(false);
   const recordingStreamRef = useRef<MediaStream | null>(null);
 
+  // Periodic recording upload interval
+  const periodicUploadRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   // In-flight welcome audio promises (started on mount, awaited at interview start)
   const welcomeAudioPromisesRef = useRef<Promise<Blob>[] | null>(null);
 
@@ -97,6 +101,12 @@ export default function VoiceAvatar({
   // Submitting guard — prevents browser close during upload
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Mobile detection
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Exit confirmation modal
+  const [showExitModal, setShowExitModal] = useState(false);
+
   // Silence detection for "Done Speaking" nudge
   const [showDoneHint, setShowDoneHint] = useState(false);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -104,30 +114,39 @@ export default function VoiceAvatar({
   // Interview timer state
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [isWrappingUp, setIsWrappingUp] = useState(false);
-  const [timeExpired, setTimeExpired] = useState(false);
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const endInterviewRef = useRef<(() => Promise<void>) | null>(null);
-  const timeExpiredRef = useRef(false);
 
-  // Round 1 (Wayne) - Personality/Drive assessment
+  // Round 1 (Serena) - Personality/Drive assessment
   const round1Prompt = `=== YOUR IDENTITY ===
-  NAME: Wayne
+  NAME: Serena
   ROLE: Elite Talent Scout at Printerpix.
   VIBE: You are warm but incredibly sharp. You are NOT checking boxes. You are hunting for "A-Players" (top 1% talent).
   GOAL: Determine if ${candidateName} has "The Hunger" (drive, resilience, ownership) or if they are just looking for a paycheck.
-  
+
   === THE CANDIDATE ===
   NAME: ${candidateName}
   JOB: ${jobDescription}
-  
+
   === CANDIDATE'S RESUME ===
   ${resumeText?.substring(0, 1000) || 'No resume provided.'}
-  
+
   === YOUR PSYCHOLOGICAL RADAR (WHAT YOU ARE LOOKING FOR) ===
   1. **Internal Locus of Control:** Do they own their failures? Or do they blame "the system," "the manager," or "bad luck"? (Reject excuse-makers).
   2. **Permissionless Action:** Do they wait for instructions, or do they find solutions? Ask for examples of them solving problems without being asked.
   3. **High Standards:** Do they obsess over quality? Do they hate mediocrity?
-  
+
+  === SOFT SKILLS SEGMENT (LAST 5 MINUTES OF THE INTERVIEW) ===
+  In the FINAL 5 minutes of the interview (around the 15-minute mark), transition into evaluating these five soft skills. Transition naturally — do NOT announce "now we're doing the soft skills portion." A good bridge: "Before we wrap up, I'd love to understand a bit more about how you work..."
+
+  1. **Entrepreneurship:** Have they ever built something from scratch, started a side project, or taken a business-minded approach to a problem? Do they think like an owner or an employee?
+  2. **Resourcefulness:** When they lacked tools, budget, or support — what did they do? Did they find creative workarounds or just complain?
+  3. **Drive & Ambition:** What are they working toward? Do they have a vision for their career, or are they just drifting? What's the hardest thing they've pushed through?
+  4. **Proactiveness & Ownership:** Do they wait to be told what to do, or do they spot problems and fix them? Ask for a specific example of something they did that was NOT part of their job description.
+  5. **Collaboration & Communication:** How do they handle disagreements with teammates? Can they explain a complex idea simply? Do they lift others up or work in isolation?
+
+  Get SPECIFIC EXAMPLES for each. Vague answers like "I'm a team player" are not acceptable — push for the story behind the claim.
+
   === INTERVIEW RULES (HUMAN MODE) ===
   1. **No Robot Lists:** Do NOT ask "Can you tell me about a time..." like a script.
   2. **The "Bridge":** Always acknowledge their last answer before pivoting.
@@ -136,55 +155,74 @@ export default function VoiceAvatar({
   3. **Dig Deep:** If they give a vague answer ("I worked hard"), PUSH BACK gently.
      - Say: "Give me the specific numbers. How much money did that actually save?"
   4. **The "Excellence" Test:** Ask questions that reveal if they are a "dead beat" or a "winner."
-  5. **NEVER PRETEND TO BE THE CANDIDATE:** You are Wayne the interviewer. NEVER say "I have experience in..." or describe YOUR work history. You have no background to share. The resume above is THEIR experience, not yours.
-  
+  5. **NEVER PRETEND TO BE THE CANDIDATE:** You are Serena the interviewer. NEVER say "I have experience in..." or describe YOUR work history. You have no background to share. The resume above is THEIR experience, not yours.
+
   === INTERVIEW DURATION ===
-  This interview lasts 15 minutes. You will be told how much time has elapsed.
-  When time is running low (around 13 minutes), wrap up naturally — thank the candidate warmly, summarize your impression briefly, and end with [END_INTERVIEW].
-  If you feel you've gathered enough information before time runs out, you may end early the same way.
+  This interview lasts 20 minutes. You will be told how much time has elapsed.
+  When time is running low (around 18 minutes), wrap up using the EXACT closing script below. Do NOT improvise your own ending.
+
+  === CLOSING SCRIPT (USE THIS EXACTLY WHEN ENDING) ===
+  When it's time to end, say EXACTLY this word for word — do NOT paraphrase, do NOT personalize, do NOT skip any part:
+  "${candidateName}, I've really enjoyed our conversation today. Thank you for being so open and sharing your experiences with me. Our team will review everything and be in touch with next steps soon. I wish you the best of luck — take care! [END_INTERVIEW]"
+  You MUST include [END_INTERVIEW] at the very end. Do NOT add anything after it.
 
   === REMEMBER ===
-  You are Wayne. You ASK questions. You do NOT answer questions about yourself.
+  You are Serena. You ASK questions. You do NOT answer questions about yourself.
   The candidate is ${candidateName}. They ANSWER your questions.`;
 
-  // Round 2 (Atlas) - Technical verification
+  // Round 2 (Nova) - Technical verification
   const dossierQuestions = dossier?.map((q, i) => `${i + 1}. ${q}`).join('\n') || 'No specific questions prepared.';
   
   const round2Prompt = `=== YOUR IDENTITY ===
-  NAME: Atlas
+  NAME: Nova
   ROLE: Senior Technical Architect at Printerpix.
   VIBE: You are professional, direct, and technical. You respect competence and have zero tolerance for BS or buzzwords.
   GOAL: Verify that ${candidateName} actually has the technical depth they claimed in their first interview.
-  
+
   === THE CANDIDATE ===
   NAME: ${candidateName}
   JOB: ${jobDescription}
-  
+
   === CONTEXT ===
-  This candidate passed Round 1 (personality/drive assessment). Now YOU need to verify their technical claims.
-  
+  This candidate passed Round 1 (personality/drive assessment with Serena). Now YOU need to verify their technical claims AND dig deeper into their soft skills.
+
   === TECHNICAL PROBE QUESTIONS (FROM ROUND 1 ANALYSIS) ===
   These are specific technical claims they made. Dig into each one:
   ${dossierQuestions}
-  
+
+  === SOFT SKILLS DEEP DIVE (LAST 5 MINUTES OF THE INTERVIEW) ===
+  In the FINAL 5 minutes of the interview (around the 35-minute mark), transition into a soft skills deep dive. In Round 1, the candidate was assessed on these same areas by Serena. Your job is to DIG DEEPER — verify consistency with their Round 1 answers and get richer, more specific examples. Transition naturally — e.g., "Shifting gears a bit before we close out — I want to revisit some things from your first conversation..."
+
+  1. **Entrepreneurship:** In Round 1 they may have described projects or initiatives. Push deeper — what was the business outcome? Did they measure ROI? Would they do it differently now?
+  2. **Resourcefulness:** Ask about a time they were stuck technically AND organizationally. How did they unblock themselves without waiting for help?
+  3. **Drive & Ambition:** What's the most ambitious technical challenge they've taken on? Not just "hard" — ambitious. What made them pursue it?
+  4. **Proactiveness & Ownership:** Ask for an example of a production incident, tech debt, or process gap they fixed without being asked. What happened AFTER they fixed it?
+  5. **Collaboration & Communication:** How do they handle code review disagreements? Have they ever had to convince a team to adopt a different approach? How did they do it?
+
+  Look for CONSISTENCY with what they told Serena in Round 1. If their stories contradict or change, note it. If they go deeper and reveal more detail, that's a strong signal.
+
   === INTERVIEW RULES (SHOW ME THE CODE MODE) ===
   1. **Verify, Don't Accept:** If they say "I optimized the database," ask HOW. What indexes? What query plans? What was the before/after latency?
   2. **Follow Up Relentlessly:** If they give a surface-level answer, dig deeper. "Walk me through the exact steps."
   3. **Test Understanding:** Ask them to explain tradeoffs. "Why did you choose X over Y?"
   4. **Expose Gaps:** It's OK to find gaps. Say "Interesting. So you're less experienced with X? That's fine, just want to understand your level."
-  5. **NEVER PRETEND TO BE THE CANDIDATE:** You are Atlas the interviewer. NEVER describe YOUR work history or experience. Ask THEM questions.
-  
+  5. **NEVER PRETEND TO BE THE CANDIDATE:** You are Nova the interviewer. NEVER describe YOUR work history or experience. Ask THEM questions.
+
   === INTERVIEW DURATION ===
   This interview lasts 40 minutes. You will be told how much time has elapsed.
-  When time is running low (around 38 minutes), wrap up naturally — thank the candidate, give a brief summary of technical strengths you observed, and end with [END_INTERVIEW].
-  If you feel you've verified enough technical depth before time runs out, you may end early the same way.
+  When time is running low (around 38 minutes), wrap up using the EXACT closing script below. Do NOT improvise your own ending.
+
+  === CLOSING SCRIPT (USE THIS EXACTLY WHEN ENDING) ===
+  When it's time to end, say something close to this (you may personalize slightly based on the conversation, but keep the structure):
+  "${candidateName}, I appreciate you walking me through the technical details today. You've given me a solid picture of your capabilities. Our team will review everything from both rounds and be in touch with next steps. Thanks again for your time — take care! [END_INTERVIEW]"
+  You MUST include [END_INTERVIEW] at the very end. Do NOT add anything after it.
 
   === REMEMBER ===
-  You are Atlas. You ASK technical questions. You do NOT answer questions about yourself.
+  You are Nova. You ASK technical questions. You do NOT answer questions about yourself.
   The candidate is ${candidateName}. They ANSWER your questions.`;
 
   const systemPrompt = round === 2 ? round2Prompt : round1Prompt;
-  const interviewerName = round === 2 ? 'Atlas' : 'Wayne';
+  const interviewerName = round === 2 ? 'Nova' : 'Serena';
 
   // Add entry to conversation history
   const addToConversation = useCallback((role: 'interviewer' | 'candidate', text: string) => {
@@ -365,6 +403,12 @@ export default function VoiceAvatar({
       // Done speaking — reset state and resume listening
       isSpeakingRef.current = false;
       setIsSpeaking(false);
+
+      // Ensure recording AudioContext is active for mic capture during candidate speech
+      if (recAudioCtxRef.current && recAudioCtxRef.current.state === 'suspended') {
+        recAudioCtxRef.current.resume().catch(() => {});
+      }
+
       if (isMicOnRef.current) {
         startDeepgramListeningRef.current?.();
       }
@@ -430,19 +474,6 @@ export default function VoiceAvatar({
 
       // Stop listening while processing
       stopDeepgramListening();
-
-      // If time has expired, deliver a farewell instead of asking another question
-      if (timeExpiredRef.current) {
-        const closingMessage = round === 2
-          ? `That's a great answer, ${candidateName}. We've reached the end of our time together. I really appreciate you walking me through the technical details — it's given me a clear picture of your capabilities and how you think through problems. The team will get back to you regarding the next steps of the process within 2 days. If you have any questions for our hiring team, feel free to drop us an email at printerpix.recruitment@gmail.com. Thanks again, and best of luck!`
-          : `I really appreciate that answer, ${candidateName}. We've reached the end of our time together, and I want to thank you for being so open and thoughtful with your responses. I've really enjoyed getting to know you. The team will get back to you regarding the next steps of the process within 2 days. If you have any specific questions for our hiring team, feel free to drop them an email at printerpix.recruitment@gmail.com. Take care, and best of luck!`;
-
-        addToConversation('interviewer', closingMessage);
-        await speakText(closingMessage);
-        await new Promise(resolve => setTimeout(resolve, 300));
-        endInterviewRef.current?.();
-        return;
-      }
 
       // Call Gemini to generate interviewer response
       const minutesElapsed = Math.floor(elapsedSeconds / 60);
@@ -597,6 +628,14 @@ export default function VoiceAvatar({
   }, []);
 
   // Attach camera stream to video element once it mounts
+  // Detect mobile devices
+  useEffect(() => {
+    const ua = navigator.userAgent;
+    const mobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)
+      || (navigator.maxTouchPoints > 0 && /Mobi|Tablet/i.test(ua));
+    setIsMobile(mobile);
+  }, []);
+
   useEffect(() => {
     if (isCameraOn && userVideoRef.current && userStreamRef.current) {
       userVideoRef.current.srcObject = userStreamRef.current;
@@ -620,8 +659,8 @@ export default function VoiceAvatar({
   // Stores promises — awaited when user clicks Start Interview
   useEffect(() => {
     const welcomeMessage = round === 2
-      ? `Welcome back, ${candidateName}! I'm Atlas, the technical interviewer for the ${jobTitle} role at Printerpix. I've reviewed your conversation with Wayne, and I was impressed. Now I'd like to dig into some of the technical details you mentioned. Same rules apply — take your time, think out loud if it helps, and ask me to repeat anything. Before we begin, could you just confirm that you can hear me clearly? Once you reply, please click the green 'Done speaking' button to let me know!`
-      : `Hi ${candidateName}, great to meet you! I'm Wayne, your interviewer for the ${jobTitle} role at Printerpix. It's completely normal to feel a few butterflies — this is a new experience for most people. Today we'll focus on concrete examples from your experience, because that's the best way to understand how you work. Take your time, think out loud if it helps, and ask me to repeat anything if you're unsure. Before we jump into the questions, could you just confirm that you can hear me clearly? Once you reply, please click the green 'Done speaking' button to let me know!`;
+      ? `Welcome back, ${candidateName}! I'm Nova, the technical interviewer for the ${jobTitle} role at Printerpix. I've reviewed your conversation with Serena, and I was impressed. Now I'd like to dig into some of the technical details you mentioned. Same rules apply — take your time, think out loud if it helps, and ask me to repeat anything. Before we begin, could you just confirm that you can hear me clearly? Once you reply, please click the green 'Done speaking' button to let me know!`
+      : `Hi ${candidateName}, great to meet you! I'm Serena, your interviewer for the ${jobTitle} role at Printerpix. It's completely normal to feel a few butterflies — this is a new experience for most people. Today we'll focus on concrete examples from your experience, because that's the best way to understand how you work. Take your time, think out loud if it helps, and ask me to repeat anything if you're unsure. Before we jump into the questions, could you just confirm that you can hear me clearly? Once you reply, please click the green 'Done speaking' button to let me know!`;
 
     const chunks = splitIntoTTSChunks(welcomeMessage);
     welcomeAudioPromisesRef.current = chunks.map(chunk =>
@@ -638,11 +677,10 @@ export default function VoiceAvatar({
   }, [candidateName, jobTitle, round]);
 
   // Interview timer — starts when call becomes active, cleans up on end/unmount
-  // Round 1: 15 min interview, wrap at 13, expire at 15, hard cutoff 30
-  // Round 2: 40 min interview, wrap at 38, expire at 40, hard cutoff 55
-  const wrapUpAt = round === 2 ? 2280 : 780;    // 38 min : 13 min
-  const expireAt = round === 2 ? 2400 : 900;    // 40 min : 15 min
-  const hardCutoff = round === 2 ? 3300 : 1800; // 55 min : 30 min
+  // Round 1: 20 min target, wrap-up signal at 18 min, hard cutoff 35 min (emergency only)
+  // Round 2: 40 min target, wrap-up signal at 38 min, hard cutoff 55 min (emergency only)
+  const wrapUpAt = round === 2 ? 2280 : 1080;    // 38 min : 18 min
+  const hardCutoff = round === 2 ? 3300 : 2100;  // 55 min : 35 min (emergency safety net)
 
   useEffect(() => {
     if (callStatus === 'active') {
@@ -651,10 +689,6 @@ export default function VoiceAvatar({
           const next = prev + 1;
           if (next === wrapUpAt) {
             setIsWrappingUp(true);
-          }
-          if (next === expireAt) {
-            timeExpiredRef.current = true;
-            setTimeExpired(true);
           }
           if (next >= hardCutoff) {
             endInterviewRef.current?.();
@@ -674,7 +708,7 @@ export default function VoiceAvatar({
         timerIntervalRef.current = null;
       }
     };
-  }, [callStatus, wrapUpAt, expireAt, hardCutoff]);
+  }, [callStatus, wrapUpAt, hardCutoff]);
 
   // Initialize user camera
   const initUserCamera = async () => {
@@ -822,9 +856,52 @@ export default function VoiceAvatar({
       if (sessionRecorderRef.current) {
         sessionRecorderRef.current.startRecording();
         isRecordingRef.current = true;
-        console.log(`[Recording] Round ${round} — RecordRTC recording started`);
+        console.log(`[Recording] ${candidateName} (${candidateId}) Round ${round} — RecordRTC recording started`);
+
+        // Start periodic upload every 5 minutes as a safety net
+        const PERIODIC_UPLOAD_MS = 5 * 60 * 1000;
+        periodicUploadRef.current = setInterval(async () => {
+          if (!sessionRecorderRef.current || !isRecordingRef.current) return;
+          try {
+            // Pause briefly to get a clean blob snapshot
+            const recorder = sessionRecorderRef.current;
+            const blob = recorder.getBlob();
+            if (!blob || blob.size === 0) return;
+
+            const folder = round === 2 ? 'round2' : 'round1';
+            const filePath = `${folder}/${candidateId}-latest.webm`;
+            const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
+            console.log(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Periodic upload: ${sizeMB}MB to ${filePath}`);
+
+            const { error: uploadError } = await supabase.storage
+              .from('interview-recordings')
+              .upload(filePath, blob, {
+                contentType: blob.type || 'video/webm',
+                upsert: true,
+              });
+
+            if (uploadError) {
+              console.warn(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Periodic upload failed:`, uploadError);
+            } else {
+              // Save URL to DB as a safety net
+              const { data: urlData } = supabase.storage
+                .from('interview-recordings')
+                .getPublicUrl(filePath);
+              if (urlData?.publicUrl) {
+                const videoColumn = round === 2 ? 'round_2_video_url' : 'video_url';
+                await supabase
+                  .from('candidates')
+                  .update({ [videoColumn]: urlData.publicUrl })
+                  .eq('id', parseInt(candidateId));
+                console.log(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Periodic save OK: ${sizeMB}MB`);
+              }
+            }
+          } catch (err) {
+            console.warn(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Periodic upload error:`, err);
+          }
+        }, PERIODIC_UPLOAD_MS);
       } else {
-        console.warn(`[Recording] Round ${round} — Recorder not initialized, no recording will be saved`);
+        console.warn(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Recorder not initialized, no recording will be saved`);
       }
 
       // Auto-enable mic so listening starts after welcome message
@@ -835,8 +912,8 @@ export default function VoiceAvatar({
 
       // Welcome message - varies by round
       const welcomeMessage = round === 2
-        ? `Welcome back, ${candidateName}! I'm Atlas, the technical interviewer for the ${jobTitle} role at Printerpix. I've reviewed your conversation with Wayne, and I was impressed. Now I'd like to dig into some of the technical details you mentioned. Same rules apply — take your time, think out loud if it helps, and ask me to repeat anything. Before we begin, could you just confirm that you can hear me clearly? Once you reply, please click the green 'Done speaking' button to let me know!`
-        : `Hi ${candidateName}, great to meet you! I'm Wayne, your interviewer for the ${jobTitle} role at Printerpix. It's completely normal to feel a few butterflies — this is a new experience for most people. Today we'll focus on concrete examples from your experience, because that's the best way to understand how you work. Take your time, think out loud if it helps, and ask me to repeat anything if you're unsure. Before we jump into the questions, could you just confirm that you can hear me clearly? Once you reply, please click the green 'Done speaking' button to let me know!`;
+        ? `Welcome back, ${candidateName}! I'm Nova, the technical interviewer for the ${jobTitle} role at Printerpix. I've reviewed your conversation with Serena, and I was impressed. Now I'd like to dig into some of the technical details you mentioned. Same rules apply — take your time, think out loud if it helps, and ask me to repeat anything. Before we begin, could you just confirm that you can hear me clearly? Once you reply, please click the green 'Done speaking' button to let me know!`
+        : `Hi ${candidateName}, great to meet you! I'm Serena, your interviewer for the ${jobTitle} role at Printerpix. It's completely normal to feel a few butterflies — this is a new experience for most people. Today we'll focus on concrete examples from your experience, because that's the best way to understand how you work. Take your time, think out loud if it helps, and ask me to repeat anything if you're unsure. Before we jump into the questions, could you just confirm that you can hear me clearly? Once you reply, please click the green 'Done speaking' button to let me know!`;
 
       addToConversation('interviewer', welcomeMessage);
 
@@ -919,15 +996,21 @@ Round: ${round}
       audioRef.current = null;
     }
 
+    // Stop periodic upload
+    if (periodicUploadRef.current) {
+      clearInterval(periodicUploadRef.current);
+      periodicUploadRef.current = null;
+    }
+
     // --- Phase 1: Stop recording and finalize blob via RecordRTC ---
     let recordingBlob: Blob | null = null;
-    console.log(`[Recording] Round ${round} — endInterview Phase 1: recorder=${!!sessionRecorderRef.current}, isRecording=${isRecordingRef.current}`);
+    console.log(`[Recording] ${candidateName} (${candidateId}) Round ${round} — endInterview Phase 1: recorder=${!!sessionRecorderRef.current}, isRecording=${isRecordingRef.current}`);
     if (sessionRecorderRef.current && isRecordingRef.current) {
       try {
         recordingBlob = await new Promise<Blob>((resolve, reject) => {
           const recorder = sessionRecorderRef.current!;
           const timeout = setTimeout(() => {
-            console.warn(`[Recording] Round ${round} — Stop timed out after 10s, trying to get blob anyway`);
+            console.warn(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Stop timed out after 10s, trying to get blob anyway`);
             const blob = recorder.getBlob();
             if (blob && blob.size > 0) {
               resolve(blob);
@@ -939,12 +1022,12 @@ Round: ${round}
           recorder.stopRecording(() => {
             clearTimeout(timeout);
             const blob = recorder.getBlob();
-            console.log(`[Recording] Round ${round} — Finalized: ${(blob.size / 1024 / 1024).toFixed(1)}MB, type=${blob.type}`);
+            console.log(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Finalized: ${(blob.size / 1024 / 1024).toFixed(1)}MB, type=${blob.type}`);
             resolve(blob);
           });
         });
       } catch (err) {
-        console.error(`[Recording] Round ${round} — Failed to stop recorder:`, err);
+        console.error(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Failed to stop recorder:`, err);
       }
       isRecordingRef.current = false;
       if (sessionRecorderRef.current) {
@@ -953,7 +1036,7 @@ Round: ${round}
       }
       recordingStreamRef.current = null;
     } else {
-      console.warn(`[Recording] Round ${round} — No active recording to finalize (recorder=${!!sessionRecorderRef.current}, isRecording=${isRecordingRef.current})`);
+      console.warn(`[Recording] ${candidateName} (${candidateId}) Round ${round} — No active recording to finalize (recorder=${!!sessionRecorderRef.current}, isRecording=${isRecordingRef.current})`);
     }
 
     // Close recording audio context
@@ -970,7 +1053,7 @@ Round: ${round}
     }
 
     // --- Phase 2: Upload recording FIRST (fast, protects against tab close) ---
-    console.log(`[Recording] Round ${round} — Phase 2: blob=${!!recordingBlob}, size=${recordingBlob?.size ?? 0}`);
+    console.log(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Phase 2: blob=${!!recordingBlob}, size=${recordingBlob?.size ?? 0}`);
     if (recordingBlob && recordingBlob.size > 0) {
       try {
         setUploadProgress(0);
@@ -978,21 +1061,36 @@ Round: ${round}
         const folder = round === 2 ? 'round2' : 'round1';
         const filePath = `${folder}/${candidateId}-${timestamp}.webm`;
 
-        console.log(`[Recording] Round ${round} — Uploading ${(recordingBlob.size / 1024 / 1024).toFixed(1)}MB to ${filePath}`);
+        console.log(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Uploading ${(recordingBlob.size / 1024 / 1024).toFixed(1)}MB to ${filePath}`);
 
-        const { error: uploadError } = await supabase.storage
-          .from('interview-recordings')
-          .upload(filePath, recordingBlob, {
-            contentType: recordingBlob.type || 'video/webm',
-            upsert: false,
-          });
+        // Upload with retry (1 retry on failure)
+        let uploadSuccess = false;
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          const { error: uploadError } = await supabase.storage
+            .from('interview-recordings')
+            .upload(filePath, recordingBlob, {
+              contentType: recordingBlob.type || 'video/webm',
+              upsert: attempt > 1, // Allow overwrite on retry
+            });
 
-        if (uploadError) {
-          throw uploadError;
+          if (!uploadError) {
+            uploadSuccess = true;
+            break;
+          }
+
+          console.error(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Upload attempt ${attempt} failed:`, uploadError);
+          if (attempt < 2) {
+            console.log(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Retrying upload...`);
+            await new Promise(r => setTimeout(r, 2000));
+          }
+        }
+
+        if (!uploadSuccess) {
+          throw new Error('Upload failed after 2 attempts');
         }
 
         setUploadProgress(100);
-        console.log(`[Recording] Round ${round} — Upload success: ${filePath}`);
+        console.log(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Upload success: ${filePath}`);
 
         // Get public URL and save to DB
         const { data: urlData } = supabase.storage
@@ -1000,29 +1098,38 @@ Round: ${round}
           .getPublicUrl(filePath);
 
         const publicUrl = urlData?.publicUrl;
+        console.log(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Public URL: ${publicUrl || 'NULL'}`);
 
         if (publicUrl) {
           const videoColumn = round === 2 ? 'round_2_video_url' : 'video_url';
-          const { error: dbError } = await supabase
-            .from('candidates')
-            .update({ [videoColumn]: publicUrl })
-            .eq('id', parseInt(candidateId));
 
-          if (dbError) {
-            console.error(`[Recording] Round ${round} — Failed to save ${videoColumn} to DB:`, dbError);
-          } else {
-            console.log(`[Recording] Round ${round} — STORED ${videoColumn}: ${publicUrl}`);
+          // Save URL to DB with retry
+          for (let attempt = 1; attempt <= 2; attempt++) {
+            const { error: dbError } = await supabase
+              .from('candidates')
+              .update({ [videoColumn]: publicUrl })
+              .eq('id', parseInt(candidateId));
+
+            if (!dbError) {
+              console.log(`[Recording] ${candidateName} (${candidateId}) Round ${round} — STORED ${videoColumn}: ${publicUrl}`);
+              break;
+            }
+
+            console.error(`[Recording] ${candidateName} (${candidateId}) Round ${round} — DB save attempt ${attempt} failed:`, dbError);
+            if (attempt < 2) {
+              await new Promise(r => setTimeout(r, 1000));
+            }
           }
         } else {
-          console.error(`[Recording] Round ${round} — No public URL returned for ${filePath}`);
+          console.error(`[Recording] ${candidateName} (${candidateId}) Round ${round} — No public URL returned for ${filePath}`);
         }
       } catch (err) {
-        console.error(`[Recording] Round ${round} — Upload failed:`, err);
+        console.error(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Upload failed:`, err);
       } finally {
         setUploadProgress(null);
       }
     } else {
-      console.warn(`[Recording] Round ${round} — No recording blob to upload (blob=${!!recordingBlob}, size=${recordingBlob?.size ?? 0})`);
+      console.warn(`[Recording] ${candidateName} (${candidateId}) Round ${round} — No recording blob to upload (blob=${!!recordingBlob}, size=${recordingBlob?.size ?? 0})`);
     }
 
     // --- Phase 3: Save transcript via API (slow — triggers Gemini scoring) ---
@@ -1082,7 +1189,7 @@ Round: ${round}
       let transcript = `INTERVIEW TRANSCRIPT\n${'='.repeat(80)}\nCandidate: ${candidateName}\nPosition: ${jobDescription}\nDate: ${now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\nTime: ${now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}\nRound: ${round}\nNote: Interview ended early — candidate left the page\n${'='.repeat(80)}\n\n`;
       for (const entry of entries) {
         const role = entry.role === 'interviewer'
-          ? `${round === 2 ? 'Atlas' : 'Wayne'} (Interviewer)`
+          ? `${round === 2 ? 'Nova' : 'Serena'} (Interviewer)`
           : `${candidateName} (Candidate)`;
         transcript += `${role}:\n${entry.text}\n\n`;
       }
@@ -1130,6 +1237,7 @@ Round: ${round}
     return () => {
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      if (periodicUploadRef.current) clearInterval(periodicUploadRef.current);
       stopDeepgramListening();
       stopMediaCheck();
       if (userStreamRef.current) {
@@ -1160,25 +1268,75 @@ Round: ${round}
   const micFeedback = micLevel < 10 ? 'Too quiet' : micLevel <= 50 ? 'Good!' : 'Great!';
   const micFeedbackColor = micLevel < 10 ? 'text-yellow-400' : 'text-emerald-400';
 
+  // Mobile Device Block
+  if (isMobile) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="max-w-md w-full text-center">
+          <div className="w-20 h-20 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Monitor className="w-10 h-10 text-blue-500" />
+          </div>
+          <h1 className="text-2xl font-bold text-foreground mb-3">
+            Desktop Required
+          </h1>
+          <p className="text-muted-foreground mb-4">
+            This interview requires a camera and microphone on a <strong className="text-foreground">desktop or laptop computer</strong>.
+          </p>
+          <p className="text-muted-foreground/70 text-sm">
+            Please open this same link on a computer with a webcam and microphone to continue.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   // Idle State - Start Screen
   if (callStatus === 'idle') {
+    const firstName = candidateName?.split(' ')[0] || candidateName;
+
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="text-center max-w-lg w-full">
-          {!mediaCheckDone && (
-            <div className="w-32 h-32 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full mx-auto mb-8 flex items-center justify-center">
-              <Volume2 className="w-16 h-16 text-white" />
-            </div>
-          )}
-          <h1 className="text-3xl font-bold text-foreground mb-4">
-            Voice Interview
+        <div className="max-w-xl w-full">
+          {/* Printerpix Logo */}
+          <div className="text-center mb-8">
+            <Image
+              src="/logo.jpg"
+              alt="Printerpix"
+              width={56}
+              height={56}
+              className="rounded-xl mx-auto mb-4"
+            />
+          </div>
+
+          {/* Title */}
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground text-center mb-8">
+            Welcome, <span className="text-cyan-400">{firstName}</span>, to your interview for the <span className="text-cyan-400">{jobTitle}</span> role at Printerpix.
           </h1>
-          <p className="text-xl text-foreground mb-2">
-            Welcome, <span className="text-cyan-400 font-semibold">{candidateName}</span>!
-          </p>
-          <p className="text-muted-foreground mb-6">
-            You&apos;re interviewing for <span className="text-foreground font-medium">{jobTitle}</span> at Printerpix.
-          </p>
+
+          {/* Instructions Card */}
+          <div className="bg-card/80 border border-border rounded-2xl p-6 sm:p-8 mb-8">
+            <p className="text-muted-foreground text-sm mb-5">
+              This is a {round === 2 ? '40' : '15'}-minute guided interview. We want you to perform at your absolute best, so please keep the following in mind:
+            </p>
+            <ul className="space-y-4 text-sm text-muted-foreground">
+              <li className="flex gap-3">
+                <span className="text-cyan-400 font-bold shrink-0">&#x2022;</span>
+                <span><strong className="text-foreground">Secure a strong connection:</strong> We record this conversation for our team to review. A stable internet connection ensures your answers are captured in high quality.</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="text-cyan-400 font-bold shrink-0">&#x2022;</span>
+                <span><strong className="text-foreground">Speak clearly and project:</strong> Find a quiet space and speak at a strong, conversational volume so every word is recorded perfectly.</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="text-cyan-400 font-bold shrink-0">&#x2022;</span>
+                <span><strong className="text-foreground">Be detailed and authentic:</strong> Don&apos;t hold back. Give genuine, honest examples from your past work. The more detail you share, the better we can evaluate your fit for the next stage.</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="text-cyan-400 font-bold shrink-0">&#x2022;</span>
+                <span><strong className="text-foreground">Important:</strong> After finishing each answer, please click the <span className="bg-muted px-2 py-0.5 rounded text-white font-semibold">Done Speaking</span> button to advance to the next question.</span>
+              </li>
+            </ul>
+          </div>
 
           {/* Camera preview + mic level (shown after media check) */}
           {mediaCheckDone && (
@@ -1224,27 +1382,6 @@ Round: ${round}
               )}
             </div>
           )}
-
-          {!mediaCheckDone && (
-            <p className="text-muted-foreground text-sm mb-6">
-              This will be a {round === 2 ? '40' : '15'}-minute conversation with our AI interviewer.<br />
-              Just relax and be yourself.
-            </p>
-          )}
-
-          <div className="bg-card/50 rounded-xl p-4 mb-8 text-left inline-block">
-            <p className="text-muted-foreground text-sm font-medium mb-2">Tips:</p>
-            <ul className="text-muted-foreground text-sm space-y-1">
-              <li>• Find a quiet spot</li>
-              <li>• Speak clearly</li>
-              <li>• There are no wrong answers!</li>
-            </ul>
-            <div className="mt-3 pt-3 border-t border-border">
-              <p className="text-cyan-400 text-sm font-medium">
-                Important: After finishing each answer, click the <span className="bg-muted px-2 py-0.5 rounded text-white font-semibold">Done Speaking</span> button so the interviewer knows you&apos;re ready for the next question.
-              </p>
-            </div>
-          </div>
 
           {error && (
             <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-6">
@@ -1361,22 +1498,55 @@ Round: ${round}
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      {/* Exit button - fixed top left */}
+      <button
+        onClick={() => setShowExitModal(true)}
+        className="fixed top-4 left-4 z-20 w-9 h-9 rounded-full bg-card/80 backdrop-blur-sm border border-border text-muted-foreground hover:text-foreground hover:bg-card transition-all flex items-center justify-center"
+        title="Exit Interview"
+      >
+        <X className="w-5 h-5" />
+      </button>
+
+      {/* Exit Confirmation Modal */}
+      {showExitModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-card border border-border rounded-2xl p-8 max-w-sm w-full mx-4 shadow-2xl">
+            <h2 className="text-xl font-bold text-foreground mb-3">Exit Interview?</h2>
+            <p className="text-muted-foreground mb-6">
+              Are you sure you want to exit the interview without completing it? Your progress will be lost.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowExitModal(false)}
+                className="flex-1 px-4 py-3 rounded-lg bg-muted text-foreground font-medium hover:bg-muted/80 transition-all"
+              >
+                Continue Interview
+              </button>
+              <button
+                onClick={() => {
+                  setShowExitModal(false);
+                  endInterview();
+                }}
+                className="flex-1 px-4 py-3 rounded-lg bg-red-500 text-white font-medium hover:bg-red-600 transition-all"
+              >
+                Exit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Timer - fixed top right */}
       <div className="fixed top-4 right-4 z-20">
         <div className={`flex items-center gap-2 px-4 py-2 rounded-lg backdrop-blur-sm border ${
-          timeExpired
-            ? 'bg-red-500/30 border-red-500/50 text-red-300'
-            : timerUrgent
-              ? 'bg-red-500/20 border-red-500/40 text-red-400'
-              : 'bg-card/80 border-border text-muted-foreground'
+          timerUrgent
+            ? 'bg-red-500/20 border-red-500/40 text-red-400'
+            : 'bg-card/80 border-border text-muted-foreground'
         }`}>
           <Clock className="w-4 h-4" />
           <span className={`font-mono text-lg font-semibold ${timerUrgent ? 'animate-pulse' : ''}`}>
             {timerDisplay}
           </span>
-          {timeExpired && (
-            <span className="text-xs font-medium ml-1">Finish your answer</span>
-          )}
         </div>
       </div>
 
@@ -1477,14 +1647,6 @@ Round: ${round}
           </div>
         )}
 
-        {/* End Call */}
-        <button
-          onClick={endInterview}
-          className="w-14 h-14 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-all"
-          title="End Interview"
-        >
-          <PhoneOff className="w-6 h-6" />
-        </button>
       </div>
 
       {/* Error Toast */}

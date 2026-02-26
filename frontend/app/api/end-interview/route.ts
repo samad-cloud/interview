@@ -194,7 +194,7 @@ export async function POST(request: Request) {
     const candidateWords = candidateResponses
       .map((r: string) => {
         // Extract text up to the next speaker marker or end
-        const endIdx = r.search(/\(Wayne\):|\(Atlas\):|\(Interviewer\):/);
+        const endIdx = r.search(/\(Serena\):|\(Nova\):|\(Wayne\):|\(Atlas\):|\(Interviewer\):/);
         return endIdx > -1 ? r.substring(0, endIdx) : r;
       })
       .join(' ')
@@ -203,7 +203,7 @@ export async function POST(request: Request) {
       .filter((w: string) => w.length > 0);
 
     if (candidateWords.length < 15) {
-      console.log(`[End Interview] Suspicious transcript for candidate ${candidateId}: only ${candidateWords.length} candidate words`);
+      console.log(`[End Interview] Suspicious transcript for ${candidate.full_name} (${candidateId}): only ${candidateWords.length} candidate words`);
       // Save transcript but don't advance status — candidate can retake
       await supabase
         .from('candidates')
@@ -227,18 +227,18 @@ export async function POST(request: Request) {
       });
     }
 
-    // Step 4: Single AI call — scoring + detailed notes together (prevents conflicts)
-    const prompt = `You are a senior talent evaluator producing BOTH a score and detailed interview notes for a Round 1 personality and drive interview. This round does NOT test technical skills — it tests hunger, resilience, and ownership mindset.
+    // Step 4: Fetch configurable prompt from DB (fall back to hardcoded default)
+    const FALLBACK_ROUND_1_PROMPT = `You are a senior talent evaluator producing BOTH a score and detailed interview notes for a Round 1 personality and drive interview. This round does NOT test technical skills — it tests hunger, resilience, and ownership mindset.
 
 CRITICAL: Your score, decision, and notes MUST be fully consistent. If you score below 70, your recommendation in the notes must NOT suggest proceeding. If you score 80+, your notes should reflect genuine enthusiasm. There must be ZERO contradiction between the numeric score and the written assessment.
 
-CANDIDATE: ${candidate.full_name || 'Unknown'}
-JOB TITLE: ${jobTitle}
-JOB DESCRIPTION: ${jobDescription}
-RESUME HIGHLIGHTS: ${resumeExcerpt}
+CANDIDATE: {candidate_name}
+JOB TITLE: {job_title}
+JOB DESCRIPTION: {job_description}
+RESUME HIGHLIGHTS: {resume_excerpt}
 
 TRANSCRIPT:
-${transcriptText}
+{transcript}
 
 SCORING CRITERIA (what this round actually tested):
 1. Internal Locus of Control — Do they own their failures or blame others?
@@ -247,11 +247,18 @@ SCORING CRITERIA (what this round actually tested):
 4. Drive & Resilience — Do they push through setbacks or give up easily?
 5. Communication — Are they articulate, specific, and honest? Or vague and evasive?
 
+SOFT SKILLS EVALUATION (weight these equally with the criteria above):
+6. Entrepreneurship — Have they built anything from scratch, shown business-minded thinking, or taken ownership like a founder?
+7. Resourcefulness — When they lacked resources, tools, or support, did they find creative workarounds or just complain?
+8. Drive & Ambition — Do they have a clear vision for their career? What's the hardest thing they pushed through?
+9. Proactiveness & Ownership — Did they fix problems that weren't their job? Do they spot issues before being told?
+10. Collaboration & Communication — Can they navigate disagreements, explain complex ideas simply, and lift others up?
+
 SCORING GUIDE:
-- 80-100: Clear A-player. Owns failures, acts without permission, gives specific examples, high standards.
-- 60-79: Solid candidate. Shows some drive but may be vague in places or lack standout moments.
-- 40-59: Mediocre. Generic answers, blames circumstances, waits for instructions, no fire.
-- 0-39: Red flags. Evasive, entitled, excuse-maker, or disengaged.
+- 80-100: Clear A-player. Owns failures, acts without permission, gives specific examples, high standards. Shows entrepreneurial thinking, resourcefulness, and genuine ambition.
+- 60-79: Solid candidate. Shows some drive but may be vague in places or lack standout moments. Decent soft skills but no exceptional examples.
+- 40-59: Mediocre. Generic answers, blames circumstances, waits for instructions, no fire. Soft skills are surface-level with no concrete examples.
+- 0-39: Red flags. Evasive, entitled, excuse-maker, or disengaged. No evidence of entrepreneurship, ownership, or collaboration.
 
 NOTES INSTRUCTIONS:
 - Be specific — reference actual things the candidate said, not generic observations.
@@ -260,6 +267,27 @@ NOTES INSTRUCTIONS:
 - The recommendation MUST align with your score and decision — do not contradict yourself.
 - Follow-up questions should target gaps or areas that need deeper exploration in Round 2.
 - For technicalAssessment: set to null since this is a personality round, not technical.`;
+
+    let promptTemplate = FALLBACK_ROUND_1_PROMPT;
+    try {
+      const { data: dbPrompt } = await supabase
+        .from('prompts')
+        .select('system_prompt')
+        .eq('name', 'round_1_scoring')
+        .single();
+      if (dbPrompt?.system_prompt) {
+        promptTemplate = dbPrompt.system_prompt;
+      }
+    } catch (e) {
+      console.warn('[End Interview] Failed to fetch prompt from DB, using fallback:', e);
+    }
+
+    const prompt = promptTemplate
+      .replace(/\{candidate_name\}/g, candidate.full_name || 'Unknown')
+      .replace(/\{job_title\}/g, jobTitle)
+      .replace(/\{job_description\}/g, jobDescription)
+      .replace(/\{resume_excerpt\}/g, resumeExcerpt)
+      .replace(/\{transcript\}/g, transcriptText);
 
     const result = await model.generateContent(prompt);
     const analysis: CombinedAnalysis = JSON.parse(result.response.text());
@@ -291,25 +319,25 @@ NOTES INSTRUCTIONS:
       .select('video_url')
       .eq('id', candidateId)
       .single();
-    console.log(`[End Interview] Recording stored for candidate ${candidateId}: ${recCheck?.video_url ? 'YES' : 'NO — video_url is null'}`);
+    console.log(`[End Interview] Recording stored for ${candidate.full_name} (${candidateId}): ${recCheck?.video_url ? 'YES' : 'NO — video_url is null'}`);
 
-    console.log(`[End Interview] Candidate ${candidateId} scored ${analysis.score}/100 - ${analysis.decision}`);
+    console.log(`[End Interview] ${candidate.full_name} (${candidateId}) scored ${analysis.score}/100 - ${analysis.decision}`);
 
     // Step 6: If score qualifies, generate dossier now and schedule Round 2 invite for next day 10 AM UTC
     // The delayed send gives the impression of human review before advancing candidates.
     if (analysis.score >= 70 && (analysis.decision === 'Strong Hire' || analysis.decision === 'Hire')) {
-      console.log(`[End Interview] Candidate ${candidateId} qualified for Round 2 (score: ${analysis.score}, decision: ${analysis.decision})`);
+      console.log(`[End Interview] ${candidate.full_name} (${candidateId}) qualified for Round 2 (score: ${analysis.score}, decision: ${analysis.decision})`);
 
       // Generate dossier immediately while transcript is fresh
       try {
         const dossierResult = await generateDossier(String(candidateId));
         if (dossierResult.success) {
-          console.log(`[End Interview] Generated ${dossierResult.dossier?.length || 0} probe questions for candidate ${candidateId}`);
+          console.log(`[End Interview] Generated ${dossierResult.dossier?.length || 0} probe questions for ${candidate.full_name} (${candidateId})`);
         } else {
-          console.warn(`[End Interview] Dossier generation failed for ${candidateId}: ${dossierResult.error}`);
+          console.warn(`[End Interview] Dossier generation failed for ${candidate.full_name} (${candidateId}): ${dossierResult.error}`);
         }
       } catch (err) {
-        console.error(`[End Interview] Dossier error for candidate ${candidateId}:`, err);
+        console.error(`[End Interview] Dossier error for ${candidate.full_name} (${candidateId}):`, err);
       }
 
       // Schedule Round 2 invite for next day at 10 AM UTC (simulates human review delay)
@@ -330,12 +358,12 @@ NOTES INSTRUCTIONS:
         .eq('id', candidateId);
 
       if (scheduleError) {
-        console.error(`[End Interview] Failed to schedule Round 2 invite for ${candidateId}:`, scheduleError);
+        console.error(`[End Interview] Failed to schedule Round 2 invite for ${candidate.full_name} (${candidateId}):`, scheduleError);
       } else {
-        console.log(`[End Interview] Round 2 invite scheduled for ${candidateId} at ${nextDay10AM.toISOString()}`);
+        console.log(`[End Interview] Round 2 invite scheduled for ${candidate.full_name} (${candidateId}) at ${nextDay10AM.toISOString()}`);
       }
     } else {
-      console.log(`[End Interview] Candidate ${candidateId} not eligible for Round 2 (score: ${analysis.score}, decision: ${analysis.decision})`);
+      console.log(`[End Interview] ${candidate.full_name} (${candidateId}) not eligible for Round 2 (score: ${analysis.score}, decision: ${analysis.decision})`);
     }
 
     // Step 7: Return success with analysis (without notes — client doesn't need them)

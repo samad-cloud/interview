@@ -74,34 +74,63 @@ export async function generateFinalVerdict(candidateId: string): Promise<Verdict
       return { success: false, error: 'No Round 2 transcript found' };
     }
 
-    // Generate the final verdict using AI SDK with structured output
-    const prompt = `You are the Hiring Committee making a final decision on ${candidate.full_name || 'this candidate'}.
+    // Fetch configurable prompt from DB (fall back to hardcoded default)
+    const FALLBACK_ROUND_2_PROMPT = `You are the Hiring Committee making a final decision on {candidate_name}.
 
-JOB: ${jobDesc.substring(0, 1500) || 'Software Engineering Role'}
+JOB: {job_description}
 
-ROUND 1 SCORE (Personality/Drive): ${round1Score}/100
+ROUND 1 SCORE (Personality/Drive): {round_1_score}/100
 
 ROUND 2 TRANSCRIPT (Technical Interview):
-${round2Transcript.substring(0, 6000)}
+{transcript}
 
 YOUR TASK:
 1. Grade the Technical Skills demonstrated in Round 2 (0-100)
-2. Provide a Final Verdict based on BOTH rounds
-3. Write a 2-sentence executive summary for the Hiring Manager
-4. Identify key technical strengths and gaps
-5. Provide a specific recommendation for next steps
+2. Evaluate the Soft Skills Deep Dive from Round 2 — did their answers show consistency with Round 1? Did they go deeper?
+3. Provide a Final Verdict based on BOTH rounds (technical + soft skills combined)
+4. Write a 2-sentence executive summary for the Hiring Manager
+5. Identify key technical strengths and gaps
+6. Provide a specific recommendation for next steps
 
-SCORING GUIDE:
+SCORING GUIDE (Technical):
 - 80-100: Strong technical depth, can explain implementation details, understands tradeoffs
 - 60-79: Solid fundamentals, some gaps in depth, capable of learning
 - 40-59: Surface-level knowledge, relies on buzzwords, needs significant mentorship
 - 0-39: Does not meet technical bar, unable to explain their own work
 
+SOFT SKILLS TO EVALUATE (factor into your verdict and summary):
+- Entrepreneurship: Did they demonstrate founder-like thinking, initiative, or building something from scratch?
+- Resourcefulness: Did they show creative problem-solving when resources were limited?
+- Drive & Ambition: Do they have a clear career vision and have they pursued ambitious challenges?
+- Proactiveness & Ownership: Did they give examples of fixing problems without being asked?
+- Collaboration & Communication: Can they navigate disagreements, explain ideas clearly, and work well with others?
+- Consistency: Do their soft skill answers in Round 2 align with what they said in Round 1, or do stories contradict?
+
 VERDICT OPTIONS:
-- "Strong Hire" - Both rounds excellent (avg 80+), clear A-player
-- "Hire" - Good performance in both (avg 65+), solid candidate
-- "Weak Hire" - Mixed signals, might work with mentorship
-- "Reject" - Failed one or both rounds, not a fit`;
+- "Strong Hire" - Both rounds excellent (avg 80+), clear A-player with strong soft skills
+- "Hire" - Good performance in both (avg 65+), solid candidate with adequate soft skills
+- "Weak Hire" - Mixed signals, might work with mentorship. Soft skills may compensate for technical gaps or vice versa
+- "Reject" - Failed one or both rounds, not a fit. Weak soft skills AND technical gaps`;
+
+    let promptTemplate = FALLBACK_ROUND_2_PROMPT;
+    try {
+      const { data: dbPrompt } = await supabase
+        .from('prompts')
+        .select('system_prompt')
+        .eq('name', 'round_2_scoring')
+        .single();
+      if (dbPrompt?.system_prompt) {
+        promptTemplate = dbPrompt.system_prompt;
+      }
+    } catch (e) {
+      console.warn('[Final Verdict] Failed to fetch prompt from DB, using fallback:', e);
+    }
+
+    const prompt = promptTemplate
+      .replace(/\{candidate_name\}/g, candidate.full_name || 'this candidate')
+      .replace(/\{job_description\}/g, jobDesc.substring(0, 1500) || 'Software Engineering Role')
+      .replace(/\{round_1_score\}/g, String(round1Score))
+      .replace(/\{transcript\}/g, round2Transcript.substring(0, 6000));
 
     const { object: fullVerdict } = await generateObject({
       model: gemini,

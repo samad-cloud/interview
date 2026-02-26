@@ -185,7 +185,7 @@ export default function Round2Page() {
     }
   }
 
-  // Success - Render Round 2 Voice Interview with Atlas persona
+  // Success - Render Round 2 Voice Interview with Nova persona
   return (
     <VoiceAvatar
       candidateId={String(candidate.id)}

@@ -68,7 +68,7 @@ export async function POST(request: Request) {
         .update({ round_2_transcript: transcriptText })
         .eq('id', candidateId);
 
-      console.log(`[End Interview Round 2] Incomplete transcript for candidate ${candidateId}: no candidate responses`);
+      console.log(`[End Interview Round 2] Incomplete transcript for ${candidate.full_name} (${candidateId}): no candidate responses`);
       return NextResponse.json({
         success: true,
         incomplete: true,
@@ -80,7 +80,7 @@ export async function POST(request: Request) {
     const candidateResponses = transcriptText.split('(Candidate):').slice(1);
     const candidateWords = candidateResponses
       .map((r: string) => {
-        const endIdx = r.search(/\(Wayne\):|\(Atlas\):|\(Interviewer\):/);
+        const endIdx = r.search(/\(Serena\):|\(Nova\):|\(Wayne\):|\(Atlas\):|\(Interviewer\):/);
         return endIdx > -1 ? r.substring(0, endIdx) : r;
       })
       .join(' ')
@@ -95,7 +95,7 @@ export async function POST(request: Request) {
         .update({ round_2_transcript: transcriptText })
         .eq('id', candidateId);
 
-      console.log(`[End Interview Round 2] Suspicious transcript for candidate ${candidateId}: only ${candidateWords.length} candidate words`);
+      console.log(`[End Interview Round 2] Suspicious transcript for ${candidate.full_name} (${candidateId}): only ${candidateWords.length} candidate words`);
       return NextResponse.json({
         success: true,
         incomplete: true,
@@ -120,7 +120,7 @@ export async function POST(request: Request) {
       );
     }
 
-    console.log(`[End Interview Round 2] Saved transcript for candidate ${candidateId}`);
+    console.log(`[End Interview Round 2] Saved transcript for ${candidate.full_name} (${candidateId})`);
 
     // Check if recording was stored for this candidate
     const { data: recCheck } = await supabase
@@ -128,19 +128,19 @@ export async function POST(request: Request) {
       .select('round_2_video_url')
       .eq('id', candidateId)
       .single();
-    console.log(`[End Interview Round 2] Recording stored for candidate ${candidateId}: ${recCheck?.round_2_video_url ? 'YES — ' + recCheck.round_2_video_url : 'NO — round_2_video_url is null'}`);
+    console.log(`[End Interview Round 2] Recording stored for ${candidate.full_name} (${candidateId}): ${recCheck?.round_2_video_url ? 'YES — ' + recCheck.round_2_video_url : 'NO — round_2_video_url is null'}`);
 
     // Generate final verdict — scores R2, updates round_2_rating, status, and current_stage
     let verdictResult = null;
     try {
       verdictResult = await generateFinalVerdict(String(candidateId));
       if (verdictResult.success) {
-        console.log(`[End Interview Round 2] Final verdict for candidate ${candidateId}: ${verdictResult.verdict?.verdict} (Score: ${verdictResult.verdict?.score}/100)`);
+        console.log(`[End Interview Round 2] Final verdict for ${candidate.full_name} (${candidateId}): ${verdictResult.verdict?.verdict} (Score: ${verdictResult.verdict?.score}/100)`);
       } else {
-        console.error(`[End Interview Round 2] Verdict generation failed for ${candidateId}: ${verdictResult.error}`);
+        console.error(`[End Interview Round 2] Verdict generation failed for ${candidate.full_name} (${candidateId}): ${verdictResult.error}`);
       }
     } catch (err) {
-      console.error(`[End Interview Round 2] Verdict error for candidate ${candidateId}:`, err);
+      console.error(`[End Interview Round 2] Verdict error for ${candidate.full_name} (${candidateId}):`, err);
     }
 
     // Auto-generate interview notes with both transcripts (fire-and-forget)
@@ -151,9 +151,9 @@ export async function POST(request: Request) {
       round1Transcript: candidate.interview_transcript || null,
       round2Transcript: transcriptText,
     }).then(() => {
-      console.log(`[End Interview Round 2] Auto-generated notes for candidate ${candidateId}`);
+      console.log(`[End Interview Round 2] Auto-generated notes for ${candidate.full_name} (${candidateId})`);
     }).catch((err) => {
-      console.error(`[End Interview Round 2] Failed to auto-generate notes for ${candidateId}:`, err);
+      console.error(`[End Interview Round 2] Failed to auto-generate notes for ${candidate.full_name} (${candidateId}):`, err);
     });
 
     return NextResponse.json({
