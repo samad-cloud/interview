@@ -15,7 +15,8 @@ export async function POST(req: NextRequest) {
     const candidateId = formData.get('candidateId') as string;
     const chunkIndex  = formData.get('chunkIndex') as string;
     const round       = formData.get('round') as string;
-    const mimeType    = (formData.get('mimeType') as string) || 'video/webm';
+    // Strip codec specifier — Supabase only accepts base MIME types (e.g. video/webm not video/webm;codecs=vp9)
+    const mimeType    = ((formData.get('mimeType') as string) || 'video/webm').split(';')[0].trim();
     const chunk       = formData.get('chunk') as File | null;
 
     if (!candidateId || chunkIndex === null || !round || !chunk) {

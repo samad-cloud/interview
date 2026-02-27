@@ -15,7 +15,8 @@ export async function POST(req: NextRequest) {
 
   try {
     const { candidateId, round, chunkCount, mimeType: rawMime } = await req.json();
-    const mimeType = rawMime || 'video/webm';
+    // Strip codec specifier — Supabase only accepts base MIME types (e.g. video/webm not video/webm;codecs=vp9)
+    const mimeType = (rawMime || 'video/webm').split(';')[0].trim();
     const fileExt  = mimeType.includes('mp4') ? 'mp4' : 'webm';
 
     if (!candidateId || !round || typeof chunkCount !== 'number' || chunkCount === 0) {
