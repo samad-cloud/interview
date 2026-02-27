@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Mic, CameraOff, Loader2, Volume2, AlertCircle, Clock, Monitor, X } from 'lucide-react';
 import Image from 'next/image';
-import { supabase } from '@/lib/supabaseClient';
 
 // ── IndexedDB helpers for chunked recording ──────────────────────────────────
 const IDB_NAME  = 'interview-recording-chunks';
@@ -130,6 +129,9 @@ export default function VoiceAvatar({
   const chunkDBRef = useRef<IDBDatabase | null>(null);
   const isRecordingRef = useRef(false);
   const recordingStreamRef = useRef<MediaStream | null>(null);
+  const chunkIndexRef = useRef(0);
+  const pendingChunkUploadsRef = useRef<Promise<void>[]>([]);
+  const recordingMimeTypeRef = useRef<string>('video/webm');
 
   // In-flight welcome audio promises (started on mount, awaited at interview start)
   const welcomeAudioPromisesRef = useRef<Promise<Blob>[] | null>(null);
@@ -274,6 +276,22 @@ export default function VoiceAvatar({
     conversationHistoryRef.current.push(entry);
   }, [candidateName, interviewerName]);
 
+  // Ship a recording chunk to the server for incremental backup + server-side logging
+  // Returns a Promise so endInterview can await all in-flight uploads before finalizing
+  const uploadChunkToServer = (chunkIndex: number, chunk: Blob): Promise<void> => {
+    const formData = new FormData();
+    formData.append('candidateId', candidateId);
+    formData.append('chunkIndex', String(chunkIndex));
+    formData.append('round', String(round));
+    formData.append('mimeType', recordingMimeTypeRef.current);
+    formData.append('chunk', chunk, `chunk_${chunkIndex}.webm`);
+    return fetch('/api/save-recording-chunk', { method: 'POST', body: formData })
+      .then(() => {})
+      .catch(() => {
+        // Server chunk upload failed — chunk still in IndexedDB as local backup
+      });
+  };
+
   // Initialize session recording using native MediaRecorder + IndexedDB chunk buffering
   const initSessionRecording = useCallback(async () => {
     try {
@@ -281,6 +299,8 @@ export default function VoiceAvatar({
       const db = await openChunkDB();
       await idbClearChunks(db);
       chunkDBRef.current = db;
+      chunkIndexRef.current = 0;
+      pendingChunkUploadsRef.current = [];
 
       // Create audio context for mixing mic + TTS audio
       const audioCtx = new AudioContext();
@@ -320,9 +340,10 @@ export default function VoiceAvatar({
 
       // Pick best supported MIME type
       const mimeType = hasVideo
-        ? (['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
-            .find(t => MediaRecorder.isTypeSupported(t)) ?? 'video/webm')
-        : 'audio/webm;codecs=opus';
+        ? (['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4;codecs=avc1', 'video/mp4']
+            .find(t => MediaRecorder.isTypeSupported(t)) ?? 'video/mp4')
+        : (['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4;codecs=mp4a.40.2', 'audio/mp4']
+            .find(t => MediaRecorder.isTypeSupported(t)) ?? 'audio/mp4');
 
       const recorder = new MediaRecorder(combinedStream, {
         mimeType,
@@ -330,18 +351,24 @@ export default function VoiceAvatar({
         audioBitsPerSecond: 128_000,
       });
 
-      // Each 30s chunk → persisted to IndexedDB immediately (disk, not RAM)
+      // Each 30s chunk → persisted to IndexedDB + shipped to server for incremental backup
       recorder.ondataavailable = async (e) => {
-        if (e.data && e.data.size > 0 && chunkDBRef.current) {
-          try {
-            await idbSaveChunk(chunkDBRef.current, e.data);
-          } catch {
-            // IndexedDB write failed — chunk lost, interview continues
+        if (e.data && e.data.size > 0) {
+          const idx = chunkIndexRef.current++;
+          if (chunkDBRef.current) {
+            try {
+              await idbSaveChunk(chunkDBRef.current, e.data);
+            } catch {
+              // IndexedDB write failed — chunk lost locally, server copy still being sent
+            }
           }
+          // Upload to server and track the promise so Phase 2 can await all before finalizing
+          pendingChunkUploadsRef.current.push(uploadChunkToServer(idx, e.data));
         }
       };
 
       sessionMediaRecorderRef.current = recorder;
+      recordingMimeTypeRef.current = recorder.mimeType || 'video/webm';
     } catch {
       // Recording init failed — interview proceeds without recording
     }
@@ -590,9 +617,11 @@ export default function VoiceAvatar({
       socket.onopen = () => {
         setIsListening(true);
 
-        // Start MediaRecorder
+        // Start MediaRecorder — pick best supported audio format (Safari needs mp4/aac)
+        const sttMimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4;codecs=mp4a.40.2', 'audio/mp4']
+          .find(t => MediaRecorder.isTypeSupported(t)) ?? 'audio/mp4';
         const mediaRecorder = new MediaRecorder(audioStream, {
-          mimeType: 'audio/webm;codecs=opus',
+          mimeType: sttMimeType,
         });
 
         mediaRecorder.ondataavailable = (event) => {
@@ -983,28 +1012,19 @@ Round: ${round}
     }
 
 
-    // --- Phase 1: Stop MediaRecorder, flush final chunk, assemble from IndexedDB ---
-    let recordingBlob: Blob | null = null;
+    // --- Phase 1: Stop MediaRecorder, flush final chunk to server ---
+    const totalChunks = chunkIndexRef.current;
     if (sessionMediaRecorderRef.current && isRecordingRef.current) {
       try {
-        // Stop recorder — triggers one final ondataavailable before 'stop' fires
-        const mimeType = sessionMediaRecorderRef.current.mimeType || 'video/webm';
+        // Stop recorder — triggers one final ondataavailable (uploaded via pendingChunkUploadsRef)
         await new Promise<void>((resolve) => {
           const recorder = sessionMediaRecorderRef.current!;
-          const timeout = setTimeout(() => resolve(), 5000); // max 5s wait
+          const timeout = setTimeout(() => resolve(), 5000);
           recorder.addEventListener('stop', () => { clearTimeout(timeout); resolve(); }, { once: true });
           recorder.stop();
         });
-
-        // Read all persisted chunks from IndexedDB and assemble single Blob
-        if (chunkDBRef.current) {
-          const chunks = await idbGetAllChunks(chunkDBRef.current);
-          if (chunks.length > 0) {
-            recordingBlob = new Blob(chunks, { type: mimeType });
-          }
-        }
       } catch {
-        // Failed to finalize recording
+        // Failed to stop recorder cleanly
       }
       isRecordingRef.current = false;
       sessionMediaRecorderRef.current = null;
@@ -1024,71 +1044,27 @@ Round: ${round}
       userStreamRef.current.getTracks().forEach(track => track.stop());
     }
 
-    // --- Phase 2: Upload recording FIRST (fast, protects against tab close) ---
-    if (recordingBlob && recordingBlob.size > 0) {
+    // --- Phase 2: Wait for all chunk uploads, then ask server to assemble + finalize ---
+    if (totalChunks > 0) {
       try {
         setUploadProgress(0);
-        const timestamp = Date.now();
-        const folder = round === 2 ? 'round2' : 'round1';
-        const filePath = `${folder}/${candidateId}-${timestamp}.webm`;
+        // Ensure every in-flight chunk upload (including the final one) reaches the server
+        await Promise.allSettled(pendingChunkUploadsRef.current);
+        pendingChunkUploadsRef.current = [];
+        setUploadProgress(50);
 
-        // Upload with retry (1 retry on failure)
-        let uploadSuccess = false;
-        for (let attempt = 1; attempt <= 2; attempt++) {
-          const { error: uploadError } = await supabase.storage
-            .from('interview-recordings')
-            .upload(filePath, recordingBlob, {
-              contentType: recordingBlob.type || 'video/webm',
-              upsert: attempt > 1, // Allow overwrite on retry
-            });
-
-          if (!uploadError) {
-            uploadSuccess = true;
-            break;
-          }
-
-          if (attempt < 2) {
-            await new Promise(r => setTimeout(r, 2000));
-          }
-        }
-
-        if (!uploadSuccess) {
-          throw new Error('Upload failed after 2 attempts');
-        }
+        // Server downloads all chunks from Supabase, concatenates, uploads final file, updates DB
+        await fetch('/api/finalize-recording', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ candidateId: parseInt(candidateId), round, chunkCount: totalChunks, mimeType: recordingMimeTypeRef.current }),
+        });
 
         setUploadProgress(100);
-
-        // Get public URL and save to DB
-        const { data: urlData } = supabase.storage
-          .from('interview-recordings')
-          .getPublicUrl(filePath);
-
-        const publicUrl = urlData?.publicUrl;
-
-        if (publicUrl) {
-          const videoColumn = round === 2 ? 'round_2_video_url' : 'video_url';
-
-          // Save URL to DB with retry
-          for (let attempt = 1; attempt <= 2; attempt++) {
-            const { error: dbError } = await supabase
-              .from('candidates')
-              .update({ [videoColumn]: publicUrl })
-              .eq('id', parseInt(candidateId));
-
-            if (!dbError) {
-              break;
-            }
-
-            if (attempt < 2) {
-              await new Promise(r => setTimeout(r, 1000));
-            }
-          }
-        }
       } catch {
-        // Upload failed
+        // Finalize failed — chunks are safely stored in Supabase for manual recovery
       } finally {
         setUploadProgress(null);
-        // Clear IndexedDB chunks — data is now in Supabase (or upload failed, transcript is priority)
         if (chunkDBRef.current) {
           idbClearChunks(chunkDBRef.current).catch(() => {});
           chunkDBRef.current = null;
