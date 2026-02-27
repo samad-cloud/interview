@@ -281,7 +281,6 @@ export default function VoiceAvatar({
       const db = await openChunkDB();
       await idbClearChunks(db);
       chunkDBRef.current = db;
-      console.log('[REC] IndexedDB opened and cleared — ready for new session');
 
       // Create audio context for mixing mic + TTS audio
       const audioCtx = new AudioContext();
@@ -318,7 +317,6 @@ export default function VoiceAvatar({
       const combinedStream = new MediaStream(combinedTracks);
       const hasVideo = combinedTracks.some(t => t.kind === 'video');
       recordingStreamRef.current = combinedStream;
-      console.log(`[REC] Combined stream built — tracks: ${combinedTracks.map(t => t.kind).join(', ')} | hasVideo: ${hasVideo}`);
 
       // Pick best supported MIME type
       const mimeType = hasVideo
@@ -332,27 +330,19 @@ export default function VoiceAvatar({
         audioBitsPerSecond: 128_000,
       });
 
-      let chunkCount = 0;
       // Each 30s chunk → persisted to IndexedDB immediately (disk, not RAM)
       recorder.ondataavailable = async (e) => {
         if (e.data && e.data.size > 0 && chunkDBRef.current) {
           try {
             await idbSaveChunk(chunkDBRef.current, e.data);
-            chunkCount++;
-            console.log(`[REC] Chunk #${chunkCount} saved to IndexedDB — size: ${(e.data.size / 1024).toFixed(1)} KB`);
-          } catch (err) {
-            console.error('[REC] IndexedDB chunk write FAILED:', err);
+          } catch {
             // IndexedDB write failed — chunk lost, interview continues
           }
-        } else if (e.data) {
-          console.warn(`[REC] ondataavailable fired but skipped — size: ${e.data.size}, dbReady: ${!!chunkDBRef.current}`);
         }
       };
 
-      console.log(`[REC] MediaRecorder created — mimeType: ${mimeType}`);
       sessionMediaRecorderRef.current = recorder;
-    } catch (err) {
-      console.error('[REC] initSessionRecording FAILED:', err);
+    } catch {
       // Recording init failed — interview proceeds without recording
     }
   }, [cameraError]);
@@ -899,12 +889,6 @@ export default function VoiceAvatar({
       if (sessionMediaRecorderRef.current && chunkDBRef.current) {
         sessionMediaRecorderRef.current.start(30_000); // 30-second chunks to IndexedDB
         isRecordingRef.current = true;
-        console.log('[REC] Recording STARTED — 30s chunks → IndexedDB');
-      } else {
-        console.warn('[REC] Recording NOT started — mediaRecorder or db missing', {
-          hasRecorder: !!sessionMediaRecorderRef.current,
-          hasDB: !!chunkDBRef.current,
-        });
       }
 
       // Auto-enable mic so listening starts after welcome message
@@ -1005,27 +989,21 @@ Round: ${round}
       try {
         // Stop recorder — triggers one final ondataavailable before 'stop' fires
         const mimeType = sessionMediaRecorderRef.current.mimeType || 'video/webm';
-        console.log('[REC] Phase 1: Stopping MediaRecorder — waiting for final chunk...');
         await new Promise<void>((resolve) => {
           const recorder = sessionMediaRecorderRef.current!;
-          const timeout = setTimeout(() => { console.warn('[REC] MediaRecorder stop timed out after 5s'); resolve(); }, 5000);
-          recorder.addEventListener('stop', () => { clearTimeout(timeout); console.log('[REC] MediaRecorder stopped cleanly'); resolve(); }, { once: true });
+          const timeout = setTimeout(() => resolve(), 5000); // max 5s wait
+          recorder.addEventListener('stop', () => { clearTimeout(timeout); resolve(); }, { once: true });
           recorder.stop();
         });
 
         // Read all persisted chunks from IndexedDB and assemble single Blob
         if (chunkDBRef.current) {
           const chunks = await idbGetAllChunks(chunkDBRef.current);
-          console.log(`[REC] Assembled ${chunks.length} chunk(s) from IndexedDB`);
           if (chunks.length > 0) {
             recordingBlob = new Blob(chunks, { type: mimeType });
-            console.log(`[REC] Final blob — size: ${(recordingBlob.size / 1024 / 1024).toFixed(2)} MB | type: ${mimeType}`);
-          } else {
-            console.warn('[REC] No chunks found in IndexedDB — recording may be empty');
           }
         }
-      } catch (err) {
-        console.error('[REC] Phase 1 FAILED (finalize/assemble):', err);
+      } catch {
         // Failed to finalize recording
       }
       isRecordingRef.current = false;
@@ -1047,21 +1025,16 @@ Round: ${round}
     }
 
     // --- Phase 2: Upload recording FIRST (fast, protects against tab close) ---
-    if (!recordingBlob || recordingBlob.size === 0) {
-      console.warn('[REC] Phase 2 SKIPPED — no recording blob available (size 0 or null)');
-    }
     if (recordingBlob && recordingBlob.size > 0) {
       try {
         setUploadProgress(0);
         const timestamp = Date.now();
         const folder = round === 2 ? 'round2' : 'round1';
         const filePath = `${folder}/${candidateId}-${timestamp}.webm`;
-        console.log(`[REC] Phase 2: Uploading to Supabase Storage — path: ${filePath}`);
 
         // Upload with retry (1 retry on failure)
         let uploadSuccess = false;
         for (let attempt = 1; attempt <= 2; attempt++) {
-          console.log(`[REC] Upload attempt ${attempt}/2...`);
           const { error: uploadError } = await supabase.storage
             .from('interview-recordings')
             .upload(filePath, recordingBlob, {
@@ -1071,11 +1044,9 @@ Round: ${round}
 
           if (!uploadError) {
             uploadSuccess = true;
-            console.log(`[REC] Upload SUCCESS on attempt ${attempt}`);
             break;
           }
 
-          console.error(`[REC] Upload attempt ${attempt} FAILED:`, uploadError.message);
           if (attempt < 2) {
             await new Promise(r => setTimeout(r, 2000));
           }
@@ -1093,7 +1064,6 @@ Round: ${round}
           .getPublicUrl(filePath);
 
         const publicUrl = urlData?.publicUrl;
-        console.log(`[REC] Public URL obtained: ${publicUrl}`);
 
         if (publicUrl) {
           const videoColumn = round === 2 ? 'round_2_video_url' : 'video_url';
@@ -1106,18 +1076,15 @@ Round: ${round}
               .eq('id', parseInt(candidateId));
 
             if (!dbError) {
-              console.log(`[REC] DB save SUCCESS — column: ${videoColumn}`);
               break;
             }
 
-            console.error(`[REC] DB save attempt ${attempt} FAILED:`, dbError.message);
             if (attempt < 2) {
               await new Promise(r => setTimeout(r, 1000));
             }
           }
         }
-      } catch (err) {
-        console.error('[REC] Phase 2 FAILED (upload):', err);
+      } catch {
         // Upload failed
       } finally {
         setUploadProgress(null);
@@ -1125,7 +1092,6 @@ Round: ${round}
         if (chunkDBRef.current) {
           idbClearChunks(chunkDBRef.current).catch(() => {});
           chunkDBRef.current = null;
-          console.log('[REC] IndexedDB chunks cleared after upload');
         }
       }
     }

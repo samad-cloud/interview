@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import VoiceAvatar from '@/components/VoiceAvatar';
-import { Loader2, AlertCircle, CheckCircle } from 'lucide-react';
+import { Loader2, AlertCircle, CheckCircle, Monitor } from 'lucide-react';
 
 interface CandidateData {
   id: number;
@@ -16,10 +16,23 @@ interface CandidateData {
   rating: number | null;
 }
 
+// Detect mobile devices — survives Chrome's "Request Desktop Site" mode.
+// UA alone is not enough: desktop mode swaps the UA string to look like desktop Chrome.
+// maxTouchPoints and screen.width reflect actual hardware and are never spoofed.
+function detectMobile(): boolean {
+  if (typeof window === 'undefined') return false;
+  const hasTouch = navigator.maxTouchPoints > 1;
+  const isSmallScreen = screen.width < 768;
+  const hasMobileUA = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  return (hasTouch && isSmallScreen) || hasMobileUA;
+}
+
 export default function VoiceInterviewPage() {
   const params = useParams();
   const token = params.token as string;
 
+  // Synchronous init — no flash, blocks before anything else renders
+  const [isMobile] = useState<boolean>(() => detectMobile());
   const [candidate, setCandidate] = useState<CandidateData | null>(null);
   const [jobTitle, setJobTitle] = useState<string>('Open Position');
   const [isLoading, setIsLoading] = useState(true);
@@ -75,6 +88,28 @@ export default function VoiceInterviewPage() {
 
     fetchCandidate();
   }, [token]);
+
+  // Mobile Block — shown before anything else, no data fetch needed
+  if (isMobile) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="text-center max-w-sm mx-auto">
+          <div className="w-20 h-20 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Monitor className="w-10 h-10 text-blue-400" />
+          </div>
+          <h1 className="text-2xl font-bold text-foreground mb-3">
+            Desktop Required
+          </h1>
+          <p className="text-muted-foreground mb-3">
+            This interview must be completed on a laptop or desktop computer.
+          </p>
+          <p className="text-muted-foreground/60 text-sm">
+            Please open your interview link in a desktop browser to continue.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   // Loading State
   if (isLoading) {
