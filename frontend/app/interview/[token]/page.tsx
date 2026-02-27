@@ -36,6 +36,7 @@ export default function VoiceInterviewPage() {
   const [candidate, setCandidate] = useState<CandidateData | null>(null);
   const [jobTitle, setJobTitle] = useState<string>('Open Position');
   const [isLoading, setIsLoading] = useState(true);
+  const [loadingMessage, setLoadingMessage] = useState('Loading interview...');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -46,43 +47,61 @@ export default function VoiceInterviewPage() {
         return;
       }
 
-      try {
-        // Query by interview_token (secure, unguessable UUID)
-        const { data, error: supabaseError } = await supabase
-          .from('candidates')
-          .select('id, full_name, job_id, job_description, resume_text, status, rating')
-          .eq('interview_token', token)
-          .single();
+      const MAX_ATTEMPTS = 3;
 
-        if (supabaseError) {
-          console.error('Supabase error:', supabaseError);
-          setError('Interview link is invalid or expired');
-          return;
-        }
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+          if (attempt > 1) {
+            setLoadingMessage(`Connecting... (attempt ${attempt} of ${MAX_ATTEMPTS})`);
+          }
 
-        if (!data) {
-          setError('Candidate not found');
-          return;
-        }
-
-        setCandidate(data);
-
-        // Fetch job title from jobs table
-        if (data.job_id) {
-          const { data: job } = await supabase
-            .from('jobs')
-            .select('title')
-            .eq('id', data.job_id)
+          const { data, error: supabaseError } = await supabase
+            .from('candidates')
+            .select('id, full_name, job_id, job_description, resume_text, status, rating')
+            .eq('interview_token', token)
             .single();
-          if (job?.title) {
-            setJobTitle(job.title);
+
+          if (supabaseError) {
+            // PGRST116 = 0 rows — token genuinely doesn't exist, never retry
+            if (supabaseError.code === 'PGRST116') {
+              setError('Interview link is invalid or expired');
+              setIsLoading(false);
+              return;
+            }
+            // Any other Supabase/network error — allow retry
+            throw new Error(supabaseError.message);
+          }
+
+          if (!data) {
+            setError('Candidate not found');
+            setIsLoading(false);
+            return;
+          }
+
+          setCandidate(data);
+
+          // Fetch job title — best-effort, single attempt (non-critical)
+          if (data.job_id) {
+            const { data: job } = await supabase
+              .from('jobs')
+              .select('title')
+              .eq('id', data.job_id)
+              .single();
+            if (job?.title) setJobTitle(job.title);
+          }
+
+          setIsLoading(false);
+          return; // success — exit retry loop
+
+        } catch {
+          if (attempt < MAX_ATTEMPTS) {
+            // Exponential backoff: 1s then 2s before next attempt
+            await new Promise(r => setTimeout(r, 1000 * attempt));
+          } else {
+            setError('Unable to connect. Please check your internet connection and try refreshing the page.');
+            setIsLoading(false);
           }
         }
-      } catch (err) {
-        console.error('Error fetching candidate:', err);
-        setError('Failed to load interview data');
-      } finally {
-        setIsLoading(false);
       }
     };
 
@@ -117,7 +136,7 @@ export default function VoiceInterviewPage() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-12 h-12 text-emerald-500 animate-spin mx-auto mb-4" />
-          <p className="text-foreground text-lg">Loading interview...</p>
+          <p className="text-foreground text-lg">{loadingMessage}</p>
         </div>
       </div>
     );

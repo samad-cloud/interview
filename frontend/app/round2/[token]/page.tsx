@@ -5,7 +5,6 @@ import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import VoiceAvatar from '@/components/VoiceAvatar';
 import { Loader2, AlertCircle, CheckCircle, Lock, Monitor } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 
 interface CandidateData {
   id: number;
@@ -39,6 +38,7 @@ export default function Round2Page() {
   const [candidate, setCandidate] = useState<CandidateData | null>(null);
   const [jobTitle, setJobTitle] = useState<string>('Open Position');
   const [isLoading, setIsLoading] = useState(true);
+  const [loadingMessage, setLoadingMessage] = useState('Loading technical interview...');
   const [error, setError] = useState<string | null>(null);
   const [accessDenied, setAccessDenied] = useState(false);
 
@@ -50,49 +50,69 @@ export default function Round2Page() {
         return;
       }
 
-      try {
-        const { data, error: supabaseError } = await supabase
-          .from('candidates')
-          .select('id, full_name, job_id, job_description, resume_text, status, current_stage, round_1_dossier, round_2_rating')
-          .eq('interview_token', token)
-          .single();
+      const MAX_ATTEMPTS = 3;
 
-        if (supabaseError) {
-          console.error('Supabase error:', supabaseError);
-          setError('Interview link is invalid or expired');
-          return;
-        }
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+          if (attempt > 1) {
+            setLoadingMessage(`Connecting... (attempt ${attempt} of ${MAX_ATTEMPTS})`);
+          }
 
-        if (!data) {
-          setError('Candidate not found');
-          return;
-        }
-
-        // Check if candidate is in Round 2 stage
-        // Allow access if current_stage is 'round_2' OR status indicates R2 invitation
-        if (data.current_stage !== 'round_2' && data.status !== 'ROUND_2_INVITED' && data.status !== 'ROUND_2_APPROVED') {
-          setAccessDenied(true);
-          return;
-        }
-
-        setCandidate(data);
-
-        // Fetch job title from jobs table
-        if (data.job_id) {
-          const { data: job } = await supabase
-            .from('jobs')
-            .select('title')
-            .eq('id', data.job_id)
+          const { data, error: supabaseError } = await supabase
+            .from('candidates')
+            .select('id, full_name, job_id, job_description, resume_text, status, current_stage, round_1_dossier, round_2_rating')
+            .eq('interview_token', token)
             .single();
-          if (job?.title) {
-            setJobTitle(job.title);
+
+          if (supabaseError) {
+            // PGRST116 = 0 rows — token genuinely doesn't exist, never retry
+            if (supabaseError.code === 'PGRST116') {
+              setError('Interview link is invalid or expired');
+              setIsLoading(false);
+              return;
+            }
+            // Any other Supabase/network error — allow retry
+            throw new Error(supabaseError.message);
+          }
+
+          if (!data) {
+            setError('Candidate not found');
+            setIsLoading(false);
+            return;
+          }
+
+          // Check if candidate is in Round 2 stage
+          // Allow access if current_stage is 'round_2' OR status indicates R2 invitation
+          if (data.current_stage !== 'round_2' && data.status !== 'ROUND_2_INVITED' && data.status !== 'ROUND_2_APPROVED') {
+            setAccessDenied(true);
+            setIsLoading(false);
+            return;
+          }
+
+          setCandidate(data);
+
+          // Fetch job title — best-effort, single attempt (non-critical)
+          if (data.job_id) {
+            const { data: job } = await supabase
+              .from('jobs')
+              .select('title')
+              .eq('id', data.job_id)
+              .single();
+            if (job?.title) setJobTitle(job.title);
+          }
+
+          setIsLoading(false);
+          return; // success — exit retry loop
+
+        } catch {
+          if (attempt < MAX_ATTEMPTS) {
+            // Exponential backoff: 1s then 2s before next attempt
+            await new Promise(r => setTimeout(r, 1000 * attempt));
+          } else {
+            setError('Unable to connect. Please check your internet connection and try refreshing the page.');
+            setIsLoading(false);
           }
         }
-      } catch (err) {
-        console.error('Error fetching candidate:', err);
-        setError('Failed to load interview data');
-      } finally {
-        setIsLoading(false);
       }
     };
 
@@ -127,7 +147,7 @@ export default function Round2Page() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
-          <p className="text-foreground text-lg">Loading technical interview...</p>
+          <p className="text-foreground text-lg">{loadingMessage}</p>
         </div>
       </div>
     );
@@ -233,6 +253,3 @@ export default function Round2Page() {
     />
   );
 }
-
-
-
