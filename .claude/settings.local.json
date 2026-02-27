@@ -39,7 +39,11 @@
       "Bash(cd:*)",
       "mcp__supabase__apply_migration",
       "Bash(head:*)",
-      "Bash(cd frontend:*)"
+      "Bash(cd frontend:*)",
+      "WebFetch(domain:supabase.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(claude plugins:*)",
+      "Bash(grep:*)"
     ]
   }
 }

@@ -42,7 +42,7 @@ def fetch_ungraded_candidates(supabase):
     return result.data
 
 
-def grade_candidate_with_pdf(gemini_client, resume_url: str, job_description: str) -> dict:
+def grade_candidate_with_pdf(gemini_client, resume_url: str, job_description: str, cv_prompt: str | None = None) -> dict:
     """Grade by passing the original PDF directly to Gemini for richer analysis."""
     from google.genai import types
 
@@ -61,6 +61,7 @@ def grade_candidate_with_pdf(gemini_client, resume_url: str, job_description: st
             config={"mime_type": "application/pdf"},
         )
 
+        # For PDF grading, use the PDF-specific prompt (DB prompt is text-based)
         prompt = GRADING_PROMPT_PDF.format(job_description=job_description)
 
         grading_schema = types.Schema(
@@ -89,11 +90,23 @@ def grade_candidate_with_pdf(gemini_client, resume_url: str, job_description: st
         Path(tmp_path).unlink(missing_ok=True)
 
 
-def grade_candidate_with_text(gemini_client, resume_text: str, job_description: str) -> dict:
+def fetch_cv_scoring_prompt(supabase) -> str:
+    """Fetch the CV scoring prompt from the prompts table, falling back to the hardcoded default."""
+    try:
+        result = supabase.table("prompts").select("system_prompt").eq("name", "cv_scoring").single().execute()
+        if result.data and result.data.get("system_prompt"):
+            return result.data["system_prompt"]
+    except Exception as e:
+        log("WARN", f"Failed to fetch cv_scoring prompt from DB, using fallback: {e}")
+    return GRADING_PROMPT_TEXT
+
+
+def grade_candidate_with_text(gemini_client, resume_text: str, job_description: str, cv_prompt: str | None = None) -> dict:
     """Fallback: grade using extracted resume text when no PDF URL is available."""
     from google.genai import types
 
-    prompt = GRADING_PROMPT_TEXT.format(
+    template = cv_prompt or GRADING_PROMPT_TEXT
+    prompt = template.format(
         job_description=job_description,
         resume_text=resume_text,
     )
@@ -152,6 +165,9 @@ def run_grader() -> int:
         log("INFO", "No candidates to grade")
         return 0
 
+    # Fetch configurable CV scoring prompt once for the batch
+    cv_prompt = fetch_cv_scoring_prompt(supabase)
+
     success, failed = 0, 0
 
     for candidate in candidates:
@@ -173,7 +189,7 @@ def run_grader() -> int:
                 result = grade_candidate_with_pdf(gemini_client, resume_url, job_description)
             else:
                 log("INFO", f"No PDF URL, using text for {email}")
-                result = grade_candidate_with_text(gemini_client, resume_text, job_description)
+                result = grade_candidate_with_text(gemini_client, resume_text, job_description, cv_prompt)
 
             score = result.get("score", 0)
             reasoning = result.get("reasoning", "No reasoning provided")

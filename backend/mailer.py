@@ -19,7 +19,7 @@ TALLY_FORM_ID = os.environ.get("TALLY_FORM_ID", "")
 REMINDER_AFTER_DAYS = 3
 
 # Dubai eligibility email (HTML with Tally CTA button)
-DUBAI_EMAIL_SUBJECT = f"Your application to {COMPANY_NAME}: Let's explore a fit"
+DUBAI_EMAIL_SUBJECT = f"Your Application to {COMPANY_NAME}: Let's Explore a Fit"
 
 DUBAI_EMAIL_HTML = """<!DOCTYPE html>
 <html>
@@ -45,7 +45,7 @@ DUBAI_EMAIL_HTML = """<!DOCTYPE html>
           <tr>
             <td style="padding:32px 36px 24px;">
               <p style="margin:0; color:#c30361; font-size:22px; font-weight:700; line-height:1.4;">
-                Thanks for applying — let's get started
+                Thank You for Applying &mdash; Let's Get Started
               </p>
             </td>
           </tr>
@@ -55,36 +55,16 @@ DUBAI_EMAIL_HTML = """<!DOCTYPE html>
             <td style="padding:8px 36px 32px;">
 
               <p style="margin:0 0 18px; color:#1f2937; font-size:15px; line-height:1.7;">
-                Hi {full_name},
+                Hi {first_name},
               </p>
               <p style="margin:0 0 18px; color:#374151; font-size:15px; line-height:1.7;">
-                Thank you for applying to {company_name}. We've received your application, and we're excited by the possibility of you joining our team in Dubai.
+                Thank you for applying to the <strong>{role_title}</strong> position at {company_name} &mdash; we're genuinely excited about the possibility of having you on the team!
               </p>
               <p style="margin:0 0 18px; color:#374151; font-size:15px; line-height:1.7;">
-                Our goal is to create a hiring experience that is quick, respectful, and gives every candidate a fair opportunity to be heard. Our first step is a straightforward, two-part online process designed to get to know you better.
-              </p>
-
-              <!-- Divider -->
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
-                <tr>
-                  <td style="border-top:2px solid #fce7f0;">&nbsp;</td>
-                </tr>
-              </table>
-
-              <p style="margin:0 0 8px; color:#374151; font-size:15px; line-height:1.7;">
-                <strong>Part 1:</strong> A few quick questions to align on logistics for our Dubai office.
-              </p>
-              <p style="margin:0 0 18px; color:#374151; font-size:15px; line-height:1.7;">
-                <strong>Part 2:</strong> An interactive AI-guided chat where you can share your experience in your own words.
-              </p>
-              <p style="margin:0 0 18px; color:#374151; font-size:15px; line-height:1.7;">
-                The entire first step takes about 20&ndash;30 minutes and can be completed on your own schedule. Please note that successful completion of this stage will be followed by a technical interview and a final conversation with the team.
-              </p>
-              <p style="margin:0 0 18px; color:#374151; font-size:15px; line-height:1.7;">
-                We're reviewing applications as they come in and moving quickly with strong candidates. Completing this within the next few days ensures your application gets full consideration and helps us move you forward faster.
+                To move things forward, our first step is a few quick questions to align on logistics and your availability for the role. This takes less than 5 minutes.
               </p>
               <p style="margin:0 0 28px; color:#374151; font-size:15px; line-height:1.7;">
-                Before proceeding, please ensure you're comfortable with the salary range from the job description.
+                We're reviewing applications in real time and prioritizing strong fits, so completing it now is the fastest way to keep your candidacy moving ahead.
               </p>
 
               <!-- CTA Button -->
@@ -119,13 +99,13 @@ DUBAI_EMAIL_HTML = """<!DOCTYPE html>
                 <tr>
                   <td>
                     <p style="margin:0 0 6px; color:#ffffff; font-size:14px; font-weight:600;">
-                      Best,
+                      Best regards,
                     </p>
                     <p style="margin:0 0 4px; color:rgba(255,255,255,0.85); font-size:13px; line-height:1.5;">
-                      {company_name} Recruiting
+                      John Poole
                     </p>
                     <p style="margin:0; color:rgba(255,255,255,0.6); font-size:13px; line-height:1.5;">
-                      John Poole, Recruitment Manager
+                      Recruitment Manager, {company_name}
                     </p>
                   </td>
                 </tr>
@@ -141,7 +121,7 @@ DUBAI_EMAIL_HTML = """<!DOCTYPE html>
 </html>"""
 
 # Direct interview invite (non-Dubai, also used for Dubai candidates who pass Tally)
-INVITE_EMAIL_SUBJECT = f"You're Invited - AI Interview with {COMPANY_NAME}"
+INVITE_EMAIL_SUBJECT = f"You're Invited to an Interview with {COMPANY_NAME}"
 
 INVITE_EMAIL_HTML = """<!DOCTYPE html>
 <html>
@@ -167,7 +147,7 @@ INVITE_EMAIL_HTML = """<!DOCTYPE html>
           <tr>
             <td style="padding:32px 36px 24px;">
               <p style="margin:0; color:#c30361; font-size:22px; font-weight:700; line-height:1.4;">
-                Ready for a different kind of interview?
+                Thank you for applying! You're invited to your first interview at {company_name}
               </p>
             </td>
           </tr>
@@ -178,15 +158,11 @@ INVITE_EMAIL_HTML = """<!DOCTYPE html>
 
               <!-- Greeting -->
               <p style="margin:0 0 18px; color:#1f2937; font-size:15px; line-height:1.7;">
-                Hi {full_name},
-              </p>
-
-              <p style="margin:0 0 18px; color:#374151; font-size:15px; line-height:1.7;">
-                At {company_name}, we're pioneering a better hiring process. To make our first conversation faster, fairer, and more focused on you, we use an AI assistant. This approach helps remove unconscious bias and allows you to interview in a low-pressure environment, at a time that suits your energy and schedule.
+                Hi {first_name},
               </p>
 
               <p style="margin:0 0 24px; color:#374151; font-size:15px; line-height:1.7;">
-                As one of the first companies to use this technology, we're excited to have you be a part of this new way of hiring. It's still in early development, so think of it as a helpful tool rather than a formal interrogator. Your experience will provide valuable feedback as we continue to improve.
+                At {company_name}, we're pioneering a better hiring process. To make our first conversation faster, fairer, and more focused on you, we use our own AI system. This approach helps remove bias and allows you to interview in a low-pressure environment, at a time that suits your energy and schedule.
               </p>
 
               <!-- Divider -->
@@ -210,10 +186,10 @@ INVITE_EMAIL_HTML = """<!DOCTYPE html>
                   <td style="padding:4px 0 4px 16px; color:#374151; font-size:15px; line-height:1.7;">&bull;&nbsp; We'll ask about your experience and how you've handled specific situations.</td>
                 </tr>
                 <tr>
-                  <td style="padding:4px 0 4px 16px; color:#374151; font-size:15px; line-height:1.7;">&bull;&nbsp; Every response is personally reviewed by our HR team. The AI helps us conduct the conversation, but real people evaluate your answers.</td>
+                  <td style="padding:4px 0 4px 16px; color:#374151; font-size:15px; line-height:1.7;">&bull;&nbsp; Every response is personally reviewed by our HR team. The system helps us conduct the conversation, but real people evaluate your answers.</td>
                 </tr>
                 <tr>
-                  <td style="padding:4px 0 4px 16px; color:#374151; font-size:15px; line-height:1.7;">&bull;&nbsp; If you complete this stage successfully, a member of our team will be in touch for a follow-up conversation.</td>
+                  <td style="padding:4px 0 4px 16px; color:#374151; font-size:15px; line-height:1.7;">&bull;&nbsp; If you complete this stage successfully, a member of our team will be in touch to invite you for a technical interview.</td>
                 </tr>
               </table>
 
@@ -257,13 +233,13 @@ INVITE_EMAIL_HTML = """<!DOCTYPE html>
                 <tr>
                   <td>
                     <p style="margin:0 0 6px; color:#ffffff; font-size:14px; font-weight:600;">
-                      Best,
+                      Best regards,
                     </p>
                     <p style="margin:0 0 4px; color:rgba(255,255,255,0.85); font-size:13px; line-height:1.5;">
-                      {company_name} Recruiting
+                      John Poole
                     </p>
                     <p style="margin:0; color:rgba(255,255,255,0.6); font-size:13px; line-height:1.5;">
-                      John Poole, Recruitment Manager
+                      Recruitment Manager, {company_name}
                     </p>
                   </td>
                 </tr>
@@ -307,7 +283,7 @@ REMINDER_EMAIL_HTML = """<!DOCTYPE html>
             <td style="padding:32px 36px;">
 
               <p style="margin:0 0 18px; color:#1f2937; font-size:15px; line-height:1.7;">
-                Hi {full_name},
+                Hi {first_name},
               </p>
 
               <p style="margin:0 0 18px; color:#374151; font-size:15px; line-height:1.7;">
@@ -315,7 +291,7 @@ REMINDER_EMAIL_HTML = """<!DOCTYPE html>
               </p>
 
               <p style="margin:0 0 18px; color:#374151; font-size:15px; line-height:1.7;">
-                We're still very interested in learning more about you, and the interview is still available for you to complete. It takes about 15&ndash;20 minutes and can be done at any time that works for you.
+                We're still very interested in learning more about you, and the interview is still available for you to complete. It takes about {duration} and can be done at any time that works for you.
               </p>
 
               <p style="margin:0 0 28px; color:#374151; font-size:15px; line-height:1.7;">
@@ -382,7 +358,7 @@ REMINDER_EMAIL_HTML = """<!DOCTYPE html>
 
 
 # Round 2 invite email (sent after delayed "human review" period)
-ROUND2_EMAIL_SUBJECT = f"Great news about your {COMPANY_NAME} application"
+ROUND2_EMAIL_SUBJECT = "Congratulations! You've been shortlisted for the {job_title} role"
 
 ROUND2_EMAIL_HTML = """<!DOCTYPE html>
 <html>
@@ -408,7 +384,7 @@ ROUND2_EMAIL_HTML = """<!DOCTYPE html>
           <tr>
             <td style="padding:32px 36px 24px;">
               <p style="margin:0; color:#c30361; font-size:22px; font-weight:700; line-height:1.4;">
-                You've been selected for the next round!
+                The Next Milestone: Your Technical Deep Dive
               </p>
             </td>
           </tr>
@@ -419,55 +395,27 @@ ROUND2_EMAIL_HTML = """<!DOCTYPE html>
 
               <!-- Greeting -->
               <p style="margin:0 0 18px; color:#1f2937; font-size:15px; line-height:1.7;">
-                Hi {full_name},
+                Hi {first_name},
               </p>
 
               <p style="margin:0 0 18px; color:#374151; font-size:15px; line-height:1.7;">
-                Thank you for completing the first interview. We were impressed with your responses and would like to invite you to the next stage of our process.
+                Thank you for completing the first stage. We were truly impressed with your responses and are excited to invite you to the next round of our process.
               </p>
 
-              <p style="margin:0 0 24px; color:#374151; font-size:15px; line-height:1.7;">
-                The next step is a technical AI interview. This conversation will dive deeper into the specific skills and expertise required for the <strong>{job_title}</strong> role. Like the first interview, it's designed to be completed on your own schedule and will give you the opportunity to demonstrate your technical capabilities in detail.
+              <p style="margin:0 0 18px; color:#374151; font-size:15px; line-height:1.7;">
+                This round is a <strong>Technical Deep Dive</strong>: a focused, conversational session (roughly 30&ndash;40 minutes) where we'll explore your problem-solving approach and architectural thinking in more detail. This is your opportunity to go deeper than the first interview by sharing new examples and expanding on your thinking.
               </p>
-
-              <!-- Divider -->
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
-                <tr>
-                  <td style="border-top:2px solid #fce7f0;">&nbsp;</td>
-                </tr>
-              </table>
-
-              <!-- What to expect -->
-              <p style="margin:0 0 16px; color:#c30361; font-size:16px; font-weight:700; line-height:1.5;">
-                What to expect
-              </p>
-
-              <!-- Bullet points -->
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
-                <tr>
-                  <td style="padding:4px 0 4px 16px; color:#374151; font-size:15px; line-height:1.7;">&bull;&nbsp; The format is similar to the first interview &mdash; an AI-guided conversation where you control the pace.</td>
-                </tr>
-                <tr>
-                  <td style="padding:4px 0 4px 16px; color:#374151; font-size:15px; line-height:1.7;">&bull;&nbsp; You'll be asked questions related to your approach to problem-solving, technical challenges you've faced, and your expertise relevant to the role.</td>
-                </tr>
-                <tr>
-                  <td style="padding:4px 0 4px 16px; color:#374151; font-size:15px; line-height:1.7;">&bull;&nbsp; Remember to click the button to start recording your response, and click it again when you're finished. Take your time to think through your answers.</td>
-                </tr>
-                <tr>
-                  <td style="padding:4px 0 4px 16px; color:#374151; font-size:15px; line-height:1.7;">&bull;&nbsp; The interview typically takes 15&ndash;20 minutes, depending on how detailed your responses are.</td>
-                </tr>
-              </table>
 
               <p style="margin:0 0 28px; color:#374151; font-size:15px; line-height:1.7;">
-                If you perform well in this technical round, the final step is a conversation with our team, where we'll discuss the role in more depth and answer any questions you may have.
+                The format is similar to your first interview and success here leads directly to the final stage: a live conversation with our team, where we'll discuss the role in more depth and answer any questions you may have. We're moving quickly with shortlisted candidates, so completing this within the next 48 hours helps keep your application on the fast track.
               </p>
 
               <!-- CTA Button -->
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 <tr>
-                  <td align="center" style="padding:8px 0 28px;">
+                  <td align="center" style="padding:4px 0 28px;">
                     <!--[if mso]>
-                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{round2_link}" style="height:52px;v-text-anchor:middle;width:280px;" arcsize="15%" strokecolor="#a00250" fillcolor="#c30361">
+                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{round2_link}" style="height:52px;v-text-anchor:middle;width:320px;" arcsize="12%" strokecolor="#a00250" fillcolor="#c30361">
                     <w:anchorlock/>
                     <center style="color:#ffffff;font-family:'Segoe UI',Tahoma,sans-serif;font-size:16px;font-weight:bold;">Start Technical Interview &rarr;</center>
                     </v:roundrect>
@@ -495,13 +443,13 @@ ROUND2_EMAIL_HTML = """<!DOCTYPE html>
                 <tr>
                   <td>
                     <p style="margin:0 0 6px; color:#ffffff; font-size:14px; font-weight:600;">
-                      Best,
+                      Best regards,
                     </p>
                     <p style="margin:0 0 4px; color:rgba(255,255,255,0.85); font-size:13px; line-height:1.5;">
-                      {company_name} Recruiting
+                      John Poole
                     </p>
                     <p style="margin:0; color:rgba(255,255,255,0.6); font-size:13px; line-height:1.5;">
-                      John Poole, Recruitment Manager
+                      Recruitment Manager, {company_name}
                     </p>
                   </td>
                 </tr>
@@ -522,7 +470,7 @@ def fetch_top_candidates(supabase):
     Only fetches candidates with created_at set (excludes old/legacy candidates)."""
     result = (
         supabase.table("candidates")
-        .select("id, email, full_name, jd_match_score, interview_token, job_id, jobs(location)")
+        .select("id, email, full_name, jd_match_score, interview_token, job_id, jobs(title, location)")
         .eq("status", "GRADED")
         .gte("jd_match_score", MIN_SCORE)
         .not_.is_("created_at", "null")
@@ -551,12 +499,14 @@ def create_email(to_email: str, subject: str, body: str, html: bool = False) -> 
     return {"raw": raw_message}
 
 
-def send_dubai_questionnaire(gmail_service, email: str, full_name: str, interview_token: str):
+def send_dubai_questionnaire(gmail_service, email: str, full_name: str, interview_token: str, role_title: str = "Open Position"):
     """Send the Dubai eligibility form email with Tally CTA button."""
     encoded_name = quote(full_name)
+    first_name = full_name.split()[0] if full_name else "there"
     tally_url = f"https://tally.so/r/{TALLY_FORM_ID}?interview_token={interview_token}&candidate_name={encoded_name}"
     body = DUBAI_EMAIL_HTML.format(
-        full_name=full_name,
+        first_name=first_name,
+        role_title=role_title,
         company_name=COMPANY_NAME,
         tally_url=tally_url
     )
@@ -566,9 +516,10 @@ def send_dubai_questionnaire(gmail_service, email: str, full_name: str, intervie
 
 def send_interview_invite(gmail_service, email: str, full_name: str, interview_token: str):
     """Send direct interview invite with secure token link."""
+    first_name = full_name.split()[0] if full_name else "there"
     interview_link = f"{INTERVIEW_BASE_URL}/{interview_token}"
     body = INVITE_EMAIL_HTML.format(
-        full_name=full_name,
+        first_name=first_name,
         interview_link=interview_link,
         company_name=COMPANY_NAME
     )
@@ -628,11 +579,14 @@ def fetch_candidates_needing_reminder(supabase):
     return eligible
 
 
-def send_reminder_email(gmail_service, email: str, full_name: str, interview_link: str):
+def send_reminder_email(gmail_service, email: str, full_name: str, interview_link: str, is_round_2: bool = False):
     """Send a reminder email to a candidate who hasn't completed their interview."""
+    first_name = full_name.split()[0] if full_name else "there"
+    duration = "30&ndash;40 minutes" if is_round_2 else "15&ndash;20 minutes"
     body = REMINDER_EMAIL_HTML.format(
-        full_name=full_name,
+        first_name=first_name,
         interview_link=interview_link,
+        duration=duration,
         company_name=COMPANY_NAME
     )
     message = create_email(email, REMINDER_EMAIL_SUBJECT, body, html=True)
@@ -667,8 +621,9 @@ def run_reminders(supabase, gmail_service) -> int:
             else:
                 interview_link = f"{INTERVIEW_BASE_URL}/{interview_token}"
 
+            is_round_2 = status == "ROUND_2_INVITED"
             log("INFO", f"Sending reminder to {email} (status: {status})")
-            send_reminder_email(gmail_service, email, full_name, interview_link)
+            send_reminder_email(gmail_service, email, full_name, interview_link, is_round_2=is_round_2)
 
             # Mark reminder as sent
             supabase.table("candidates").update({
@@ -702,14 +657,16 @@ def fetch_round_2_approved_candidates(supabase):
 
 def send_round_2_invite(gmail_service, email: str, full_name: str, interview_token: str, job_title: str):
     """Send Round 2 technical interview invite email."""
+    first_name = full_name.split()[0] if full_name else "there"
     round2_link = f"{ROUND2_BASE_URL}/{interview_token}"
+    subject = ROUND2_EMAIL_SUBJECT.format(job_title=job_title)
     body = ROUND2_EMAIL_HTML.format(
-        full_name=full_name,
+        first_name=first_name,
         round2_link=round2_link,
         job_title=job_title,
         company_name=COMPANY_NAME
     )
-    message = create_email(email, ROUND2_EMAIL_SUBJECT, body, html=True)
+    message = create_email(email, subject, body, html=True)
     gmail_service.users().messages().send(userId="me", body=message).execute()
 
 
@@ -809,8 +766,10 @@ def run_mailer() -> tuple[int, int, int, int]:
 
             if is_dubai_role(candidate):
                 # Dubai role → Send Tally eligibility form
+                job = candidate.get("jobs")
+                job_title = job.get("title", "Open Position") if job else "Open Position"
                 log("INFO", f"Dubai role detected for {email} (score: {score})")
-                send_dubai_questionnaire(gmail_service, email, full_name, interview_token)
+                send_dubai_questionnaire(gmail_service, email, full_name, interview_token, job_title)
                 update_candidate_status(supabase, candidate_id, "QUESTIONNAIRE_SENT")
                 log("SUCCESS", f"Dubai eligibility form sent to {email}")
                 dubai_sent += 1

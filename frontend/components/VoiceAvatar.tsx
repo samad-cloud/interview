@@ -4,7 +4,48 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Mic, CameraOff, Loader2, Volume2, AlertCircle, Clock, Monitor, X } from 'lucide-react';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
-import RecordRTC from 'recordrtc';
+
+// ── IndexedDB helpers for chunked recording ──────────────────────────────────
+const IDB_NAME  = 'interview-recording-chunks';
+const IDB_STORE = 'chunks';
+
+function openChunkDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(IDB_STORE)) {
+        req.result.createObjectStore(IDB_STORE, { autoIncrement: true });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  });
+}
+function idbSaveChunk(db: IDBDatabase, chunk: Blob): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).add(chunk);
+    tx.oncomplete = () => resolve();
+    tx.onerror    = () => reject(tx.error);
+  });
+}
+function idbGetAllChunks(db: IDBDatabase): Promise<Blob[]> {
+  return new Promise((resolve, reject) => {
+    const tx  = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).getAll();
+    req.onsuccess = () => resolve(req.result as Blob[]);
+    req.onerror   = () => reject(req.error);
+  });
+}
+function idbClearChunks(db: IDBDatabase): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror    = () => reject(tx.error);
+  });
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface VoiceAvatarProps {
   candidateId: string;
@@ -81,16 +122,14 @@ export default function VoiceAvatar({
   const sendToAIRef = useRef<((text: string) => Promise<void>) | null>(null);
   const startDeepgramListeningRef = useRef<(() => Promise<void>) | null>(null);
 
-  // Session recording refs (RecordRTC)
+  // Session recording refs (native MediaRecorder + IndexedDB chunks)
   const recAudioCtxRef = useRef<AudioContext | null>(null);
   const recDestinationRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   const recMicSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const sessionRecorderRef = useRef<RecordRTC | null>(null);
+  const sessionMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunkDBRef = useRef<IDBDatabase | null>(null);
   const isRecordingRef = useRef(false);
   const recordingStreamRef = useRef<MediaStream | null>(null);
-
-  // Periodic recording upload interval
-  const periodicUploadRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // In-flight welcome audio promises (started on mount, awaited at interview start)
   const welcomeAudioPromisesRef = useRef<Promise<Blob>[] | null>(null);
@@ -233,13 +272,16 @@ export default function VoiceAvatar({
       timestamp: new Date(),
     };
     conversationHistoryRef.current.push(entry);
-    console.log(`[Transcript] ${entry.speaker}: ${entry.text}`);
   }, [candidateName, interviewerName]);
 
-  // Initialize session recording using RecordRTC (video + mixed audio)
-  const initSessionRecording = useCallback(() => {
+  // Initialize session recording using native MediaRecorder + IndexedDB chunk buffering
+  const initSessionRecording = useCallback(async () => {
     try {
-      console.log(`[Recording] Round ${round} — Starting init. userStream=${!!userStreamRef.current}, cameraError=${cameraError}`);
+      // Open IndexedDB and clear any stale chunks from a previous session
+      const db = await openChunkDB();
+      await idbClearChunks(db);
+      chunkDBRef.current = db;
+      console.log('[REC] IndexedDB opened and cleared — ready for new session');
 
       // Create audio context for mixing mic + TTS audio
       const audioCtx = new AudioContext();
@@ -250,57 +292,70 @@ export default function VoiceAvatar({
       // Connect candidate mic audio into the mix
       if (userStreamRef.current) {
         const audioTracks = userStreamRef.current.getAudioTracks();
-        console.log(`[Recording] Round ${round} — Stream audio tracks: ${audioTracks.length}, video tracks: ${userStreamRef.current.getVideoTracks().length}`);
         if (audioTracks.length > 0) {
           const micOnlyStream = new MediaStream(audioTracks);
           const micSource = audioCtx.createMediaStreamSource(micOnlyStream);
           micSource.connect(destination);
           recMicSourceRef.current = micSource;
         }
-      } else {
-        console.warn(`[Recording] Round ${round} — No userStream available for recording`);
       }
 
       // Build combined stream: video track (if available) + mixed audio
       const combinedTracks: MediaStreamTrack[] = [];
 
-      // Add video track if camera is available
       const videoTrack = userStreamRef.current?.getVideoTracks()[0];
       if (videoTrack && !cameraError) {
         combinedTracks.push(videoTrack);
       }
 
-      // Add mixed audio track
       const mixedAudioTrack = destination.stream.getAudioTracks()[0];
       if (mixedAudioTrack) {
         combinedTracks.push(mixedAudioTrack);
       }
 
-      if (combinedTracks.length === 0) {
-        console.warn(`[Recording] Round ${round} — No tracks available for recording, skipping`);
-        return;
-      }
+      if (combinedTracks.length === 0) return;
 
       const combinedStream = new MediaStream(combinedTracks);
       const hasVideo = combinedTracks.some(t => t.kind === 'video');
       recordingStreamRef.current = combinedStream;
+      console.log(`[REC] Combined stream built — tracks: ${combinedTracks.map(t => t.kind).join(', ')} | hasVideo: ${hasVideo}`);
 
-      // Create RecordRTC recorder
-      const recorder = new RecordRTC(combinedStream, {
-        type: hasVideo ? 'video' : 'audio',
-        mimeType: hasVideo ? 'video/webm;codecs=vp8' as const : 'audio/webm' as const,
-        disableLogs: false,
+      // Pick best supported MIME type
+      const mimeType = hasVideo
+        ? (['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
+            .find(t => MediaRecorder.isTypeSupported(t)) ?? 'video/webm')
+        : 'audio/webm;codecs=opus';
+
+      const recorder = new MediaRecorder(combinedStream, {
+        mimeType,
         videoBitsPerSecond: hasVideo ? 200_000 : undefined,
         audioBitsPerSecond: 128_000,
-        timeSlice: 1000, // Get data every second for reliability
       });
 
-      sessionRecorderRef.current = recorder;
-      console.log(`[Recording] Round ${round} — RecordRTC initialized: hasVideo=${hasVideo}, tracks=${combinedTracks.length}`);
+      let chunkCount = 0;
+      // Each 30s chunk → persisted to IndexedDB immediately (disk, not RAM)
+      recorder.ondataavailable = async (e) => {
+        if (e.data && e.data.size > 0 && chunkDBRef.current) {
+          try {
+            await idbSaveChunk(chunkDBRef.current, e.data);
+            chunkCount++;
+            console.log(`[REC] Chunk #${chunkCount} saved to IndexedDB — size: ${(e.data.size / 1024).toFixed(1)} KB`);
+          } catch (err) {
+            console.error('[REC] IndexedDB chunk write FAILED:', err);
+            // IndexedDB write failed — chunk lost, interview continues
+          }
+        } else if (e.data) {
+          console.warn(`[REC] ondataavailable fired but skipped — size: ${e.data.size}, dbReady: ${!!chunkDBRef.current}`);
+        }
+      };
+
+      console.log(`[REC] MediaRecorder created — mimeType: ${mimeType}`);
+      sessionMediaRecorderRef.current = recorder;
     } catch (err) {
-      console.error(`[Recording] Round ${round} — Init failed, interview proceeds without recording:`, err);
+      console.error('[REC] initSessionRecording FAILED:', err);
+      // Recording init failed — interview proceeds without recording
     }
-  }, [cameraError, round]);
+  }, [cameraError]);
 
   // Split text into sentence chunks for pipelined TTS playback
   const splitIntoTTSChunks = (text: string): string[] => {
@@ -340,8 +395,8 @@ export default function VoiceAvatar({
         ttsSource.connect(recDestinationRef.current); // → recording
         ttsSource.connect(recAudioCtxRef.current.destination); // → speakers
       }
-    } catch (routeErr) {
-      console.warn('[Recording] TTS audio routing failed:', routeErr);
+    } catch {
+      // TTS audio routing failed — audio still plays through default output
     }
 
     await new Promise<void>((resolve) => {
@@ -350,12 +405,10 @@ export default function VoiceAvatar({
         resolve();
       };
       audio.onerror = () => {
-        console.error('Audio playback error');
         URL.revokeObjectURL(audioUrl);
         resolve();
       };
-      audio.play().catch((err) => {
-        console.error('Audio play failed:', err);
+      audio.play().catch(() => {
         resolve();
       });
     });
@@ -412,8 +465,7 @@ export default function VoiceAvatar({
       if (isMicOnRef.current) {
         startDeepgramListeningRef.current?.();
       }
-    } catch (err) {
-      console.error('TTS error:', err);
+    } catch {
       isSpeakingRef.current = false;
       setIsSpeaking(false);
       // Fallback: use browser TTS
@@ -461,7 +513,6 @@ export default function VoiceAvatar({
     if (!text.trim() || callStatus !== 'active') return;
 
     try {
-      console.log('Candidate said:', text);
       addToConversation('candidate', text);
       finalTranscriptRef.current = '';
       setTranscript('');
@@ -494,7 +545,6 @@ export default function VoiceAvatar({
       }
 
       const { reply } = await response.json();
-      console.log('Gemini response:', reply);
 
       // Check if AI wants to end the interview
       const wantsToEnd = reply.includes('[END_INTERVIEW]');
@@ -508,8 +558,7 @@ export default function VoiceAvatar({
       if (wantsToEnd) {
         endInterviewRef.current?.();
       }
-    } catch (err) {
-      console.error('Failed to get AI response:', err);
+    } catch {
       setError('Failed to get response');
     }
   }, [callStatus, addToConversation, systemPrompt, speakText, stopDeepgramListening, elapsedSeconds, isWrappingUp, candidateName, round]);
@@ -549,7 +598,6 @@ export default function VoiceAvatar({
       );
 
       socket.onopen = () => {
-        console.log('Deepgram connected');
         setIsListening(true);
 
         // Start MediaRecorder
@@ -605,24 +653,21 @@ export default function VoiceAvatar({
               }
             }
           }
-        } catch (err) {
-          console.error('Error parsing Deepgram message:', err);
+        } catch {
+          // Ignore malformed Deepgram message
         }
       };
 
-      socket.onerror = (error) => {
-        console.error('Deepgram error:', error);
+      socket.onerror = () => {
         setError('Voice recognition error');
       };
 
       socket.onclose = () => {
-        console.log('Deepgram disconnected');
         setIsListening(false);
       };
 
       deepgramSocketRef.current = socket;
-    } catch (err) {
-      console.error('Failed to start Deepgram:', err);
+    } catch {
       setError('Could not access microphone');
     }
   }, []);
@@ -673,7 +718,6 @@ export default function VoiceAvatar({
         return r.blob();
       })
     );
-    console.log(`[TTS Prefetch] Fired ${chunks.length} welcome audio requests`);
   }, [candidateName, jobTitle, round]);
 
   // Interview timer — starts when call becomes active, cleans up on end/unmount
@@ -719,8 +763,7 @@ export default function VoiceAvatar({
       });
       userStreamRef.current = stream;
       setIsCameraOn(true);
-    } catch (err) {
-      console.error('Failed to access camera:', err);
+    } catch {
       setIsCameraOn(false);
     }
   };
@@ -795,8 +838,7 @@ export default function VoiceAvatar({
           animFrameRef.current = requestAnimationFrame(tick);
         };
         animFrameRef.current = requestAnimationFrame(tick);
-      } catch (err) {
-        console.error('AudioContext error:', err);
+      } catch {
         setMicError(true);
       }
     } else {
@@ -852,56 +894,17 @@ export default function VoiceAvatar({
       }
 
       // Initialize and start session recording BEFORE welcome message
-      initSessionRecording();
-      if (sessionRecorderRef.current) {
-        sessionRecorderRef.current.startRecording();
+      // Chunks are written to IndexedDB every 30s — flat RAM usage throughout
+      await initSessionRecording();
+      if (sessionMediaRecorderRef.current && chunkDBRef.current) {
+        sessionMediaRecorderRef.current.start(30_000); // 30-second chunks to IndexedDB
         isRecordingRef.current = true;
-        console.log(`[Recording] ${candidateName} (${candidateId}) Round ${round} — RecordRTC recording started`);
-
-        // Start periodic upload every 5 minutes as a safety net
-        const PERIODIC_UPLOAD_MS = 5 * 60 * 1000;
-        periodicUploadRef.current = setInterval(async () => {
-          if (!sessionRecorderRef.current || !isRecordingRef.current) return;
-          try {
-            // Pause briefly to get a clean blob snapshot
-            const recorder = sessionRecorderRef.current;
-            const blob = recorder.getBlob();
-            if (!blob || blob.size === 0) return;
-
-            const folder = round === 2 ? 'round2' : 'round1';
-            const filePath = `${folder}/${candidateId}-latest.webm`;
-            const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
-            console.log(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Periodic upload: ${sizeMB}MB to ${filePath}`);
-
-            const { error: uploadError } = await supabase.storage
-              .from('interview-recordings')
-              .upload(filePath, blob, {
-                contentType: blob.type || 'video/webm',
-                upsert: true,
-              });
-
-            if (uploadError) {
-              console.warn(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Periodic upload failed:`, uploadError);
-            } else {
-              // Save URL to DB as a safety net
-              const { data: urlData } = supabase.storage
-                .from('interview-recordings')
-                .getPublicUrl(filePath);
-              if (urlData?.publicUrl) {
-                const videoColumn = round === 2 ? 'round_2_video_url' : 'video_url';
-                await supabase
-                  .from('candidates')
-                  .update({ [videoColumn]: urlData.publicUrl })
-                  .eq('id', parseInt(candidateId));
-                console.log(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Periodic save OK: ${sizeMB}MB`);
-              }
-            }
-          } catch (err) {
-            console.warn(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Periodic upload error:`, err);
-          }
-        }, PERIODIC_UPLOAD_MS);
+        console.log('[REC] Recording STARTED — 30s chunks → IndexedDB');
       } else {
-        console.warn(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Recorder not initialized, no recording will be saved`);
+        console.warn('[REC] Recording NOT started — mediaRecorder or db missing', {
+          hasRecorder: !!sessionMediaRecorderRef.current,
+          hasDB: !!chunkDBRef.current,
+        });
       }
 
       // Auto-enable mic so listening starts after welcome message
@@ -943,7 +946,6 @@ export default function VoiceAvatar({
       }
 
     } catch (err) {
-      console.error('Failed to start interview:', err);
       setError(err instanceof Error ? err.message : 'Failed to start interview');
       setCallStatus('idle');
       callStatusRef.current = 'idle';
@@ -996,47 +998,39 @@ Round: ${round}
       audioRef.current = null;
     }
 
-    // Stop periodic upload
-    if (periodicUploadRef.current) {
-      clearInterval(periodicUploadRef.current);
-      periodicUploadRef.current = null;
-    }
 
-    // --- Phase 1: Stop recording and finalize blob via RecordRTC ---
+    // --- Phase 1: Stop MediaRecorder, flush final chunk, assemble from IndexedDB ---
     let recordingBlob: Blob | null = null;
-    console.log(`[Recording] ${candidateName} (${candidateId}) Round ${round} — endInterview Phase 1: recorder=${!!sessionRecorderRef.current}, isRecording=${isRecordingRef.current}`);
-    if (sessionRecorderRef.current && isRecordingRef.current) {
+    if (sessionMediaRecorderRef.current && isRecordingRef.current) {
       try {
-        recordingBlob = await new Promise<Blob>((resolve, reject) => {
-          const recorder = sessionRecorderRef.current!;
-          const timeout = setTimeout(() => {
-            console.warn(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Stop timed out after 10s, trying to get blob anyway`);
-            const blob = recorder.getBlob();
-            if (blob && blob.size > 0) {
-              resolve(blob);
-            } else {
-              reject(new Error('Recording stop timed out and no blob available'));
-            }
-          }, 10000);
-
-          recorder.stopRecording(() => {
-            clearTimeout(timeout);
-            const blob = recorder.getBlob();
-            console.log(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Finalized: ${(blob.size / 1024 / 1024).toFixed(1)}MB, type=${blob.type}`);
-            resolve(blob);
-          });
+        // Stop recorder — triggers one final ondataavailable before 'stop' fires
+        const mimeType = sessionMediaRecorderRef.current.mimeType || 'video/webm';
+        console.log('[REC] Phase 1: Stopping MediaRecorder — waiting for final chunk...');
+        await new Promise<void>((resolve) => {
+          const recorder = sessionMediaRecorderRef.current!;
+          const timeout = setTimeout(() => { console.warn('[REC] MediaRecorder stop timed out after 5s'); resolve(); }, 5000);
+          recorder.addEventListener('stop', () => { clearTimeout(timeout); console.log('[REC] MediaRecorder stopped cleanly'); resolve(); }, { once: true });
+          recorder.stop();
         });
+
+        // Read all persisted chunks from IndexedDB and assemble single Blob
+        if (chunkDBRef.current) {
+          const chunks = await idbGetAllChunks(chunkDBRef.current);
+          console.log(`[REC] Assembled ${chunks.length} chunk(s) from IndexedDB`);
+          if (chunks.length > 0) {
+            recordingBlob = new Blob(chunks, { type: mimeType });
+            console.log(`[REC] Final blob — size: ${(recordingBlob.size / 1024 / 1024).toFixed(2)} MB | type: ${mimeType}`);
+          } else {
+            console.warn('[REC] No chunks found in IndexedDB — recording may be empty');
+          }
+        }
       } catch (err) {
-        console.error(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Failed to stop recorder:`, err);
+        console.error('[REC] Phase 1 FAILED (finalize/assemble):', err);
+        // Failed to finalize recording
       }
       isRecordingRef.current = false;
-      if (sessionRecorderRef.current) {
-        sessionRecorderRef.current.destroy();
-        sessionRecorderRef.current = null;
-      }
+      sessionMediaRecorderRef.current = null;
       recordingStreamRef.current = null;
-    } else {
-      console.warn(`[Recording] ${candidateName} (${candidateId}) Round ${round} — No active recording to finalize (recorder=${!!sessionRecorderRef.current}, isRecording=${isRecordingRef.current})`);
     }
 
     // Close recording audio context
@@ -1053,19 +1047,21 @@ Round: ${round}
     }
 
     // --- Phase 2: Upload recording FIRST (fast, protects against tab close) ---
-    console.log(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Phase 2: blob=${!!recordingBlob}, size=${recordingBlob?.size ?? 0}`);
+    if (!recordingBlob || recordingBlob.size === 0) {
+      console.warn('[REC] Phase 2 SKIPPED — no recording blob available (size 0 or null)');
+    }
     if (recordingBlob && recordingBlob.size > 0) {
       try {
         setUploadProgress(0);
         const timestamp = Date.now();
         const folder = round === 2 ? 'round2' : 'round1';
         const filePath = `${folder}/${candidateId}-${timestamp}.webm`;
-
-        console.log(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Uploading ${(recordingBlob.size / 1024 / 1024).toFixed(1)}MB to ${filePath}`);
+        console.log(`[REC] Phase 2: Uploading to Supabase Storage — path: ${filePath}`);
 
         // Upload with retry (1 retry on failure)
         let uploadSuccess = false;
         for (let attempt = 1; attempt <= 2; attempt++) {
+          console.log(`[REC] Upload attempt ${attempt}/2...`);
           const { error: uploadError } = await supabase.storage
             .from('interview-recordings')
             .upload(filePath, recordingBlob, {
@@ -1075,12 +1071,12 @@ Round: ${round}
 
           if (!uploadError) {
             uploadSuccess = true;
+            console.log(`[REC] Upload SUCCESS on attempt ${attempt}`);
             break;
           }
 
-          console.error(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Upload attempt ${attempt} failed:`, uploadError);
+          console.error(`[REC] Upload attempt ${attempt} FAILED:`, uploadError.message);
           if (attempt < 2) {
-            console.log(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Retrying upload...`);
             await new Promise(r => setTimeout(r, 2000));
           }
         }
@@ -1090,7 +1086,6 @@ Round: ${round}
         }
 
         setUploadProgress(100);
-        console.log(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Upload success: ${filePath}`);
 
         // Get public URL and save to DB
         const { data: urlData } = supabase.storage
@@ -1098,7 +1093,7 @@ Round: ${round}
           .getPublicUrl(filePath);
 
         const publicUrl = urlData?.publicUrl;
-        console.log(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Public URL: ${publicUrl || 'NULL'}`);
+        console.log(`[REC] Public URL obtained: ${publicUrl}`);
 
         if (publicUrl) {
           const videoColumn = round === 2 ? 'round_2_video_url' : 'video_url';
@@ -1111,31 +1106,33 @@ Round: ${round}
               .eq('id', parseInt(candidateId));
 
             if (!dbError) {
-              console.log(`[Recording] ${candidateName} (${candidateId}) Round ${round} — STORED ${videoColumn}: ${publicUrl}`);
+              console.log(`[REC] DB save SUCCESS — column: ${videoColumn}`);
               break;
             }
 
-            console.error(`[Recording] ${candidateName} (${candidateId}) Round ${round} — DB save attempt ${attempt} failed:`, dbError);
+            console.error(`[REC] DB save attempt ${attempt} FAILED:`, dbError.message);
             if (attempt < 2) {
               await new Promise(r => setTimeout(r, 1000));
             }
           }
-        } else {
-          console.error(`[Recording] ${candidateName} (${candidateId}) Round ${round} — No public URL returned for ${filePath}`);
         }
       } catch (err) {
-        console.error(`[Recording] ${candidateName} (${candidateId}) Round ${round} — Upload failed:`, err);
+        console.error('[REC] Phase 2 FAILED (upload):', err);
+        // Upload failed
       } finally {
         setUploadProgress(null);
+        // Clear IndexedDB chunks — data is now in Supabase (or upload failed, transcript is priority)
+        if (chunkDBRef.current) {
+          idbClearChunks(chunkDBRef.current).catch(() => {});
+          chunkDBRef.current = null;
+          console.log('[REC] IndexedDB chunks cleared after upload');
+        }
       }
-    } else {
-      console.warn(`[Recording] ${candidateName} (${candidateId}) Round ${round} — No recording blob to upload (blob=${!!recordingBlob}, size=${recordingBlob?.size ?? 0})`);
     }
 
     // --- Phase 3: Save transcript via API (slow — triggers Gemini scoring) ---
     try {
       const transcriptText = formatTranscript();
-      console.log('Final transcript:', transcriptText);
 
       const endpoint = round === 2 ? '/api/end-interview-round2' : '/api/end-interview';
 
@@ -1152,10 +1149,8 @@ Round: ${round}
         throw new Error('Failed to save interview');
       }
 
-      const result = await response.json();
-      console.log('Interview saved:', result);
-    } catch (err) {
-      console.error('Failed to end interview:', err);
+      await response.json();
+    } catch {
       setError('Failed to save interview data');
     }
 
@@ -1202,29 +1197,10 @@ Round: ${round}
       );
       navigator.sendBeacon(endpoint, payload);
 
-      // Best-effort: try to upload whatever recording data exists
-      if (sessionRecorderRef.current && isRecordingRef.current) {
-        try {
-          const blob = sessionRecorderRef.current.getBlob();
-          if (blob && blob.size > 0) {
-            const folder = round === 2 ? 'round2' : 'round1';
-            const filePath = `${folder}/${candidateId}-${Date.now()}.webm`;
-            const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/interview-recordings/${filePath}`;
-            const formData = new FormData();
-            formData.append('', blob, filePath);
-            // keepalive fetch survives page close for small payloads
-            fetch(url, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
-              },
-              body: formData,
-              keepalive: true,
-            }).catch(() => {});
-          }
-        } catch {
-          // Recording may not be available — transcript is the priority
-        }
+      // Stop MediaRecorder so the final chunk is flushed to IndexedDB before page unloads
+      // (chunks already written every 30s — this captures the last partial chunk)
+      if (sessionMediaRecorderRef.current && isRecordingRef.current) {
+        try { sessionMediaRecorderRef.current.stop(); } catch { /* ignore */ }
       }
     };
 
@@ -1237,7 +1213,6 @@ Round: ${round}
     return () => {
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-      if (periodicUploadRef.current) clearInterval(periodicUploadRef.current);
       stopDeepgramListening();
       stopMediaCheck();
       if (userStreamRef.current) {
@@ -1246,10 +1221,10 @@ Round: ${round}
       if (audioRef.current) {
         audioRef.current.pause();
       }
-      // Cleanup session recording (RecordRTC)
-      if (sessionRecorderRef.current) {
-        try { sessionRecorderRef.current.destroy(); } catch { /* ignore */ }
-        sessionRecorderRef.current = null;
+      // Stop session MediaRecorder if still running
+      if (sessionMediaRecorderRef.current && isRecordingRef.current) {
+        try { sessionMediaRecorderRef.current.stop(); } catch { /* ignore */ }
+        sessionMediaRecorderRef.current = null;
       }
       isRecordingRef.current = false;
       recordingStreamRef.current = null;
