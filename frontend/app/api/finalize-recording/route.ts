@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Allow up to 60s for chunk downloads + assembly + upload
-export const maxDuration = 60;
+// Allow up to 300s for chunk downloads + assembly + upload (large interviews can be 80-100MB)
+export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -38,7 +38,8 @@ export async function POST(req: NextRequest) {
           .download(path);
 
         if (error) {
-          console.warn(`[Recording] Chunk ${i} download failed — candidate ${candidateId}: ${error.message}`);
+          const reason = error.message || JSON.stringify(error);
+          console.warn(`[Recording] Chunk ${i} download failed — candidate ${candidateId}: ${reason}`);
           return null;
         }
         return { index: i, blob: data };
@@ -65,6 +66,7 @@ export async function POST(req: NextRequest) {
     }
 
     const sizeMB = (totalBytes / 1024 / 1024).toFixed(2);
+    const uploadStart = Date.now();
     console.log(`[Recording] Assembled ${sizeMB}MB from ${valid.length} chunks — candidate ${candidateId}, uploading final file`);
 
     // Upload the assembled final file
@@ -82,6 +84,7 @@ export async function POST(req: NextRequest) {
       console.error(`[Recording] Final upload FAILED — candidate ${candidateId} (Round ${round}): ${uploadError.message}`);
       return NextResponse.json({ success: false, error: uploadError.message });
     }
+    console.log(`[Recording] Upload complete — candidate ${candidateId}, ${sizeMB}MB in ${((Date.now() - uploadStart) / 1000).toFixed(1)}s`);
 
     // Get the public URL
     const { data: urlData } = supabase.storage
