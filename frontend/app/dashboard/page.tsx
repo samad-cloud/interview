@@ -292,6 +292,34 @@ export default function DashboardPage() {
     setNoteText(selectedCandidate?.hr_notes || '');
   }, [selectedCandidate]);
 
+  // Stitch recording
+  const [stitchingRound, setStitchingRound] = useState<1 | 2 | null>(null);
+
+  const handleStitchRecording = async (round: 1 | 2) => {
+    if (!selectedCandidate) return;
+    setStitchingRound(round);
+    try {
+      const res = await fetch('/api/finalize-recording', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ candidateId: selectedCandidate.id, round }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        const videoColumn = round === 2 ? 'round_2_video_url' : 'video_url';
+        setSelectedCandidate(prev => prev ? { ...prev, [videoColumn]: data.url } : prev);
+        setCandidates(prev => prev.map(c => c.id === selectedCandidate.id ? { ...c, [videoColumn]: data.url } : c));
+        setToastModal({ title: 'Recording stitched', description: `Round ${round} recording assembled successfully.`, variant: 'success' });
+      } else {
+        setToastModal({ title: 'Stitch failed', description: data.error || 'Could not assemble recording.', variant: 'error' });
+      }
+    } catch {
+      setToastModal({ title: 'Stitch failed', description: 'Network error — check Vercel logs.', variant: 'error' });
+    } finally {
+      setStitchingRound(null);
+    }
+  };
+
   // Action states
   const [sendingInvite, setSendingInvite] = useState<number | null>(null);
   const [revertingCandidate, setRevertingCandidate] = useState<number | null>(null);
@@ -2028,33 +2056,75 @@ export default function DashboardPage() {
             )}
 
             {/* Video Recordings */}
-            {(selectedCandidate?.video_url || selectedCandidate?.round_2_video_url) && <Separator />}
-            {(selectedCandidate?.video_url || selectedCandidate?.round_2_video_url) && (
+            {(selectedCandidate?.video_url || selectedCandidate?.round_2_video_url || selectedCandidate?.interview_transcript || selectedCandidate?.round_2_transcript) && <Separator />}
+            {(selectedCandidate?.video_url || selectedCandidate?.round_2_video_url || selectedCandidate?.interview_transcript || selectedCandidate?.round_2_transcript) && (
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <Video className="w-5 h-5 text-purple-400" />
                   <h3 className="text-lg font-semibold">Interview Recordings</h3>
                 </div>
                 <div className="space-y-4">
-                  {selectedCandidate?.video_url && (
-                    <Card>
-                      <CardContent className="pt-4">
-                        <VideoPlayer
-                          src={selectedCandidate.video_url}
-                          title="Round 1 Recording"
-                        />
-                      </CardContent>
-                    </Card>
+                  {/* Round 1 */}
+                  {selectedCandidate?.interview_transcript && (
+                    selectedCandidate.video_url ? (
+                      <Card>
+                        <CardContent className="pt-4">
+                          <VideoPlayer
+                            src={selectedCandidate.video_url}
+                            title="Round 1 Recording"
+                          />
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      <Card>
+                        <CardContent className="pt-4 flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">Round 1 recording not yet assembled</span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleStitchRecording(1)}
+                            disabled={stitchingRound !== null}
+                          >
+                            {stitchingRound === 1 ? (
+                              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Stitching…</>
+                            ) : (
+                              <><RotateCcw className="w-4 h-4 mr-2" />Stitch Round 1</>
+                            )}
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    )
                   )}
-                  {selectedCandidate?.round_2_video_url && (
-                    <Card>
-                      <CardContent className="pt-4">
-                        <VideoPlayer
-                          src={selectedCandidate.round_2_video_url}
-                          title="Round 2 Recording"
-                        />
-                      </CardContent>
-                    </Card>
+                  {/* Round 2 */}
+                  {selectedCandidate?.round_2_transcript && (
+                    selectedCandidate.round_2_video_url ? (
+                      <Card>
+                        <CardContent className="pt-4">
+                          <VideoPlayer
+                            src={selectedCandidate.round_2_video_url}
+                            title="Round 2 Recording"
+                          />
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      <Card>
+                        <CardContent className="pt-4 flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">Round 2 recording not yet assembled</span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleStitchRecording(2)}
+                            disabled={stitchingRound !== null}
+                          >
+                            {stitchingRound === 2 ? (
+                              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Stitching…</>
+                            ) : (
+                              <><RotateCcw className="w-4 h-4 mr-2" />Stitch Round 2</>
+                            )}
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    )
                   )}
                 </div>
               </div>

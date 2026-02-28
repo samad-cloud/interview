@@ -6,7 +6,8 @@ export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  // Prefer service role key (bypasses RLS) — falls back to anon key
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseKey) {
     console.error('[Recording] Finalize — missing Supabase env vars');
@@ -14,18 +15,40 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { candidateId, round, chunkCount, mimeType: rawMime } = await req.json();
+    const { candidateId, round, chunkCount: rawChunkCount, mimeType: rawMime } = await req.json();
     // Strip codec specifier — Supabase only accepts base MIME types (e.g. video/webm not video/webm;codecs=vp9)
     const mimeType = (rawMime || 'video/webm').split(';')[0].trim();
     const fileExt  = mimeType.includes('mp4') ? 'mp4' : 'webm';
 
-    if (!candidateId || !round || typeof chunkCount !== 'number' || chunkCount === 0) {
-      console.error('[Recording] Finalize — missing fields', { candidateId, round, chunkCount });
+    if (!candidateId || !round) {
+      console.error('[Recording] Finalize — missing fields', { candidateId, round });
       return NextResponse.json({ success: false, error: 'Missing fields' }, { status: 400 });
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
     const folder = round === 2 ? 'round2' : 'round1';
+
+    // Auto-detect chunk count from storage if not provided (e.g. manual stitch from dashboard)
+    let chunkCount: number = typeof rawChunkCount === 'number' && rawChunkCount > 0 ? rawChunkCount : 0;
+    if (chunkCount === 0) {
+      const { data: fileList, error: listError } = await supabase.storage
+        .from('interview-recordings')
+        .list(`chunks/${folder}/${candidateId}`, { limit: 1000 });
+      if (listError || !fileList || fileList.length === 0) {
+        console.error(`[Recording] Finalize — could not list chunks for candidate ${candidateId} (Round ${round})`);
+        return NextResponse.json({ success: false, error: 'No chunks found in storage' });
+      }
+      const indices = fileList
+        .map(f => { const m = f.name.match(/^chunk_(\d+)\./); return m ? parseInt(m[1]) : -1; })
+        .filter(i => i >= 0);
+      chunkCount = indices.length > 0 ? Math.max(...indices) + 1 : 0;
+      console.log(`[Recording] Auto-detected ${chunkCount} chunks (indices: ${indices.sort((a,b)=>a-b).join(',')}) — candidate ${candidateId} (Round ${round})`);
+    }
+
+    if (chunkCount === 0) {
+      console.error(`[Recording] Finalize — no chunks found — candidate ${candidateId} (Round ${round})`);
+      return NextResponse.json({ success: false, error: 'No chunks found in storage' });
+    }
 
     console.log(`[Recording] Finalize started — candidate ${candidateId} (Round ${round}), expecting ${chunkCount} chunks`);
 
