@@ -338,9 +338,10 @@ export default function VoiceAvatar({
       const hasVideo = combinedTracks.some(t => t.kind === 'video');
       recordingStreamRef.current = combinedStream;
 
-      // Pick best supported MIME type
+      // Pick best supported MIME type — must include audio codec alongside video codec
+      // so both candidate voice and video are captured in the recording
       const mimeType = hasVideo
-        ? (['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4;codecs=avc1', 'video/mp4']
+        ? (['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4']
             .find(t => MediaRecorder.isTypeSupported(t)) ?? 'video/mp4')
         : (['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4;codecs=mp4a.40.2', 'audio/mp4']
             .find(t => MediaRecorder.isTypeSupported(t)) ?? 'audio/mp4');

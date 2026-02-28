@@ -4,6 +4,34 @@ import { createClient } from '@supabase/supabase-js';
 // Allow up to 300s for chunk downloads + assembly + upload (large interviews can be 80-100MB)
 export const maxDuration = 300;
 
+/**
+ * Fix the WebM Duration metadata field so video players show the correct total length.
+ * Chrome's MediaRecorder writes the duration of only the FIRST chunk into the EBML Segment
+ * Info element (~30s), causing assembled multi-chunk files to display as 59s even when they
+ * are 18+ minutes long. We scan the first 2KB for the Duration element (ID 0x4489) and
+ * overwrite it with the actual total duration.
+ */
+function fixWebmDuration(assembled: Uint8Array, validChunks: number, chunkIntervalMs = 30_000): void {
+  const estimatedDurationMs = validChunks * chunkIntervalMs;
+  const limit = Math.min(assembled.length - 12, 2048);
+  for (let i = 0; i < limit; i++) {
+    if (assembled[i] === 0x44 && assembled[i + 1] === 0x89) {
+      const sizeVint = assembled[i + 2];
+      if (sizeVint === 0x84) {
+        // float32 big-endian duration in milliseconds
+        new DataView(assembled.buffer, assembled.byteOffset + i + 3, 4)
+          .setFloat32(0, estimatedDurationMs, false);
+        return;
+      } else if (sizeVint === 0x88) {
+        // float64 big-endian duration in milliseconds
+        new DataView(assembled.buffer, assembled.byteOffset + i + 3, 8)
+          .setFloat64(0, estimatedDurationMs, false);
+        return;
+      }
+    }
+  }
+}
+
 export async function POST(req: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   // Prefer service role key (bypasses RLS) — falls back to anon key
@@ -87,6 +115,9 @@ export async function POST(req: NextRequest) {
       assembled.set(new Uint8Array(buf), offset);
       offset += buf.byteLength;
     }
+
+    // Fix WebM Duration metadata so players show correct total length instead of ~30s
+    if (fileExt === 'webm') fixWebmDuration(assembled, valid.length);
 
     const sizeMB = (totalBytes / 1024 / 1024).toFixed(2);
     const uploadStart = Date.now();
