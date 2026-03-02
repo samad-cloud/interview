@@ -114,9 +114,9 @@ export default function PromptsPage() {
               <div>
                 <h1 className="text-lg font-semibold flex items-center gap-2">
                   <Settings2 className="w-5 h-5 text-zinc-400" />
-                  AI Scoring Prompts
+                  AI Prompts
                 </h1>
-                <p className="text-sm text-zinc-500">Edit the prompts used by AI to score candidates</p>
+                <p className="text-sm text-zinc-500">Edit AI interviewer prompts and outgoing email templates</p>
               </div>
             </div>
           </div>
@@ -127,7 +127,7 @@ export default function PromptsPage() {
       <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 text-sm text-zinc-400">
           <p>
-            These prompts control how the AI evaluates candidates at each stage. Use <code className="text-zinc-300 bg-zinc-800 px-1.5 py-0.5 rounded">{'{variable_name}'}</code> placeholders
+            These prompts control how the AI interviews candidates and the emails sent throughout the hiring process. Use <code className="text-zinc-300 bg-zinc-800 px-1.5 py-0.5 rounded">{'{variable_name}'}</code> placeholders
             for dynamic values — they will be replaced with actual candidate data at runtime.
           </p>
         </div>
@@ -139,15 +139,24 @@ export default function PromptsPage() {
             <p>
               The following placeholders are injected automatically at runtime. Renaming, deleting, or altering them in any way will cause the system to break.
             </p>
-            <div className="flex flex-wrap gap-2 pt-1">
-              {['{candidateName}', '{jobTitle}', '{jobDescription}', '{resumeText}', '{dossierQuestions}'].map((v) => (
+            <p className="text-amber-300 font-medium pt-1">AI Interview prompts:</p>
+            <div className="flex flex-wrap gap-2">
+              {['{candidateName}', '{jobDescription}', '{resumeText}', '{dossierQuestions}'].map((v) => (
                 <code key={v} className="bg-amber-900/50 border border-amber-700/40 text-amber-300 px-2 py-0.5 rounded text-xs font-mono">
                   {v}
                 </code>
               ))}
             </div>
-            <p className="text-amber-200/60 text-xs">
-              Only edit the surrounding instructions and prose. Keep all <code className="text-amber-300 bg-amber-900/50 px-1 rounded">{'${...}'}</code> expressions exactly as they appear.
+            <p className="text-amber-300 font-medium pt-1">Email templates:</p>
+            <div className="flex flex-wrap gap-2">
+              {['{first_name}', '{company_name}', '{interview_link}', '{round2_link}', '{job_title}', '{role_title}', '{duration}', '{tally_url}'].map((v) => (
+                <code key={v} className="bg-amber-900/50 border border-amber-700/40 text-amber-300 px-2 py-0.5 rounded text-xs font-mono">
+                  {v}
+                </code>
+              ))}
+            </div>
+            <p className="text-amber-200/60 text-xs pt-1">
+              Only edit the surrounding instructions and prose. Keep all placeholders exactly as they appear.
             </p>
           </div>
         </div>

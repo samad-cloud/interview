@@ -465,6 +465,32 @@ ROUND2_EMAIL_HTML = """<!DOCTYPE html>
 </html>"""
 
 
+def interpolate_template(template: str, vars: dict) -> str:
+    """Replace {variable} placeholders in a template string. Safer than str.format()."""
+    result = template
+    for key, value in vars.items():
+        result = result.replace(f'{{{key}}}', str(value))
+    return result
+
+
+def fetch_email_templates(supabase) -> dict:
+    """Fetch email HTML templates from the prompts table. Returns empty dict on failure."""
+    try:
+        result = (
+            supabase.table("prompts")
+            .select("name, system_prompt")
+            .in_("name", ["email_round1_invite", "email_round2_invite", "email_reminder", "email_dubai_form"])
+            .execute()
+        )
+        templates = {}
+        for row in (result.data or []):
+            templates[row["name"]] = row["system_prompt"]
+        return templates
+    except Exception as e:
+        log("WARN", f"Failed to fetch email templates from DB, using hardcoded fallbacks: {e}")
+        return {}
+
+
 def fetch_top_candidates(supabase):
     """Fetch graded candidates with score >= MIN_SCORE, joining jobs.location for Dubai detection.
     Only fetches candidates with created_at set (excludes old/legacy candidates)."""
@@ -499,30 +525,32 @@ def create_email(to_email: str, subject: str, body: str, html: bool = False) -> 
     return {"raw": raw_message}
 
 
-def send_dubai_questionnaire(gmail_service, email: str, full_name: str, interview_token: str, role_title: str = "Open Position"):
+def send_dubai_questionnaire(gmail_service, email: str, full_name: str, interview_token: str, role_title: str = "Open Position", template: str = ""):
     """Send the Dubai eligibility form email with Tally CTA button."""
     encoded_name = quote(full_name)
     first_name = full_name.split()[0] if full_name else "there"
     tally_url = f"https://tally.so/r/{TALLY_FORM_ID}?interview_token={interview_token}&candidate_name={encoded_name}"
-    body = DUBAI_EMAIL_HTML.format(
-        first_name=first_name,
-        role_title=role_title,
-        company_name=COMPANY_NAME,
-        tally_url=tally_url
-    )
+    html_template = template or DUBAI_EMAIL_HTML
+    body = interpolate_template(html_template, {
+        "first_name": first_name,
+        "role_title": role_title,
+        "company_name": COMPANY_NAME,
+        "tally_url": tally_url,
+    })
     message = create_email(email, DUBAI_EMAIL_SUBJECT, body, html=True)
     gmail_service.users().messages().send(userId="me", body=message).execute()
 
 
-def send_interview_invite(gmail_service, email: str, full_name: str, interview_token: str):
+def send_interview_invite(gmail_service, email: str, full_name: str, interview_token: str, template: str = ""):
     """Send direct interview invite with secure token link."""
     first_name = full_name.split()[0] if full_name else "there"
     interview_link = f"{INTERVIEW_BASE_URL}/{interview_token}"
-    body = INVITE_EMAIL_HTML.format(
-        first_name=first_name,
-        interview_link=interview_link,
-        company_name=COMPANY_NAME
-    )
+    html_template = template or INVITE_EMAIL_HTML
+    body = interpolate_template(html_template, {
+        "first_name": first_name,
+        "interview_link": interview_link,
+        "company_name": COMPANY_NAME,
+    })
     message = create_email(email, INVITE_EMAIL_SUBJECT, body, html=True)
     gmail_service.users().messages().send(userId="me", body=message).execute()
 
@@ -579,21 +607,22 @@ def fetch_candidates_needing_reminder(supabase):
     return eligible
 
 
-def send_reminder_email(gmail_service, email: str, full_name: str, interview_link: str, is_round_2: bool = False):
+def send_reminder_email(gmail_service, email: str, full_name: str, interview_link: str, is_round_2: bool = False, template: str = ""):
     """Send a reminder email to a candidate who hasn't completed their interview."""
     first_name = full_name.split()[0] if full_name else "there"
     duration = "30&ndash;40 minutes" if is_round_2 else "15&ndash;20 minutes"
-    body = REMINDER_EMAIL_HTML.format(
-        first_name=first_name,
-        interview_link=interview_link,
-        duration=duration,
-        company_name=COMPANY_NAME
-    )
+    html_template = template or REMINDER_EMAIL_HTML
+    body = interpolate_template(html_template, {
+        "first_name": first_name,
+        "interview_link": interview_link,
+        "duration": duration,
+        "company_name": COMPANY_NAME,
+    })
     message = create_email(email, REMINDER_EMAIL_SUBJECT, body, html=True)
     gmail_service.users().messages().send(userId="me", body=message).execute()
 
 
-def run_reminders(supabase, gmail_service) -> int:
+def run_reminders(supabase, gmail_service, template: str = "") -> int:
     """Send reminder emails to candidates who haven't completed their interview after 3 days.
     Returns the number of reminders sent."""
     candidates = fetch_candidates_needing_reminder(supabase)
@@ -623,7 +652,7 @@ def run_reminders(supabase, gmail_service) -> int:
 
             is_round_2 = status == "ROUND_2_INVITED"
             log("INFO", f"Sending reminder to {email} (status: {status})")
-            send_reminder_email(gmail_service, email, full_name, interview_link, is_round_2=is_round_2)
+            send_reminder_email(gmail_service, email, full_name, interview_link, is_round_2=is_round_2, template=template)
 
             # Mark reminder as sent
             supabase.table("candidates").update({
@@ -655,22 +684,23 @@ def fetch_round_2_approved_candidates(supabase):
     return result.data
 
 
-def send_round_2_invite(gmail_service, email: str, full_name: str, interview_token: str, job_title: str):
+def send_round_2_invite(gmail_service, email: str, full_name: str, interview_token: str, job_title: str, template: str = ""):
     """Send Round 2 technical interview invite email."""
     first_name = full_name.split()[0] if full_name else "there"
     round2_link = f"{ROUND2_BASE_URL}/{interview_token}"
     subject = ROUND2_EMAIL_SUBJECT.format(job_title=job_title)
-    body = ROUND2_EMAIL_HTML.format(
-        first_name=first_name,
-        round2_link=round2_link,
-        job_title=job_title,
-        company_name=COMPANY_NAME
-    )
+    html_template = template or ROUND2_EMAIL_HTML
+    body = interpolate_template(html_template, {
+        "first_name": first_name,
+        "round2_link": round2_link,
+        "job_title": job_title,
+        "company_name": COMPANY_NAME,
+    })
     message = create_email(email, subject, body, html=True)
     gmail_service.users().messages().send(userId="me", body=message).execute()
 
 
-def run_round_2_invites(supabase, gmail_service) -> int:
+def run_round_2_invites(supabase, gmail_service, template: str = "") -> int:
     """Send Round 2 invite emails to candidates whose scheduled time has arrived.
     Returns the number of invites sent."""
     candidates = fetch_round_2_approved_candidates(supabase)
@@ -697,7 +727,7 @@ def run_round_2_invites(supabase, gmail_service) -> int:
             job_title = job.get("title", "Open Position") if job else "Open Position"
 
             log("INFO", f"Sending Round 2 invite to {email} (job: {job_title})")
-            send_round_2_invite(gmail_service, email, full_name, interview_token, job_title)
+            send_round_2_invite(gmail_service, email, full_name, interview_token, job_title, template=template)
             update_candidate_status(supabase, candidate_id, "ROUND_2_INVITED")
             log("SUCCESS", f"Round 2 invite sent to {email}")
             sent += 1
@@ -717,6 +747,13 @@ def run_mailer() -> tuple[int, int, int, int]:
 
     supabase = get_supabase_client()
     gmail_service = get_gmail_service()
+
+    # Fetch email templates from DB (fallback to hardcoded if unavailable)
+    templates = fetch_email_templates(supabase)
+    tmpl_invite = templates.get("email_round1_invite", "")
+    tmpl_round2 = templates.get("email_round2_invite", "")
+    tmpl_reminder = templates.get("email_reminder", "")
+    tmpl_dubai = templates.get("email_dubai_form", "")
 
     dubai_sent, invites_sent, failed = 0, 0, 0
 
@@ -738,7 +775,7 @@ def run_mailer() -> tuple[int, int, int, int]:
                 continue
 
             log("INFO", f"Sending interview invite to eligible Dubai candidate {email}")
-            send_interview_invite(gmail_service, email, full_name, interview_token)
+            send_interview_invite(gmail_service, email, full_name, interview_token, template=tmpl_invite)
             update_candidate_status(supabase, candidate_id, "INVITE_SENT")
             log("SUCCESS", f"Interview invite sent to {email}")
             invites_sent += 1
@@ -769,14 +806,14 @@ def run_mailer() -> tuple[int, int, int, int]:
                 job = candidate.get("jobs")
                 job_title = job.get("title", "Open Position") if job else "Open Position"
                 log("INFO", f"Dubai role detected for {email} (score: {score})")
-                send_dubai_questionnaire(gmail_service, email, full_name, interview_token, job_title)
+                send_dubai_questionnaire(gmail_service, email, full_name, interview_token, job_title, template=tmpl_dubai)
                 update_candidate_status(supabase, candidate_id, "QUESTIONNAIRE_SENT")
                 log("SUCCESS", f"Dubai eligibility form sent to {email}")
                 dubai_sent += 1
             else:
                 # Non-Dubai role → Send interview link directly
                 log("INFO", f"Non-Dubai role for {email} (score: {score}) - sending interview invite")
-                send_interview_invite(gmail_service, email, full_name, interview_token)
+                send_interview_invite(gmail_service, email, full_name, interview_token, template=tmpl_invite)
                 update_candidate_status(supabase, candidate_id, "INVITE_SENT")
                 log("SUCCESS", f"Interview invite sent to {email}")
                 invites_sent += 1
@@ -787,14 +824,14 @@ def run_mailer() -> tuple[int, int, int, int]:
 
     # --- Phase 3: Send delayed Round 2 invites (scheduled after "human review" period) ---
     try:
-        round_2_sent = run_round_2_invites(supabase, gmail_service)
+        round_2_sent = run_round_2_invites(supabase, gmail_service, template=tmpl_round2)
     except Exception as e:
         log("ERROR", f"Round 2 invite phase failed: {e}")
         round_2_sent = 0
 
     # --- Phase 4: Send reminders to candidates who haven't completed their interview ---
     try:
-        reminders_sent = run_reminders(supabase, gmail_service)
+        reminders_sent = run_reminders(supabase, gmail_service, template=tmpl_reminder)
     except Exception as e:
         log("ERROR", f"Reminder phase failed: {e}")
         reminders_sent = 0

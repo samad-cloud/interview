@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Mic, CameraOff, Loader2, Volume2, AlertCircle, Clock, Monitor, X } from 'lucide-react';
 import Image from 'next/image';
+import { supabase } from '@/lib/supabaseClient';
 
 // ── IndexedDB helpers for chunked recording ──────────────────────────────────
 const IDB_NAME  = 'interview-recording-chunks';
@@ -136,6 +137,11 @@ export default function VoiceAvatar({
   // In-flight welcome audio promises (started on mount, awaited at interview start)
   const welcomeAudioPromisesRef = useRef<Promise<Blob>[] | null>(null);
 
+  // Interviewer prompt templates fetched from DB (fetched once on mount)
+  const [promptTemplates, setPromptTemplates] = useState<Record<string, string>>({});
+  // Locked system prompt — set once when templates load (or immediately from fallback)
+  const systemPromptRef = useRef<string>('');
+
   // Upload progress state
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
@@ -158,8 +164,26 @@ export default function VoiceAvatar({
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const endInterviewRef = useRef<(() => Promise<void>) | null>(null);
 
+  // Helper: substitute {placeholder} variables in a prompt template
+  function interpolatePrompt(template: string, vars: Record<string, string>): string {
+    return Object.entries(vars).reduce(
+      (result, [key, value]) => result.replaceAll(`{${key}}`, value),
+      template
+    );
+  }
+
   // Round 1 (Serena) - Personality/Drive assessment
-  const round1Prompt = `=== YOUR IDENTITY ===
+  const dossierQuestions = dossier?.map((q, i) => `${i + 1}. ${q}`).join('\n') || 'No specific questions prepared.';
+
+  const vars = {
+    candidateName,
+    jobDescription,
+    resumeText: resumeText?.substring(0, 1000) || 'No resume provided.',
+    dossierQuestions,
+  };
+
+  // Fallback hardcoded prompts (used if DB fetch hasn't completed or failed)
+  const fallbackRound1Prompt = `=== YOUR IDENTITY ===
   NAME: Serena
   ROLE: Elite Talent Scout at Printerpix.
   VIBE: You are warm but incredibly sharp. You are NOT checking boxes. You are hunting for "A-Players" (top 1% talent).
@@ -211,10 +235,7 @@ export default function VoiceAvatar({
   You are Serena. You ASK questions. You do NOT answer questions about yourself.
   The candidate is ${candidateName}. They ANSWER your questions.`;
 
-  // Round 2 (Nova) - Technical verification
-  const dossierQuestions = dossier?.map((q, i) => `${i + 1}. ${q}`).join('\n') || 'No specific questions prepared.';
-  
-  const round2Prompt = `=== YOUR IDENTITY ===
+  const fallbackRound2Prompt = `=== YOUR IDENTITY ===
   NAME: Nova
   ROLE: Senior Technical Architect at Printerpix.
   VIBE: You are professional, direct, and technical. You respect competence and have zero tolerance for BS or buzzwords.
@@ -262,7 +283,24 @@ export default function VoiceAvatar({
   You are Nova. You ASK technical questions. You do NOT answer questions about yourself.
   The candidate is ${candidateName}. They ANSWER your questions.`;
 
-  const systemPrompt = round === 2 ? round2Prompt : round1Prompt;
+  // Lock the system prompt into a ref once DB templates load (or keep fallback if fetch fails).
+  // The ref ensures sendToAI always reads the same prompt for the entire interview session.
+  useEffect(() => {
+    const promptKey = round === 2 ? 'round_2_interviewer' : 'round_1_interviewer';
+    const dbTemplate = promptTemplates[promptKey];
+    if (dbTemplate) {
+      systemPromptRef.current = interpolatePrompt(dbTemplate, vars);
+    }
+  // Intentionally run only when promptTemplates changes (once after DB fetch)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [promptTemplates]);
+
+  // Initialise ref with fallback on first render so it's never empty
+  if (!systemPromptRef.current) {
+    systemPromptRef.current = round === 2 ? fallbackRound2Prompt : fallbackRound1Prompt;
+  }
+
+  const systemPrompt = systemPromptRef.current;
   const interviewerName = round === 2 ? 'Nova' : 'Serena';
 
   // Add entry to conversation history
@@ -690,6 +728,25 @@ export default function VoiceAvatar({
     } catch {
       setError('Could not access microphone');
     }
+  }, []);
+
+  // Fetch interviewer prompt templates from DB once on mount and lock into a ref
+  useEffect(() => {
+    supabase
+      .from('prompts')
+      .select('name, system_prompt')
+      .in('name', ['round_1_interviewer', 'round_2_interviewer'])
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          const map: Record<string, string> = {};
+          data.forEach((row: { name: string; system_prompt: string }) => {
+            map[row.name] = row.system_prompt;
+          });
+          setPromptTemplates(map);
+        }
+        // If fetch fails or returns nothing, systemPromptRef stays as fallback (set below)
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Attach camera stream to video element once it mounts

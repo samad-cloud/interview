@@ -43,7 +43,9 @@
       "WebFetch(domain:supabase.com)",
       "WebFetch(domain:github.com)",
       "Bash(claude plugins:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "mcp__plugin_claude-mem_mcp-search__search",
+      "mcp__supabase__list_migrations"
     ]
   }
 }
