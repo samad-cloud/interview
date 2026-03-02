@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Allow up to 300s for chunk downloads + assembly + upload (large interviews can be 80-100MB)
-export const maxDuration = 300;
-
 /**
  * Fix the WebM Duration metadata field so video players show the correct total length.
  * Chrome's MediaRecorder writes the duration of only the FIRST chunk into the EBML Segment
