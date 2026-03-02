@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
-import { generateJobDescription, type JobCitation } from '../actions/generateJob';
+import { generateJobDescription, refineJobDescription, type JobCitation } from '../actions/generateJob';
 import { generateSkills } from '../actions/generateSkills';
 import {
   ArrowLeft,
@@ -22,6 +22,7 @@ import {
   X,
   ExternalLink,
   Globe,
+  Wand2,
 } from 'lucide-react';
 
 // shadcn components
@@ -213,6 +214,8 @@ export default function GenJobPage() {
   const [isGeneratingSkills, setIsGeneratingSkills] = useState(false);
   const skillsGeneratedForTitle = useRef<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isRefining, setIsRefining] = useState(false);
+  const [refinePrompt, setRefinePrompt] = useState('');
   const [isPublishing, setIsPublishing] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [activeStep, setActiveStep] = useState(1);
@@ -389,6 +392,21 @@ export default function GenJobPage() {
       setMessage({ type: 'error', text: 'Failed to generate description. Try again.' });
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleRefine = async () => {
+    if (!refinePrompt.trim() || !description) return;
+    setIsRefining(true);
+    try {
+      const updated = await refineJobDescription(description, refinePrompt.trim());
+      setDescription(updated);
+      setRefinePrompt('');
+    } catch (error) {
+      console.error('Refinement failed:', error);
+      setMessage({ type: 'error', text: 'Failed to refine. Please try again.' });
+    } finally {
+      setIsRefining(false);
     }
   };
 
@@ -1021,6 +1039,50 @@ export default function GenJobPage() {
                       ))}
                     </CardContent>
                   </Card>
+                </div>
+              )}
+
+              {/* AI Refinement */}
+              {description && (
+                <div className="space-y-3 border border-zinc-700 rounded-lg p-4 bg-zinc-900/40">
+                  <Label className="flex items-center gap-2 text-sm font-medium">
+                    <Wand2 className="w-4 h-4 text-violet-400" />
+                    Refine with AI
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Not happy with something? Describe the changes you want and the AI will update the JD.
+                  </p>
+                  <Textarea
+                    value={refinePrompt}
+                    onChange={(e) => setRefinePrompt(e.target.value)}
+                    placeholder='e.g. "Make the tone more casual", "Add a section on remote work policy", "Shorten the requirements list to 5 bullet points"'
+                    rows={3}
+                    className="text-sm resize-none"
+                    disabled={isRefining}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleRefine();
+                    }}
+                  />
+                  <div className="flex justify-end">
+                    <Button
+                      onClick={handleRefine}
+                      disabled={isRefining || !refinePrompt.trim()}
+                      variant="outline"
+                      className="border-violet-600 text-violet-400 hover:bg-violet-600/10 hover:text-violet-300"
+                    >
+                      {isRefining ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                          Refining...
+                        </>
+                      ) : (
+                        <>
+                          <Wand2 className="w-4 h-4 mr-2" />
+                          Apply Changes
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
               )}
 

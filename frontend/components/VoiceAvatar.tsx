@@ -1587,7 +1587,7 @@ Round: ${round}
           )}
           {!isSpeaking && !transcript && isListening && (
             <p className="text-muted-foreground text-lg">
-              Listening...
+              Please begin speaking...
             </p>
           )}
         </div>
@@ -1597,28 +1597,29 @@ Round: ${round}
       <div className="h-24 bg-card border-t border-border flex items-center justify-center gap-6">
         {/* Done Speaking Button */}
         {!isSpeaking && (
-          <div className="relative">
-            {/* Silence nudge — appears after 5s of no voice */}
-            {showDoneHint && transcript.trim() && (
-              <div className="absolute -top-14 left-1/2 -translate-x-1/2 whitespace-nowrap animate-bounce">
-                <div className="bg-cyan-500 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-lg shadow-cyan-500/30">
-                  Done speaking? Click here!
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-cyan-500" />
-                </div>
-              </div>
-            )}
+          <div className="relative flex items-center">
             <button
               onClick={() => sendToAI(transcript)}
               disabled={!transcript.trim()}
               className={`px-6 h-14 rounded-full text-white font-semibold flex items-center justify-center gap-2 transition-all ${
                 transcript.trim()
-                  ? 'bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-500/25'
+                  ? `bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-500/25${showDoneHint ? ' animate-breathe-glow' : ''}`
                   : 'bg-muted opacity-50 cursor-not-allowed'
               }`}
               title="Send your response"
             >
               Done Speaking
             </button>
+            {/* Silence nudge — appears after 5s of silence, anchored to the right of the button */}
+            {showDoneHint && transcript.trim() && (
+              <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 whitespace-nowrap animate-in fade-in duration-300 z-10">
+                <div className="relative bg-emerald-500 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-lg shadow-emerald-500/30">
+                  {/* Left-pointing caret connecting tooltip to button */}
+                  <div className="absolute right-full top-1/2 -translate-y-1/2 w-0 h-0 border-y-[6px] border-r-[7px] border-y-transparent border-r-emerald-500" />
+                  All finished? Click here to continue.
+                </div>
+              </div>
+            )}
           </div>
         )}
 

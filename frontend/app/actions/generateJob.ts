@@ -132,3 +132,30 @@ OUTPUT RULES:
 
   return { description: object.jobDescription, citations };
 }
+
+export async function refineJobDescription(currentDescription: string, feedback: string): Promise<string> {
+  const schema = z.object({
+    jobDescription: z.string().describe('The complete revised job description in clean Markdown format. No preamble or commentary — only the JD itself.'),
+  });
+
+  const { object } = await generateObject({
+    model: gemini,
+    schema,
+    prompt: `You are an elite Technical Recruiter. Below is an existing job description that was written by an AI. The HR team has reviewed it and has specific feedback. Apply their feedback precisely while preserving the quality, tone, and structure of the original.
+
+CURRENT JOB DESCRIPTION:
+${currentDescription}
+
+HR FEEDBACK / REQUESTED CHANGES:
+${feedback}
+
+RULES:
+- Apply the requested changes accurately and completely.
+- Preserve all sections that were not mentioned in the feedback.
+- Keep the same direct, honest, specific tone as the original.
+- Return ONLY the revised job description. No preamble, no commentary, no "here is the updated JD".
+- Use clean Markdown (## for headers, - for bullets).`,
+  });
+
+  return object.jobDescription;
+}
