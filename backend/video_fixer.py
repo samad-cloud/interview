@@ -115,13 +115,23 @@ def run_video_fixer() -> int:
 
     supabase = get_supabase_client()
 
+    # Fetch candidates where either recording exists but hasn't been remuxed yet.
+    # We check each round independently so a candidate who completes R2 after R1
+    # was already fixed still gets their R2 recording processed.
     result = (
         supabase.table("candidates")
-        .select("id, video_url, round_2_video_url")
+        .select("id, video_url, round_2_video_url, video_remuxed, round_2_video_remuxed")
         .or_("video_url.not.is.null,round_2_video_url.not.is.null")
-        .neq("video_remuxed", True)
         .execute()
     )
+
+    # Filter to only those with at least one unremuxed recording
+    all_candidates = result.data or []
+    candidates = [
+        c for c in all_candidates
+        if (c.get("video_url") and not c.get("video_remuxed"))
+        or (c.get("round_2_video_url") and not c.get("round_2_video_remuxed"))
+    ]
 
     candidates = result.data or []
     log("INFO", f"[VideoFixer] Found {len(candidates)} candidate(s) with unremuxed recordings")
@@ -133,21 +143,19 @@ def run_video_fixer() -> int:
 
     for candidate in candidates:
         candidate_id = candidate["id"]
-        success = True
+        updates = {}
 
-        if candidate.get("video_url"):
-            if not fix_recording(supabase, candidate_id, candidate["video_url"], "video_url"):
-                success = False
+        if candidate.get("video_url") and not candidate.get("video_remuxed"):
+            if fix_recording(supabase, candidate_id, candidate["video_url"], "video_url"):
+                updates["video_remuxed"] = True
 
-        if candidate.get("round_2_video_url"):
-            if not fix_recording(supabase, candidate_id, candidate["round_2_video_url"], "round_2_video_url"):
-                success = False
+        if candidate.get("round_2_video_url") and not candidate.get("round_2_video_remuxed"):
+            if fix_recording(supabase, candidate_id, candidate["round_2_video_url"], "round_2_video_url"):
+                updates["round_2_video_remuxed"] = True
 
-        if success:
-            supabase.table("candidates").update({"video_remuxed": True}).eq("id", candidate_id).execute()
+        if updates:
+            supabase.table("candidates").update(updates).eq("id", candidate_id).execute()
             fixed_count += 1
-        else:
-            log("WARN", f"[VideoFixer] Skipping video_remuxed flag for candidate {candidate_id} due to errors")
 
     log("INFO", f"[VideoFixer] Done — {fixed_count} candidate(s) fixed")
     return fixed_count
