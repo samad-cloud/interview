@@ -46,7 +46,8 @@ def remux_with_ffmpeg(input_path: str, output_path: str) -> bool:
         stderr=subprocess.PIPE,
     )
     if result.returncode != 0:
-        log("ERROR", f"FFmpeg failed: {result.stderr.decode()[:500]}")
+        stderr = result.stderr.decode(errors="replace")
+        log("ERROR", f"FFmpeg failed (last 1000 chars):\n{stderr[-1000:]}")
         return False
     return True
 
