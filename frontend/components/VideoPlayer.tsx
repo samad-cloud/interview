@@ -1,7 +1,6 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import ReactPlayer from 'react-player';
 import {
   Play,
   Pause,
@@ -12,6 +11,7 @@ import {
   SkipForward,
   SkipBack,
   Gauge,
+  Download,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -56,6 +56,7 @@ export default function VideoPlayer({ src, title, className }: VideoPlayerProps)
   const [hoverX, setHoverX] = useState(0);
   const [jumpToInput, setJumpToInput] = useState('');
   const [showJumpInput, setShowJumpInput] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   // Fullscreen change listener
   useEffect(() => {
@@ -204,7 +205,7 @@ export default function VideoPlayer({ src, title, className }: VideoPlayerProps)
   const seekFromEvent = (clientX: number) => {
     const video = videoRef.current;
     const bar = progressRef.current;
-    if (!video || !bar) return;
+    if (!video || !bar || !duration || !isFinite(duration)) return;
     const rect = bar.getBoundingClientRect();
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     video.currentTime = ratio * duration;
@@ -254,6 +255,26 @@ export default function VideoPlayer({ src, title, className }: VideoPlayerProps)
     setJumpToInput('');
   };
 
+  // Download video
+  const handleDownload = async () => {
+    if (isDownloading) return;
+    setIsDownloading(true);
+    try {
+      const response = await fetch(src);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = title ? `${title}.webm` : 'interview-recording.webm';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   // Native video event handlers
   const handleTimeUpdate = () => {
     const video = videoRef.current;
@@ -264,7 +285,24 @@ export default function VideoPlayer({ src, title, className }: VideoPlayerProps)
   const handleLoadedMetadata = () => {
     const video = videoRef.current;
     if (!video) return;
+    if (isFinite(video.duration)) {
+      setDuration(video.duration);
+    } else {
+      // WebM files recorded with MediaRecorder don't store duration in the header.
+      // Seeking to an absurdly large value forces the browser to scan to the real end
+      // and fire a durationchange event with the actual duration, then we reset.
+      video.currentTime = 1e101;
+    }
+  };
+
+  const handleDurationChange = () => {
+    const video = videoRef.current;
+    if (!video || !isFinite(video.duration)) return;
     setDuration(video.duration);
+    // If we triggered the probe seek, reset playhead to the beginning
+    if (video.currentTime > 0 && currentTime === 0) {
+      video.currentTime = 0;
+    }
   };
 
   const handleProgress = () => {
@@ -288,23 +326,23 @@ export default function VideoPlayer({ src, title, className }: VideoPlayerProps)
       onMouseLeave={() => { if (isPlaying) setShowControls(false); }}
       tabIndex={0}
     >
-      {/* ReactPlayer wrapping video */}
+      {/* Native video element */}
       <div
         className={cn('w-full', isFullscreen ? 'h-full' : 'aspect-video max-h-[480px]')}
         onClick={togglePlay}
         onDoubleClick={toggleFullscreen}
       >
-        <ReactPlayer
+        <video
           ref={videoRef}
           src={src}
-          width="100%"
-          height="100%"
           preload="metadata"
+          className="w-full h-full object-contain"
           onPlay={() => setIsPlaying(true)}
           onPause={() => setIsPlaying(false)}
           onEnded={() => setIsPlaying(false)}
           onTimeUpdate={handleTimeUpdate}
           onLoadedMetadata={handleLoadedMetadata}
+          onDurationChange={handleDurationChange}
           onProgress={handleProgress}
         />
       </div>
@@ -431,7 +469,7 @@ export default function VideoPlayer({ src, title, className }: VideoPlayerProps)
                 className="hover:text-pink-400 transition-colors tabular-nums"
                 title="Click to jump to timestamp"
               >
-                {formatTime(currentTime)} / {formatTime(duration)}
+                {formatTime(currentTime)} / {duration && isFinite(duration) ? formatTime(duration) : '--:--'}
               </button>
             )}
           </div>
@@ -475,6 +513,16 @@ export default function VideoPlayer({ src, title, className }: VideoPlayerProps)
               </>
             )}
           </div>
+
+          {/* Download */}
+          <button
+            onClick={handleDownload}
+            disabled={isDownloading}
+            className="p-1.5 text-white hover:text-pink-400 transition-colors disabled:opacity-50 disabled:cursor-wait"
+            title="Download recording"
+          >
+            <Download className={cn('w-4 h-4', isDownloading && 'animate-pulse')} />
+          </button>
 
           {/* Fullscreen */}
           <button onClick={toggleFullscreen} className="p-1.5 text-white hover:text-pink-400 transition-colors" title="Fullscreen (f)">
