@@ -35,6 +35,7 @@ CREDENTIALS_PATH = PROJECT_ROOT / "credentials.json"
 # Environment variables
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # Production env vars for headless auth
@@ -48,10 +49,24 @@ def log(level: str, msg: str):
 
 
 def get_supabase_client():
-    """Initialize and return the Supabase client."""
+    """Initialize and return the Supabase client (anon key)."""
     if not SUPABASE_URL or not SUPABASE_KEY:
         raise ValueError("Missing SUPABASE_URL or SUPABASE_KEY environment variables")
     return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+
+def get_supabase_service_client():
+    """
+    Initialize and return a Supabase client using the service role key.
+    Bypasses RLS — use only for trusted server-side operations like storage writes.
+    Falls back to anon key if service role key is not set.
+    """
+    if not SUPABASE_URL:
+        raise ValueError("Missing SUPABASE_URL environment variable")
+    key = SUPABASE_SERVICE_ROLE_KEY or SUPABASE_KEY
+    if not key:
+        raise ValueError("Missing SUPABASE_SERVICE_ROLE_KEY and SUPABASE_KEY environment variables")
+    return create_client(SUPABASE_URL, key)
 
 
 def get_gmail_service():

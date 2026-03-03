@@ -16,7 +16,7 @@ import tempfile
 from pathlib import Path
 
 import httpx
-from utils import get_supabase_client, log
+from utils import get_supabase_service_client, log
 
 BUCKET = "interview-recordings"
 
@@ -113,7 +113,8 @@ def run_video_fixer() -> int:
     """
     log("INFO", "[VideoFixer] Starting...")
 
-    supabase = get_supabase_client()
+    # Service role key required to bypass RLS for storage re-uploads
+    supabase = get_supabase_service_client()
 
     # Fetch candidates where either recording exists but hasn't been remuxed yet.
     # We check each round independently so a candidate who completes R2 after R1
