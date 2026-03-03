@@ -325,7 +325,7 @@ NOTES INSTRUCTIONS:
 
     // Step 6: If score qualifies, generate dossier now and schedule Round 2 invite for next day 10 AM UTC
     // The delayed send gives the impression of human review before advancing candidates.
-    if (analysis.score >= 70 && (analysis.decision === 'Strong Hire' || analysis.decision === 'Hire')) {
+    if (analysis.score >= 50 && (analysis.decision === 'Strong Hire' || analysis.decision === 'Hire')) {
       console.log(`[End Interview] ${candidate.full_name} (${candidateId}) qualified for Round 2 (score: ${analysis.score}, decision: ${analysis.decision})`);
 
       // Generate dossier immediately while transcript is fresh

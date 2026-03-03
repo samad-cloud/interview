@@ -118,7 +118,7 @@ interface FullDossier {
   overallAssessment: string;
 }
 
-type SortColumn = 'created_at' | 'jd_match_score' | 'rating' | 'round_1_completed_at' | 'round_2_completed_at';
+type SortColumn = 'created_at' | 'jd_match_score' | 'combined_score' | 'round_1_completed_at' | 'round_2_completed_at';
 type SortDirection = 'asc' | 'desc';
 
 interface Candidate {
@@ -253,7 +253,7 @@ export default function DashboardPage() {
   const [resumeSearchQuery, setResumeSearchQuery] = useState('');
 
   // Sorting
-  const [sortColumn, setSortColumn] = useState<SortColumn>('rating');
+  const [sortColumn, setSortColumn] = useState<SortColumn>('combined_score');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   // Advanced filters
@@ -525,9 +525,15 @@ export default function DashboardPage() {
       if (r2DateFrom) query = query.gte('round_2_completed_at', r2DateFrom);
       if (r2DateTo) query = query.lte('round_2_completed_at', r2DateTo + 'T23:59:59');
 
-      const { data, error, count } = await query
-        .order(sortColumn, { ascending: sortDirection === 'asc', nullsFirst: false })
-        .range(from, to);
+      if (sortColumn === 'combined_score') {
+        query = query
+          .order('rating', { ascending: sortDirection === 'asc', nullsFirst: false })
+          .order('round_2_rating', { ascending: sortDirection === 'asc', nullsFirst: false });
+      } else {
+        query = query.order(sortColumn, { ascending: sortDirection === 'asc', nullsFirst: false });
+      }
+
+      const { data, error, count } = await query.range(from, to);
 
       if (error) {
         console.error('Error fetching candidates:', error);
@@ -544,8 +550,12 @@ export default function DashboardPage() {
         results = results.filter(c => matchesBooleanSearch(c.resume_text, resumeSearchQuery));
         // Client-side sort
         results.sort((a, b) => {
-          const aVal = a[sortColumn];
-          const bVal = b[sortColumn];
+          const aVal = sortColumn === 'combined_score'
+            ? (a.rating ?? 0) + (a.round_2_rating ?? 0)
+            : a[sortColumn as keyof typeof a];
+          const bVal = sortColumn === 'combined_score'
+            ? (b.rating ?? 0) + (b.round_2_rating ?? 0)
+            : b[sortColumn as keyof typeof b];
           if (aVal == null && bVal == null) return 0;
           if (aVal == null) return 1;
           if (bVal == null) return -1;
@@ -1522,10 +1532,10 @@ export default function DashboardPage() {
                         </div>
                       </TableHead>
                       <TableHead>Stage</TableHead>
-                      <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('rating')}>
+                      <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('combined_score')}>
                         <div className="flex items-center gap-1">
                           Scores
-                          <SortIcon column="rating" />
+                          <SortIcon column="combined_score" />
                         </div>
                       </TableHead>
                       <TableHead>Verdict</TableHead>
@@ -1628,17 +1638,10 @@ export default function DashboardPage() {
                           </TableCell>
 
                           <TableCell>
-                            {candidate.final_verdict ? (
-                              <Badge className={`${
-                                candidate.final_verdict === 'Hired' ? 'bg-emerald-500/20 text-emerald-400' :
-                                candidate.final_verdict.includes('Strong') ? 'bg-emerald-500/20 text-emerald-400' :
-                                candidate.final_verdict === 'Hire' ? 'bg-blue-500/20 text-blue-400' :
-                                candidate.final_verdict.includes('Weak') ? 'bg-yellow-500/20 text-yellow-400' :
-                                candidate.final_verdict === 'Rejected' ? 'bg-red-500/20 text-red-400' :
-                                'bg-red-500/20 text-red-400'
-                              }`}>
-                                {candidate.final_verdict}
-                              </Badge>
+                            {candidate.final_verdict === 'Hired' ? (
+                              <Badge className="bg-emerald-500/20 text-emerald-400">Advanced</Badge>
+                            ) : candidate.final_verdict === 'Rejected' ? (
+                              <Badge className="bg-red-500/20 text-red-400">Rejected</Badge>
                             ) : (
                               <span className="text-muted-foreground text-sm">—</span>
                             )}

@@ -138,8 +138,8 @@ def update_candidate_grade(supabase, candidate_id: int, score: int, reasoning: s
     updated_metadata = existing_metadata or {}
     updated_metadata["grading_reasoning"] = reasoning
 
-    # Set status based on score (70+ passes to mailer, below = rejected)
-    status = "GRADED" if score >= 70 else "CV_REJECTED"
+    # Set status based on score (50+ passes to mailer, below = rejected)
+    status = "GRADED" if score >= 50 else "CV_REJECTED"
 
     supabase.table("candidates").update({
         "jd_match_score": score,

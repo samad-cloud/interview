@@ -12,7 +12,7 @@ from utils import get_supabase_client, get_gmail_service, log
 
 # --- Configuration ---
 COMPANY_NAME = "Printerpix"
-MIN_SCORE = 70
+MIN_SCORE = 50
 INTERVIEW_BASE_URL = "https://printerpix-recruitment.vercel.app/interview"
 ROUND2_BASE_URL = "https://printerpix-recruitment.vercel.app/round2"
 TALLY_FORM_ID = os.environ.get("TALLY_FORM_ID", "")
