@@ -92,7 +92,8 @@ def fix_recording(supabase, candidate_id: int, url: str, column: str) -> bool | 
 
         # Remux with FFmpeg
         if not remux_with_ffmpeg(input_path, output_path):
-            return False
+            log("WARN", f"[VideoFixer] Corrupted/unreadable file for candidate {candidate_id}, skipping permanently: {storage_path}")
+            return None  # permanent — no point retrying a corrupt file
 
         fixed_size_mb = Path(output_path).stat().st_size / 1024 / 1024
         log("INFO", f"[VideoFixer] Remux complete ({fixed_size_mb:.1f}MB) — re-uploading to {storage_path}")
