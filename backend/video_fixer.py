@@ -52,15 +52,18 @@ def remux_with_ffmpeg(input_path: str, output_path: str) -> bool:
     return True
 
 
-def fix_recording(supabase, candidate_id: int, url: str, column: str) -> bool:
+def fix_recording(supabase, candidate_id: int, url: str, column: str) -> bool | None:
     """
     Download a recording, remux it with FFmpeg, re-upload to the same storage
-    path (overwrite), and return True on success.
+    path (overwrite), and return:
+      True  — success (remuxed)
+      False — temporary failure (will retry next cycle)
+      None  — permanent failure: file missing or bad URL (mark as done to stop retrying)
     """
     storage_path = extract_storage_path(url)
     if not storage_path:
         log("WARN", f"[VideoFixer] Could not extract storage path from URL for candidate {candidate_id}: {url}")
-        return False
+        return None
 
     log("INFO", f"[VideoFixer] Fixing {column} for candidate {candidate_id} — {storage_path}")
 
@@ -73,6 +76,13 @@ def fix_recording(supabase, candidate_id: int, url: str, column: str) -> bool:
             response = httpx.get(url, timeout=120, follow_redirects=True)
             response.raise_for_status()
             Path(input_path).write_bytes(response.content)
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code < 500:
+                # 4xx = file doesn't exist in storage — no point retrying
+                log("WARN", f"[VideoFixer] File not found for candidate {candidate_id} ({e.response.status_code}), skipping: {storage_path}")
+                return None
+            log("ERROR", f"[VideoFixer] Download failed for candidate {candidate_id}: {e}")
+            return False
         except Exception as e:
             log("ERROR", f"[VideoFixer] Download failed for candidate {candidate_id}: {e}")
             return False
@@ -148,11 +158,13 @@ def run_video_fixer() -> int:
         updates = {}
 
         if candidate.get("video_url") and not candidate.get("video_remuxed"):
-            if fix_recording(supabase, candidate_id, candidate["video_url"], "video_url"):
+            result = fix_recording(supabase, candidate_id, candidate["video_url"], "video_url")
+            if result is not False:  # True = remuxed, None = file missing — both stop retrying
                 updates["video_remuxed"] = True
 
         if candidate.get("round_2_video_url") and not candidate.get("round_2_video_remuxed"):
-            if fix_recording(supabase, candidate_id, candidate["round_2_video_url"], "round_2_video_url"):
+            result = fix_recording(supabase, candidate_id, candidate["round_2_video_url"], "round_2_video_url")
+            if result is not False:  # True = remuxed, None = file missing — both stop retrying
                 updates["round_2_video_remuxed"] = True
 
         if updates:
