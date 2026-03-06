@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
+import { generateRubric } from '@/app/actions/generateRubric';
 import {
   ArrowLeft,
   Plus,
@@ -17,6 +18,8 @@ import {
   AlertTriangle,
   X,
   Search,
+  Sparkles,
+  Upload,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -59,6 +62,7 @@ interface Job {
   ideal_candidate: string | null;
   red_flags: string | null;
   project_context: string | null;
+  r2_rubric: string | null;
   created_at: string | null;
   updated_at: string | null;
   candidate_count?: number;
@@ -151,6 +155,10 @@ export default function JobsPage() {
   const [editProjectContext, setEditProjectContext] = useState('');
   const [editIdealCandidate, setEditIdealCandidate] = useState('');
   const [editRedFlags, setEditRedFlags] = useState('');
+  const [editR2Rubric, setEditR2Rubric] = useState('');
+  const [isGeneratingRubric, setIsGeneratingRubric] = useState(false);
+  const [isParsingRubric, setIsParsingRubric] = useState(false);
+  const [rubricError, setRubricError] = useState<string | null>(null);
 
   const fetchJobs = useCallback(async () => {
     setLoading(true);
@@ -237,6 +245,8 @@ export default function JobsPage() {
     setEditProjectContext(job.project_context || '');
     setEditIdealCandidate(job.ideal_candidate || '');
     setEditRedFlags(job.red_flags || '');
+    setEditR2Rubric(job.r2_rubric || '');
+    setRubricError(null);
   };
 
   const handleSave = async () => {
@@ -270,6 +280,7 @@ export default function JobsPage() {
           project_context: editProjectContext || null,
           ideal_candidate: editIdealCandidate || null,
           red_flags: editRedFlags || null,
+          r2_rubric: editR2Rubric || null,
         })
         .eq('id', editingJob.id);
 
@@ -499,11 +510,12 @@ export default function JobsPage() {
           </DialogHeader>
 
           <Tabs defaultValue="details" className="mt-4">
-            <TabsList className="w-full grid grid-cols-4">
+            <TabsList className="w-full grid grid-cols-5">
               <TabsTrigger value="details">Details</TabsTrigger>
               <TabsTrigger value="compensation">Compensation</TabsTrigger>
               <TabsTrigger value="requirements">Requirements</TabsTrigger>
               <TabsTrigger value="description">Description</TabsTrigger>
+              <TabsTrigger value="rubric">Rubric</TabsTrigger>
             </TabsList>
 
             {/* Tab: Details */}
@@ -644,6 +656,83 @@ export default function JobsPage() {
               <div className="space-y-2">
                 <Label>Red Flags</Label>
                 <Textarea value={editRedFlags} onChange={(e) => setEditRedFlags(e.target.value)} rows={2} />
+              </div>
+            </TabsContent>
+
+            {/* Tab: Rubric */}
+            <TabsContent value="rubric" className="space-y-4 mt-4">
+              <p className="text-sm text-muted-foreground">
+                This rubric is used to guide the Round 2 technical interview questions and scoring. Auto-generate from the job description or upload your own document.
+              </p>
+              <div className="flex items-center gap-3 flex-wrap">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    if (!editingJob) return;
+                    setIsGeneratingRubric(true);
+                    setRubricError(null);
+                    const res = await generateRubric(editingJob.title, editDescription || editingJob.description || '');
+                    if (res.success && res.rubric) setEditR2Rubric(res.rubric);
+                    else setRubricError(res.error || 'Failed to generate rubric');
+                    setIsGeneratingRubric(false);
+                  }}
+                  disabled={isGeneratingRubric}
+                  className="border-blue-600 text-blue-400 hover:bg-blue-600/10"
+                >
+                  {isGeneratingRubric ? (
+                    <><Loader2 className="w-3 h-3 animate-spin mr-2" />Generating...</>
+                  ) : (
+                    <><Sparkles className="w-3 h-3 mr-2" />Generate from JD</>
+                  )}
+                </Button>
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.txt"
+                    className="hidden"
+                    disabled={isParsingRubric}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setIsParsingRubric(true);
+                      setRubricError(null);
+                      const formData = new FormData();
+                      formData.append('file', file);
+                      try {
+                        const res = await fetch('/api/parse-rubric', { method: 'POST', body: formData });
+                        const data = await res.json();
+                        if (data.rubric) setEditR2Rubric(data.rubric);
+                        else setRubricError(data.error || 'Failed to parse document');
+                      } catch {
+                        setRubricError('Upload failed. Please try again.');
+                      } finally {
+                        setIsParsingRubric(false);
+                        e.target.value = '';
+                      }
+                    }}
+                  />
+                  <Button variant="outline" size="sm" asChild disabled={isParsingRubric}>
+                    <span>
+                      {isParsingRubric ? (
+                        <><Loader2 className="w-3 h-3 animate-spin mr-2" />Parsing...</>
+                      ) : (
+                        <>Upload PDF / Word</>
+                      )}
+                    </span>
+                  </Button>
+                </label>
+              </div>
+              {rubricError && <p className="text-sm text-red-400">{rubricError}</p>}
+              <div className="space-y-2">
+                <Label>Rubric <span className="text-muted-foreground font-normal">(editable)</span></Label>
+                <Textarea
+                  value={editR2Rubric}
+                  onChange={(e) => setEditR2Rubric(e.target.value)}
+                  rows={16}
+                  className="font-mono text-sm"
+                  placeholder="No rubric set. Generate one from the JD or upload a document."
+                />
               </div>
             </TabsContent>
           </Tabs>

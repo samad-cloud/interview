@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
 import { generateJobDescription, refineJobDescription, type JobCitation } from '../actions/generateJob';
 import { generateSkills } from '../actions/generateSkills';
+import { generateRubric } from '../actions/generateRubric';
 import {
   ArrowLeft,
   Briefcase,
@@ -206,7 +207,13 @@ export default function GenJobPage() {
   const [idealCandidate, setIdealCandidate] = useState('');
   const [redFlags, setRedFlags] = useState('');
 
-  // Step 5: Generated Description
+  // Step 5: Rubric
+  const [r2Rubric, setR2Rubric] = useState('');
+  const [isGeneratingRubric, setIsGeneratingRubric] = useState(false);
+  const [rubricUploadError, setRubricUploadError] = useState<string | null>(null);
+  const [isParsingRubric, setIsParsingRubric] = useState(false);
+
+  // Step 6: Generated Description
   const [description, setDescription] = useState('');
   const [citations, setCitations] = useState<JobCitation[]>([]);
 
@@ -387,6 +394,13 @@ export default function GenJobPage() {
       setDescription(result.description);
       setCitations(result.citations);
       setActiveStep(5);
+      // Auto-generate rubric in background
+      if (!r2Rubric) {
+        setIsGeneratingRubric(true);
+        generateRubric(title, result.description).then((res) => {
+          if (res.success && res.rubric) setR2Rubric(res.rubric);
+        }).finally(() => setIsGeneratingRubric(false));
+      }
     } catch (error) {
       console.error('Generation failed:', error);
       setMessage({ type: 'error', text: 'Failed to generate description. Try again.' });
@@ -442,6 +456,7 @@ export default function GenJobPage() {
         ideal_candidate: idealCandidate || null,
         red_flags: redFlags || null,
         project_context: projectContext || null,
+        r2_rubric: r2Rubric || null,
       });
 
       if (error) throw error;
@@ -465,7 +480,8 @@ export default function GenJobPage() {
     { num: 2, label: 'Compensation', icon: DollarSign },
     { num: 3, label: 'Requirements', icon: GraduationCap },
     { num: 4, label: 'AI Context', icon: Target },
-    { num: 5, label: 'Review', icon: FileText },
+    { num: 5, label: 'Rubric', icon: Target },
+    { num: 6, label: 'Review', icon: FileText },
   ];
 
   return (
@@ -959,8 +975,116 @@ export default function GenJobPage() {
           </Card>
         )}
 
-        {/* Step 5: Review & Publish */}
+        {/* Step 5: Rubric */}
         {activeStep === 5 && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center">
+                  <Target className="w-5 h-5 text-blue-400" />
+                </div>
+                <div>
+                  <CardTitle>Technical Interview Rubric</CardTitle>
+                  <CardDescription>Define how candidates will be assessed in Round 2. Auto-generated from your JD — edit freely or upload your own.</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {/* Auto-generate button */}
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    setIsGeneratingRubric(true);
+                    const res = await generateRubric(title, description);
+                    if (res.success && res.rubric) setR2Rubric(res.rubric);
+                    setIsGeneratingRubric(false);
+                  }}
+                  disabled={isGeneratingRubric || !description}
+                  className="border-blue-600 text-blue-400 hover:bg-blue-600/10"
+                >
+                  {isGeneratingRubric ? (
+                    <><Loader2 className="w-4 h-4 animate-spin mr-2" />Generating...</>
+                  ) : (
+                    <><Sparkles className="w-4 h-4 mr-2" />Regenerate from JD</>
+                  )}
+                </Button>
+                <span className="text-muted-foreground text-sm">or</span>
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.txt"
+                    className="hidden"
+                    disabled={isParsingRubric}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setIsParsingRubric(true);
+                      setRubricUploadError(null);
+                      const formData = new FormData();
+                      formData.append('file', file);
+                      try {
+                        const res = await fetch('/api/parse-rubric', { method: 'POST', body: formData });
+                        const data = await res.json();
+                        if (data.rubric) setR2Rubric(data.rubric);
+                        else setRubricUploadError(data.error || 'Failed to parse document');
+                      } catch {
+                        setRubricUploadError('Upload failed. Please try again.');
+                      } finally {
+                        setIsParsingRubric(false);
+                        e.target.value = '';
+                      }
+                    }}
+                  />
+                  <Button variant="outline" asChild disabled={isParsingRubric}>
+                    <span>
+                      {isParsingRubric ? (
+                        <><Loader2 className="w-4 h-4 animate-spin mr-2" />Parsing...</>
+                      ) : (
+                        <>Upload PDF / Word</>
+                      )}
+                    </span>
+                  </Button>
+                </label>
+              </div>
+
+              {rubricUploadError && (
+                <p className="text-sm text-red-400">{rubricUploadError}</p>
+              )}
+
+              {isGeneratingRubric && !r2Rubric && (
+                <div className="text-sm text-muted-foreground animate-pulse">Generating rubric from job description...</div>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="r2Rubric">
+                  Rubric
+                  <span className="text-muted-foreground font-normal ml-2">(editable)</span>
+                </Label>
+                <Textarea
+                  id="r2Rubric"
+                  value={r2Rubric}
+                  onChange={(e) => setR2Rubric(e.target.value)}
+                  rows={18}
+                  placeholder={isGeneratingRubric ? 'Generating rubric...' : 'Rubric will appear here. Click "Regenerate from JD" or upload a document.'}
+                  className="font-mono text-sm"
+                />
+              </div>
+
+              <div className="flex justify-between pt-4">
+                <Button variant="outline" onClick={() => setActiveStep(4)}>
+                  ← Back
+                </Button>
+                <Button onClick={() => setActiveStep(6)} className="bg-emerald-600 hover:bg-emerald-500">
+                  Next: Review & Publish →
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Step 6: Review & Publish */}
+        {activeStep === 6 && (
           <Card>
             <CardHeader>
               <div className="flex items-center gap-3">
@@ -1087,8 +1211,8 @@ export default function GenJobPage() {
               )}
 
               <div className="flex justify-between pt-4">
-                <Button variant="outline" onClick={() => setActiveStep(4)}>
-                  ← Back to Edit
+                <Button variant="outline" onClick={() => setActiveStep(5)}>
+                  ← Back to Rubric
                 </Button>
                 <Button
                   onClick={handlePublish}

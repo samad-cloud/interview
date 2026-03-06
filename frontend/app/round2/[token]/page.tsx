@@ -37,6 +37,7 @@ export default function Round2Page() {
   const [isMobile] = useState<boolean>(() => detectMobile());
   const [candidate, setCandidate] = useState<CandidateData | null>(null);
   const [jobTitle, setJobTitle] = useState<string>('Open Position');
+  const [r2Rubric, setR2Rubric] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
   const [loadingMessage, setLoadingMessage] = useState('Loading technical interview...');
   const [error, setError] = useState<string | null>(null);
@@ -91,14 +92,15 @@ export default function Round2Page() {
 
           setCandidate(data);
 
-          // Fetch job title — best-effort, single attempt (non-critical)
+          // Fetch job details — best-effort, single attempt (non-critical)
           if (data.job_id) {
             const { data: job } = await supabase
               .from('jobs')
-              .select('title')
+              .select('title, r2_rubric')
               .eq('id', data.job_id)
               .single();
             if (job?.title) setJobTitle(job.title);
+            if (job?.r2_rubric) setR2Rubric(job.r2_rubric);
           }
 
           setIsLoading(false);
@@ -250,6 +252,7 @@ export default function Round2Page() {
       resumeText={candidate.resume_text || 'No resume provided'}
       round={2}
       dossier={parsedDossier}
+      r2Rubric={r2Rubric}
     />
   );
 }

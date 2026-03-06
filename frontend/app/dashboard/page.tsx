@@ -127,6 +127,7 @@ interface Candidate {
   email: string;
   rating: number | null;
   round_2_rating: number | null;
+  combined_score: number | null;
   jd_match_score: number | null;
   ai_summary: string | null;
   interview_notes: InterviewNotes | null;
@@ -465,7 +466,7 @@ export default function DashboardPage() {
 
       let query = supabase
         .from('candidates')
-        .select('id, full_name, email, rating, round_2_rating, jd_match_score, ai_summary, interview_notes, status, current_stage, interview_transcript, round_2_transcript, resume_text, resume_url, job_id, final_verdict, full_verdict, round_1_full_dossier, hr_notes, interview_token, created_at, video_url, round_2_video_url, applied_at, round_1_completed_at, round_2_completed_at', { count: isBooleanActive ? undefined : 'exact' });
+        .select('id, full_name, email, rating, round_2_rating, combined_score, jd_match_score, ai_summary, interview_notes, status, current_stage, interview_transcript, round_2_transcript, resume_text, resume_url, job_id, final_verdict, full_verdict, round_1_full_dossier, hr_notes, interview_token, created_at, video_url, round_2_video_url, applied_at, round_1_completed_at, round_2_completed_at', { count: isBooleanActive ? undefined : 'exact' });
 
       if (searchQuery) {
         query = query.or(`full_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
@@ -525,13 +526,7 @@ export default function DashboardPage() {
       if (r2DateFrom) query = query.gte('round_2_completed_at', r2DateFrom);
       if (r2DateTo) query = query.lte('round_2_completed_at', r2DateTo + 'T23:59:59');
 
-      if (sortColumn === 'combined_score') {
-        query = query
-          .order('rating', { ascending: sortDirection === 'asc', nullsFirst: false })
-          .order('round_2_rating', { ascending: sortDirection === 'asc', nullsFirst: false });
-      } else {
-        query = query.order(sortColumn, { ascending: sortDirection === 'asc', nullsFirst: false });
-      }
+      query = query.order(sortColumn, { ascending: sortDirection === 'asc', nullsFirst: false });
 
       const { data, error, count } = await query.range(from, to);
 
@@ -550,12 +545,8 @@ export default function DashboardPage() {
         results = results.filter(c => matchesBooleanSearch(c.resume_text, resumeSearchQuery));
         // Client-side sort
         results.sort((a, b) => {
-          const aVal = sortColumn === 'combined_score'
-            ? (a.rating ?? 0) + (a.round_2_rating ?? 0)
-            : a[sortColumn as keyof typeof a];
-          const bVal = sortColumn === 'combined_score'
-            ? (b.rating ?? 0) + (b.round_2_rating ?? 0)
-            : b[sortColumn as keyof typeof b];
+          const aVal = a[sortColumn as keyof typeof a] ?? 0;
+          const bVal = b[sortColumn as keyof typeof b] ?? 0;
           if (aVal == null && bVal == null) return 0;
           if (aVal == null) return 1;
           if (bVal == null) return -1;
@@ -1010,7 +1001,7 @@ export default function DashboardPage() {
   };
 
   const handleBulkAdvance = () => {
-    const eligible = selectedCandidates.filter(c => c.rating !== null && c.final_verdict !== 'Hired');
+    const eligible = selectedCandidates.filter(c => c.final_verdict !== 'Hired');
     if (eligible.length === 0) {
       setToastModal({ title: 'No Eligible Candidates', description: 'None of the selected candidates are eligible to advance.', variant: 'error' });
       return;
@@ -1028,7 +1019,7 @@ export default function DashboardPage() {
   };
 
   const handleBulkReject = () => {
-    const eligible = selectedCandidates.filter(c => c.rating !== null && c.final_verdict !== 'Rejected');
+    const eligible = selectedCandidates.filter(c => c.final_verdict !== 'Rejected');
     if (eligible.length === 0) {
       setToastModal({ title: 'No Eligible Candidates', description: 'None of the selected candidates are eligible to reject.', variant: 'error' });
       return;
@@ -2263,9 +2254,8 @@ export default function DashboardPage() {
             ) : null}
 
             {/* HR Decision */}
-            {selectedCandidate?.rating !== null && <Separator />}
-            {selectedCandidate?.rating !== null && (
-              <div>
+            <Separator />
+            <div>
                 <div className="flex items-center gap-2 mb-3">
                   <Trophy className="w-5 h-5 text-amber-400" />
                   <h3 className="text-lg font-semibold">HR Decision</h3>
@@ -2315,8 +2305,7 @@ export default function DashboardPage() {
                     {selectedCandidate?.final_verdict === 'Rejected' ? 'Rejected' : 'Reject'}
                   </Button>
                 </div>
-              </div>
-            )}
+            </div>
 
             {/* No data state */}
             {!selectedCandidate?.interview_transcript && !selectedCandidate?.round_2_transcript && (

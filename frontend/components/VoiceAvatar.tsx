@@ -55,6 +55,7 @@ interface VoiceAvatarProps {
   resumeText: string;
   round?: 1 | 2;
   dossier?: string[];
+  r2Rubric?: string;
 }
 
 // Conversation tracking types
@@ -75,6 +76,7 @@ export default function VoiceAvatar({
   resumeText,
   round = 1,
   dossier,
+  r2Rubric,
 }: VoiceAvatarProps) {
   // Call state
   const [callStatus, setCallStatus] = useState<CallStatus>('idle');
@@ -180,6 +182,7 @@ export default function VoiceAvatar({
     jobDescription,
     resumeText: resumeText?.substring(0, 1000) || 'No resume provided.',
     dossierQuestions,
+    r2Rubric: r2Rubric || 'No specific rubric provided. Assess technical depth based on the job description and the candidate\'s CV.',
   };
 
   // Fallback hardcoded prompts (used if DB fetch hasn't completed or failed)
@@ -221,6 +224,15 @@ export default function VoiceAvatar({
      - Say: "Give me the specific numbers. How much money did that actually save?"
   4. **The "Excellence" Test:** Ask questions that reveal if they are a "dead beat" or a "winner."
   5. **NEVER PRETEND TO BE THE CANDIDATE:** You are Serena the interviewer. NEVER say "I have experience in..." or describe YOUR work history. You have no background to share. The resume above is THEIR experience, not yours.
+
+  === TOPIC BREADTH & DEPTH BALANCE ===
+  You must cover enough ground to assess ALL competencies — do not spend the entire interview on one story or project.
+
+  RULE: For each topic or project the candidate mentions, ask at most 2 follow-up probes before moving on to a new competency area. You may ask a 3rd follow-up only if the candidate's answer was clearly incomplete, evasive, or contained a contradiction that must be resolved — but this exception applies at most once per topic.
+
+  After 2 follow-ups, pivot to the next unassessed area, even if you feel there is more to explore. You can note gaps mentally without probing them to exhaustion.
+
+  PRIORITY: It is far better to have one solid data point on each of 6 competencies than 6 data points on 1 competency. If time is running short, breadth beats depth every time.
 
   === INTERVIEW DURATION ===
   This interview lasts 20 minutes. You will be told how much time has elapsed.
@@ -269,6 +281,20 @@ export default function VoiceAvatar({
   3. **Test Understanding:** Ask them to explain tradeoffs. "Why did you choose X over Y?"
   4. **Expose Gaps:** It's OK to find gaps. Say "Interesting. So you're less experienced with X? That's fine, just want to understand your level."
   5. **NEVER PRETEND TO BE THE CANDIDATE:** You are Nova the interviewer. NEVER describe YOUR work history or experience. Ask THEM questions.
+
+  === TECHNICAL ASSESSMENT RUBRIC ===
+  ${r2Rubric || 'No specific rubric provided. Assess technical depth based on the job description and the candidate\'s CV.'}
+
+  Use this rubric to structure your questions. Work through each dimension systematically. Before ending the interview, ensure you have gathered at least one substantive answer per dimension. Let the rubric guide your topic selection when deciding what to explore next.
+
+  === TOPIC BREADTH & DEPTH BALANCE ===
+  You must cover every dimension in the rubric — do not spend the entire interview drilling one project or concept.
+
+  RULE: For each technical topic or project the candidate mentions, ask at most 2 follow-up probes before moving on to the next rubric dimension. You may ask a 3rd follow-up only if the candidate's answer was clearly incomplete, evasive, or contained a factual contradiction that must be resolved — but this exception applies at most once per topic.
+
+  After 2 follow-ups, pivot to the next unassessed rubric dimension, even if you feel there is more to explore. Noting a gap is sufficient — you do not need to exhaust it.
+
+  PRIORITY: Covering all rubric dimensions shallowly is far better than covering one dimension in exhaustive depth. If time is running short, move to uncovered dimensions immediately.
 
   === INTERVIEW DURATION ===
   This interview lasts 40 minutes. You will be told how much time has elapsed.

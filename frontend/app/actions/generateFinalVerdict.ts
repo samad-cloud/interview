@@ -52,17 +52,19 @@ export async function generateFinalVerdict(candidateId: string): Promise<Verdict
       return { success: false, error: 'Candidate not found' };
     }
 
-    // Get job description from jobs table if not on candidate
+    // Get job description and rubric from jobs table if not on candidate
     let jobDesc = candidate.job_description || '';
-    if (!jobDesc && candidate.job_id) {
+    let r2Rubric = '';
+    if (candidate.job_id) {
       const { data: job } = await supabase
         .from('jobs')
-        .select('description, title')
+        .select('description, title, r2_rubric')
         .eq('id', candidate.job_id)
         .single();
 
       if (job) {
-        jobDesc = `${job.title}: ${job.description || ''}`;
+        if (!jobDesc) jobDesc = `${job.title}: ${job.description || ''}`;
+        r2Rubric = job.r2_rubric || '';
       }
     }
 
@@ -80,6 +82,11 @@ export async function generateFinalVerdict(candidateId: string): Promise<Verdict
 JOB: {job_description}
 
 ROUND 1 SCORE (Personality/Drive): {round_1_score}/100
+
+TECHNICAL ASSESSMENT RUBRIC:
+{r2_rubric}
+
+Score each rubric dimension explicitly based on the transcript evidence, then derive your overall technical score from those dimension scores.
 
 ROUND 2 TRANSCRIPT (Technical Interview):
 {transcript}
@@ -137,6 +144,7 @@ VERDICT OPTIONS:
       .replace(/\{candidate_name\}/g, candidate.full_name || 'this candidate')
       .replace(/\{job_description\}/g, jobDesc.substring(0, 1500) || 'Software Engineering Role')
       .replace(/\{round_1_score\}/g, String(round1Score))
+      .replace(/\{r2_rubric\}/g, r2Rubric || 'No specific rubric provided. Assess technical depth based on the job description.')
       .replace(/\{transcript\}/g, round2Transcript.substring(0, 6000));
 
     const { object: fullVerdict } = await generateObject({
