@@ -3,9 +3,11 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { google } from 'googleapis';
 import { generateDossier } from './generateDossier';
+import { generateRound3Dossier } from './generateRound3Dossier';
 
 const INTERVIEW_BASE_URL = 'https://printerpix-recruitment.vercel.app/interview';
 const ROUND2_BASE_URL = 'https://printerpix-recruitment.vercel.app/round2';
+const ROUND3_BASE_URL = 'https://printerpix-recruitment.vercel.app/round3';
 const COMPANY_NAME = 'Printerpix';
 
 /** Replace {variable} placeholders in a template string. */
@@ -41,6 +43,20 @@ const ROUND1_INVITE_FALLBACK_HTML = `<!DOCTYPE html><html><head><meta charset="u
 <p>Hi {first_name},</p>
 <p>At {company_name}, we use our own AI system to make hiring faster, fairer, and more focused on you. The interview typically takes 15–20 minutes. Find a quiet spot, relax, and let your experience speak for itself.</p>
 <p style="text-align:center;margin:28px 0;"><a href="{interview_link}" style="background:#c30361;color:#fff;text-decoration:none;padding:16px 40px;border-radius:8px;font-weight:700;">Start Your Interview →</a></p>
+<p style="color:#6b7280;font-size:13px;">Issues? Email <a href="mailto:printerpix.recruitment@gmail.com">printerpix.recruitment@gmail.com</a></p>
+</div>
+<div style="background:#1f2937;padding:24px 36px;color:rgba(255,255,255,0.85);font-size:13px;">Best regards, John Poole — Recruitment Manager, {company_name}</div>
+</div></body></html>`;
+
+const ROUND3_INVITE_FALLBACK_HTML = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="font-family:'Segoe UI',sans-serif;background:#faf5f7;padding:40px 16px;">
+<div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;">
+<div style="background:#c30361;padding:28px 36px;"><h1 style="margin:0;color:#fff;font-size:22px;">{company_name}</h1></div>
+<div style="padding:32px 36px;">
+<p style="color:#c30361;font-size:22px;font-weight:700;">Final Stage: Your AI Avatar Deep-Dive</p>
+<p>Hi {first_name},</p>
+<p>Congratulations — you've made it to the final stage of our process for the <strong>{job_title}</strong> role. This is a 40-minute in-depth session with our AI avatar interviewer, who will explore your background in detail. You will need a laptop with a working camera and microphone, and you'll be asked to share your screen for the session.</p>
+<p style="text-align:center;margin:28px 0;"><a href="{round3_link}" style="background:#c30361;color:#fff;text-decoration:none;padding:16px 40px;border-radius:8px;font-weight:700;">Start Final Interview →</a></p>
 <p style="color:#6b7280;font-size:13px;">Issues? Email <a href="mailto:printerpix.recruitment@gmail.com">printerpix.recruitment@gmail.com</a></p>
 </div>
 <div style="background:#1f2937;padding:24px 36px;color:rgba(255,255,255,0.85);font-size:13px;">Best regards, John Poole — Recruitment Manager, {company_name}</div>
@@ -334,5 +350,82 @@ export async function inviteToRound2(candidateId: number): Promise<SendInviteRes
   } catch (error) {
     console.error('Invite to round 2 error:', error);
     return { success: false, error: 'Failed to invite to round 2' };
+  }
+}
+
+export async function inviteToRound3(candidateId: number): Promise<SendInviteResult> {
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseKey) return { success: false, error: 'Supabase not configured' };
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    const { data: candidate, error: fetchError } = await supabase
+      .from('candidates')
+      .select('email, full_name, round_3_token, job_id')
+      .eq('id', candidateId)
+      .single();
+
+    if (fetchError || !candidate) return { success: false, error: 'Candidate not found' };
+    if (!candidate.round_3_token) return { success: false, error: 'No Round 3 token found' };
+
+    let jobTitle = 'Open Position';
+    if (candidate.job_id) {
+      const { data: job } = await supabase.from('jobs').select('title').eq('id', candidate.job_id).single();
+      if (job) jobTitle = job.title;
+    }
+
+    const round3Link = `${ROUND3_BASE_URL}/${candidate.round_3_token}`;
+    const firstName = candidate.full_name?.split(' ')[0] || 'there';
+
+    // Generate deep-dive dossier from R1 + R2 before inviting
+    console.log(`[Round 3 Invite] Generating dossier for candidate ${candidateId}...`);
+    const dossierResult = await generateRound3Dossier(String(candidateId));
+    if (!dossierResult.success) {
+      console.warn(`[Round 3 Invite] Dossier generation failed: ${dossierResult.error} — proceeding without dossier`);
+    } else {
+      console.log(`[Round 3 Invite] Generated ${dossierResult.dossier?.probeAreas.length || 0} probe areas`);
+    }
+
+    const gmail = getGmailService();
+    if (gmail) {
+      try {
+        const template = await fetchEmailTemplate(supabase, 'email_round3_invite');
+        const htmlBody = interpolateEmail(template ?? ROUND3_INVITE_FALLBACK_HTML, {
+          first_name: firstName,
+          round3_link: round3Link,
+          job_title: jobTitle,
+          company_name: COMPANY_NAME,
+        });
+
+        const rawMessage = createEmail(
+          candidate.email,
+          `Final Interview Stage — ${jobTitle} at ${COMPANY_NAME}`,
+          htmlBody
+        );
+
+        const result = await gmail.users.messages.send({ userId: 'me', requestBody: { raw: rawMessage } });
+        console.log(`[Round 3 Invite] SUCCESS — Gmail message ID: ${result.data.id}`);
+      } catch (emailError: unknown) {
+        const err = emailError as { code?: number; message?: string };
+        console.error('[Round 3 Invite] Gmail FAILED:', err.message);
+        return { success: false, error: `Gmail send failed: ${err.message || 'Unknown error'}` };
+      }
+    }
+
+    await supabase
+      .from('candidates')
+      .update({
+        current_stage: 'round_3',
+        round_3_status: 'INVITED',
+        round_3_invited_at: new Date().toISOString(),
+      })
+      .eq('id', candidateId);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Invite to round 3 error:', error);
+    return { success: false, error: 'Failed to invite to round 3' };
   }
 }

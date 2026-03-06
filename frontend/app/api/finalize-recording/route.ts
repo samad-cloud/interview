@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
-    const folder = round === 2 ? 'round2' : 'round1';
+    const folder = round === 3 ? 'round3' : round === 2 ? 'round2' : 'round1';
 
     // Auto-detect chunk count from storage if not provided (e.g. manual stitch from dashboard)
     let chunkCount: number = typeof rawChunkCount === 'number' && rawChunkCount > 0 ? rawChunkCount : 0;
@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Update the DB column
-    const videoColumn = round === 2 ? 'round_2_video_url' : 'video_url';
+    const videoColumn = round === 3 ? 'round_3_recording_url' : round === 2 ? 'round_2_video_url' : 'video_url';
     const { error: dbError } = await supabase
       .from('candidates')
       .update({ [videoColumn]: publicUrl })

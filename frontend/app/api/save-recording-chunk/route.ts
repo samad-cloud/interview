@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
 
     const chunkBuffer = await chunk.arrayBuffer();
     const sizeKB = (chunkBuffer.byteLength / 1024).toFixed(1);
-    const folder = round === '2' ? 'round2' : 'round1';
+    const folder = round === '3' ? 'round3' : round === '2' ? 'round2' : 'round1';
     const filePath = `chunks/${folder}/${candidateId}/chunk_${chunkIndex}.webm`;
 
     console.log(`[Recording] Chunk ${chunkIndex} received — candidate ${candidateId} (Round ${round}), size: ${sizeKB}KB, type: ${mimeType}`);

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { createClient as createBrowserSupabase } from '@/lib/supabase-browser';
-import { sendInterviewInvite, inviteToRound2 } from '@/app/actions/sendInvite';
+import { sendInterviewInvite, inviteToRound2, inviteToRound3 } from '@/app/actions/sendInvite';
 import { generateInterviewNotes, type InterviewNotes } from '@/app/actions/generateNotes';
 import {
   Trophy,
@@ -143,6 +143,7 @@ interface Candidate {
   created_at: string | null;
   video_url: string | null;
   round_2_video_url: string | null;
+  round_3_status: string | null;
   full_verdict: FullVerdict | null;
   round_1_full_dossier: FullDossier | null;
   hr_notes: string | null;
@@ -466,7 +467,7 @@ export default function DashboardPage() {
 
       let query = supabase
         .from('candidates')
-        .select('id, full_name, email, rating, round_2_rating, combined_score, jd_match_score, ai_summary, interview_notes, status, current_stage, interview_transcript, round_2_transcript, resume_text, resume_url, job_id, final_verdict, full_verdict, round_1_full_dossier, hr_notes, interview_token, created_at, video_url, round_2_video_url, applied_at, round_1_completed_at, round_2_completed_at', { count: isBooleanActive ? undefined : 'exact' });
+        .select('id, full_name, email, rating, round_2_rating, combined_score, jd_match_score, ai_summary, interview_notes, status, current_stage, interview_transcript, round_2_transcript, resume_text, resume_url, job_id, final_verdict, full_verdict, round_1_full_dossier, hr_notes, interview_token, created_at, video_url, round_2_video_url, round_3_status, applied_at, round_1_completed_at, round_2_completed_at', { count: isBooleanActive ? undefined : 'exact' });
 
       if (searchQuery) {
         query = query.or(`full_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
@@ -714,6 +715,20 @@ export default function DashboardPage() {
       setCandidates(prev => prev.map(c =>
         c.id === candidateId ? { ...c, current_stage: 'round_2', status: 'ROUND_2_INVITED' } : c
       ));
+    } else {
+      setToastModal({ title: 'Failed to Invite', description: result.error || 'An unexpected error occurred.', variant: 'error' });
+    }
+    setSendingInvite(null);
+  };
+
+  const handleInviteRound3 = async (candidateId: number) => {
+    setSendingInvite(candidateId);
+    const result = await inviteToRound3(candidateId);
+    if (result.success) {
+      setCandidates(prev => prev.map(c =>
+        c.id === candidateId ? { ...c, current_stage: 'round_3', round_3_status: 'INVITED' } : c
+      ));
+      setToastModal({ title: 'Round 3 Invite Sent', description: 'Candidate has been invited to the avatar deep-dive interview.', variant: 'success' });
     } else {
       setToastModal({ title: 'Failed to Invite', description: result.error || 'An unexpected error occurred.', variant: 'error' });
     }
@@ -1549,6 +1564,10 @@ export default function DashboardPage() {
                       // Override detection for visual distinction
                       const isR1Override = canSendInvite && ['CV_REJECTED', 'QUESTIONNAIRE_SENT', 'REJECTED_VISA'].includes(candidate.status);
                       const isR2Override = canInviteR2 && candidate.rating !== null && candidate.rating < 70;
+                      // R3 invite: show for R2-completed candidates not already invited/completed
+                      const canInviteR3 = candidate.round_2_rating !== null &&
+                        candidate.round_3_status !== 'INVITED' &&
+                        candidate.round_3_status !== 'COMPLETED';
                       const rowNumber = startIndex + index;
 
                       return (
@@ -1689,7 +1708,18 @@ export default function DashboardPage() {
                                     </DropdownMenuItem>
                                   )}
 
-                                  {(canSendInvite || canInviteR2) && candidate.rating !== null && (
+                                  {canInviteR3 && (
+                                    <DropdownMenuItem
+                                      onClick={() => handleInviteRound3(candidate.id)}
+                                      disabled={sendingInvite === candidate.id}
+                                      className="text-purple-400"
+                                    >
+                                      <ArrowRight className="w-3.5 h-3.5 mr-2" />
+                                      Invite to Round 3
+                                    </DropdownMenuItem>
+                                  )}
+
+                                  {(canSendInvite || canInviteR2 || canInviteR3) && candidate.rating !== null && (
                                     <DropdownMenuSeparator />
                                   )}
 
