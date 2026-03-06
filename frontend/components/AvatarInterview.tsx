@@ -1,11 +1,18 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Mic, MicOff, Loader2, Monitor, AlertCircle, Clock, X } from 'lucide-react';
+import {
+  Room,
+  RoomEvent,
+  Track,
+  ConnectionState,
+  DataPacket_Kind,
+} from 'livekit-client';
+import { Mic, Loader2, Monitor, Clock, X } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import type { Round3Dossier } from '@/app/actions/generateRound3Dossier';
 
-// ── IndexedDB helpers (same pattern as VoiceAvatar) ──────────────────────────
+// ── IndexedDB helpers ─────────────────────────────────────────────────────────
 const IDB_NAME  = 'avatar-recording-chunks';
 const IDB_STORE = 'chunks';
 
@@ -45,22 +52,14 @@ interface AvatarInterviewProps {
   jobDescription: string;
   resumeText: string;
   dossier: Round3Dossier | null;
+  r3Rubric: string;
+  round1Score: number | null;
+  round2Score: number | null;
+  round2Verdict: string | null;
 }
 
 type Stage = 'screen-setup' | 'ready' | 'starting' | 'active' | 'analyzing' | 'ended';
 
-interface ConversationMessage {
-  role: 'user' | 'assistant';
-  content: string;
-}
-
-// Estimate how long it takes the avatar to speak text (ms)
-function estimateSpeakDuration(text: string): number {
-  const words = text.trim().split(/\s+/).length;
-  return Math.max(2500, (words / 2.5) * 1000 + 1500); // ~150 wpm + 1.5s buffer
-}
-
-// Format seconds as MM:SS
 function formatTime(s: number): string {
   const m = Math.floor(s / 60);
   return `${m}:${String(s % 60).padStart(2, '0')}`;
@@ -73,51 +72,132 @@ export default function AvatarInterview({
   jobDescription,
   resumeText,
   dossier,
+  r3Rubric,
+  round1Score,
+  round2Score,
+  round2Verdict,
 }: AvatarInterviewProps) {
-  const [stage, setStage] = useState<Stage>('screen-setup');
-  const [screenError, setScreenError] = useState<string | null>(null);
-  const [bithumanToken, setBithumanToken] = useState<string | null>(null);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const [transcript, setTranscript] = useState('');
-  const [statusText, setStatusText] = useState('');
+  const [stage, setStage]               = useState<Stage>('screen-setup');
+  const [screenError, setScreenError]   = useState<string | null>(null);
+  const [isSpeaking, setIsSpeaking]     = useState(false);
+  const [isListening, setIsListening]   = useState(false);
+  const [statusText, setStatusText]     = useState('Connecting avatar...');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [camReady, setCamReady] = useState(false);
+  const [camReady, setCamReady]         = useState(false);
+  const [agentConnected, setAgentConnected] = useState(false);
 
   // Streams & recording
-  const screenStreamRef    = useRef<MediaStream | null>(null);
-  const camStreamRef       = useRef<MediaStream | null>(null);
-  const recorderRef        = useRef<MediaRecorder | null>(null);
-  const chunkDBRef         = useRef<IDBDatabase | null>(null);
-  const chunkIndexRef      = useRef(0);
-  const pendingUploadsRef  = useRef<Promise<void>[]>([]);
-  const isRecordingRef     = useRef(false);
-  const recordingMimeRef   = useRef('video/webm');
+  const screenStreamRef   = useRef<MediaStream | null>(null);
+  const camStreamRef      = useRef<MediaStream | null>(null);
+  const recorderRef       = useRef<MediaRecorder | null>(null);
+  const chunkDBRef        = useRef<IDBDatabase | null>(null);
+  const chunkIndexRef     = useRef(0);
+  const pendingUploadsRef = useRef<Promise<void>[]>([]);
+  const isRecordingRef    = useRef(false);
+  const recordingMimeRef  = useRef('video/webm');
 
-  // Deepgram
-  const deepgramSocketRef  = useRef<WebSocket | null>(null);
-  const micRecorderRef     = useRef<MediaRecorder | null>(null);
+  // LiveKit
+  const roomRef              = useRef<Room | null>(null);
+  const agentVideoRef        = useRef<HTMLVideoElement>(null);
+  const agentVideoBgRef      = useRef<HTMLVideoElement>(null);
+  const agentAudioRef        = useRef<HTMLAudioElement>(null);
+  const audioCtxRef       = useRef<AudioContext | null>(null);
+  const recordingDestRef  = useRef<MediaStreamAudioDestinationNode | null>(null);
 
-  // Gemini conversation
-  const historyRef         = useRef<ConversationMessage[]>([]);
-  const finalTranscriptRef = useRef('');
-  const interimTranscriptRef = useRef('');
+  // Transcript
+  const transcriptRef     = useRef<string>('');
 
-  // Avatar session
-  const roomIdRef          = useRef<string | undefined>(undefined);
-  const speakCancelledRef  = useRef(false);
-
-  // Timers
-  const timerRef           = useRef<ReturnType<typeof setInterval> | null>(null);
-  const speakTimeoutRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // UI refs
-  const camVideoRef        = useRef<HTMLVideoElement>(null);
+  // Timers & cleanup
+  const timerRef          = useRef<ReturnType<typeof setInterval> | null>(null);
+  const camVideoRef       = useRef<HTMLVideoElement>(null);
   const endInterviewCalledRef = useRef(false);
+  const roomNameRef       = useRef<string>('');
 
-  // ── Screen share request & validation ───────────────────────────────────────
+  // Set srcObject once PiP video element mounts (stage switches to active after stream is ready)
+  useEffect(() => {
+    if (stage === 'active' && camVideoRef.current && camStreamRef.current) {
+      camVideoRef.current.srcObject = camStreamRef.current;
+    }
+  }, [stage]);
+
+  // ── Build system prompt ───────────────────────────────────────────────────
+  const buildSystemPrompt = useCallback((): string => {
+    const firstName = candidateName.split(' ')[0];
+
+    const probeSection = dossier?.probeAreas.map((a, i) =>
+      `${i + 1}. [${a.priority.toUpperCase()}] ${a.topic}\n   Context: ${a.context}\n   Why probe: ${a.whyProbe}\n   Suggested angles: ${a.suggestedAngles.join(' | ')}`
+    ).join('\n\n') ?? 'Assess the candidate thoroughly based on their stated experience and the job requirements.';
+
+    const redFlagsSection = dossier?.redFlags.length
+      ? `\n=== RED FLAGS — YOU MUST ADDRESS THESE ===\n${dossier.redFlags.map((f, i) => `${i + 1}. ${f}`).join('\n')}`
+      : '';
+
+    const rubricSection = r3Rubric
+      ? `\n=== TECHNICAL ASSESSMENT RUBRIC ===\n${r3Rubric}\n\nUse this rubric to structure your technical questions. Before closing, ensure you have gathered at least one substantive answer per rubric dimension. Do not end the interview without covering every dimension.`
+      : '';
+
+    const scoreContext = [
+      round1Score != null ? `Round 1 Score: ${round1Score}/100` : null,
+      round2Score != null ? `Round 2 Score: ${round2Score}/100` : null,
+      round2Verdict ? `Round 2 Verdict: ${round2Verdict}` : null,
+    ].filter(Boolean).join(' | ') || 'Prior scores not available';
+
+    return `=== YOUR IDENTITY ===
+NAME: Atlas
+ROLE: Final Vetting Interviewer, Printerpix Hiring Committee.
+VIBE: You are the last line of defence before a hire decision. You have read every word this candidate has said across two interviews. You are warm but relentless — you do not let vague answers pass, you do not move on without real evidence, and you never accept buzzwords.
+
+=== THE CANDIDATE ===
+NAME: ${candidateName}
+JOB: ${jobTitle}
+${jobDescription ? `DESCRIPTION: ${jobDescription.substring(0, 600)}` : ''}
+
+=== CANDIDATE RESUME ===
+${resumeText?.substring(0, 1000) || 'Not provided'}
+
+=== PERFORMANCE TO DATE ===
+${scoreContext}
+
+=== ROUND 3 MISSION ===
+${dossier?.interviewerBrief ?? "Conduct a final deep-dive to verify all claims across both previous rounds and establish true depth of knowledge."}
+
+=== PROBE AREAS — work through these in priority order ===
+${probeSection}
+${redFlagsSection}
+${rubricSection}
+
+=== INTERVIEW RULES ===
+1. Verify, never accept. "I optimised the database" → How? What indexes? What was before/after latency? Give me numbers.
+2. Push immediately on vague answers: "Walk me through exactly how you did that, step by step."
+3. Test real understanding: ask about tradeoffs, what failed, what they would do differently.
+4. If an answer contradicts anything from Round 1 or Round 2, surface it directly but professionally.
+5. Do NOT accept buzzwords — make them define and demonstrate every technical term they use.
+6. NEVER pretend to be the candidate. You are Atlas. You ASK questions only. You have no work history to share.
+7. After 2 follow-up probes on any topic, move to the next probe area or rubric dimension.
+8. Keep responses under 60 words unless a technical explanation genuinely requires more.
+
+=== BREADTH vs DEPTH ===
+You MUST cover all probe areas AND all rubric dimensions before closing.
+RULE: Maximum 2 follow-up probes per topic. A 3rd follow-up is only permitted if the candidate gave a directly contradictory answer — and only once per topic.
+If time is running short, move to uncovered areas immediately. Breadth beats depth every time.
+
+=== INTERVIEW DURATION ===
+This interview lasts 40 minutes. You will be given time updates automatically.
+Pace yourself to cover all probe areas and rubric dimensions.
+At the 38-minute mark you will receive a wrap-up cue — deliver the closing script below at that point.
+
+=== CLOSING SCRIPT — say this word for word when it is time to close ===
+"${firstName}, you've given me a very thorough picture today. Thank you for your time and effort across all three rounds — we'll review everything with the team and be in touch with next steps very soon. Best of luck. [END_INTERVIEW]"
+You MUST include [END_INTERVIEW] at the very end. Do NOT add anything after it.
+
+=== REMEMBER ===
+You are Atlas. You ASK questions. You do NOT describe your own experience or background.
+${candidateName} is the candidate. They answer. You probe.`;
+  }, [candidateName, jobTitle, jobDescription, resumeText, dossier, r3Rubric, round1Score, round2Score, round2Verdict]);
+
+  // ── Screen share ─────────────────────────────────────────────────────────────
   const requestScreenShare = async () => {
     setScreenError(null);
     try {
@@ -131,11 +211,10 @@ export default function AvatarInterview({
 
       if (settings.displaySurface && settings.displaySurface !== 'monitor') {
         stream.getTracks().forEach(t => t.stop());
-        setScreenError('Please share your entire screen — not a window or browser tab. Click "Share Screen" again and select a monitor from the list.');
+        setScreenError('Please share your entire screen — not a window or tab. Select a monitor from the list.');
         return;
       }
 
-      // Listen for user stopping share
       videoTrack.addEventListener('ended', () => {
         if (stage === 'active') endInterview();
       });
@@ -144,9 +223,22 @@ export default function AvatarInterview({
       setStage('ready');
     } catch (err) {
       if ((err as Error).name !== 'NotAllowedError') {
-        setScreenError('Screen sharing is required to proceed. Please allow screen sharing when prompted.');
+        setScreenError('Screen sharing is required. Please allow it when prompted.');
       }
     }
+  };
+
+  // ── Upload chunk ─────────────────────────────────────────────────────────────
+  const uploadChunk = (idx: number, chunk: Blob): Promise<void> => {
+    const fd = new FormData();
+    fd.append('candidateId', candidateId);
+    fd.append('chunkIndex', String(idx));
+    fd.append('round', '3');
+    fd.append('mimeType', recordingMimeRef.current);
+    fd.append('chunk', chunk, `chunk_${idx}.webm`);
+    return fetch('/api/save-recording-chunk', { method: 'POST', body: fd })
+      .then(() => {})
+      .catch(() => {});
   };
 
   // ── Start interview ──────────────────────────────────────────────────────────
@@ -154,37 +246,27 @@ export default function AvatarInterview({
     setStage('starting');
 
     try {
-      // 1. Cam + mic
+      // 1. Camera + mic
       const camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       camStreamRef.current = camStream;
-      if (camVideoRef.current) {
-        camVideoRef.current.srcObject = camStream;
-        camVideoRef.current.muted = true; // no echo
-      }
       setCamReady(true);
 
-      // 2. Build combined recording stream: screen video + mixed audio
+      // 2. Build combined recording stream (screen video + mic audio + agent audio)
       const audioCtx = new AudioContext();
+      audioCtxRef.current = audioCtx;
       const dest = audioCtx.createMediaStreamDestination();
-
-      // Mic audio
+      recordingDestRef.current = dest;
       const micSource = audioCtx.createMediaStreamSource(camStream);
       micSource.connect(dest);
 
-      // System audio from screen share (if captured — works on Chrome/Windows)
       const screenAudioTracks = screenStreamRef.current?.getAudioTracks() ?? [];
       if (screenAudioTracks.length > 0) {
-        const sysSource = audioCtx.createMediaStreamSource(
-          new MediaStream(screenAudioTracks)
-        );
+        const sysSource = audioCtx.createMediaStreamSource(new MediaStream(screenAudioTracks));
         sysSource.connect(dest);
       }
 
       const screenVideoTrack = screenStreamRef.current!.getVideoTracks()[0];
-      const recordingStream = new MediaStream([
-        screenVideoTrack,
-        ...dest.stream.getAudioTracks(),
-      ]);
+      const recordingStream = new MediaStream([screenVideoTrack, ...dest.stream.getAudioTracks()]);
 
       // 3. Init recording
       const db = await openChunkDB();
@@ -211,19 +293,95 @@ export default function AvatarInterview({
       recorder.start(30_000);
       isRecordingRef.current = true;
 
-      // 4. Get BitHuman token
-      const tokenRes = await fetch('/api/bithuman-token', {
+      // 4. Get LiveKit token and create room with system prompt as metadata
+      const roomName = `round3-${candidateId}-${Date.now()}`;
+      roomNameRef.current = roomName;
+      const systemPrompt = buildSystemPrompt();
+
+      const tokenRes = await fetch('/api/livekit-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ candidateId }),
+        body: JSON.stringify({ candidateId, candidateName, roomName, systemPrompt }),
       });
-      const tokenData = await tokenRes.json();
-      if (!tokenData.token) throw new Error('Failed to get avatar token');
-      setBithumanToken(tokenData.token);
-      if (tokenData.sid) roomIdRef.current = tokenData.sid;
+      const { token, url } = await tokenRes.json();
+      if (!token) throw new Error('Failed to get LiveKit token');
 
-      // 5. Start Deepgram STT
-      await startDeepgram(camStream);
+      // 5. Connect to LiveKit room
+      const room = new Room({
+        adaptiveStream: true,
+        dynacast: true,
+      });
+      roomRef.current = room;
+
+      // Subscribe to agent video + audio tracks
+      room.on(RoomEvent.TrackSubscribed, (track, _pub, _participant) => {
+        if (track.kind === Track.Kind.Video) {
+          if (agentVideoRef.current) track.attach(agentVideoRef.current);
+          if (agentVideoBgRef.current) track.attach(agentVideoBgRef.current);
+          setAgentConnected(true);
+          setStatusText('');
+        }
+        if (track.kind === Track.Kind.Audio) {
+          // Play agent audio in the browser
+          if (agentAudioRef.current) track.attach(agentAudioRef.current);
+          // Also pipe agent audio directly into the recording mix
+          if (audioCtxRef.current && recordingDestRef.current && track.mediaStreamTrack) {
+            const agentStream = new MediaStream([track.mediaStreamTrack]);
+            const agentSource = audioCtxRef.current.createMediaStreamSource(agentStream);
+            agentSource.connect(recordingDestRef.current);
+          }
+        }
+      });
+
+      room.on(RoomEvent.TrackUnsubscribed, (track) => {
+        track.detach();
+      });
+
+      // Detect speaking states from active speakers
+      room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+        const agentSpeaking = speakers.some(p => !p.isLocal);
+        const candidateSpeaking = speakers.some(p => p.isLocal);
+        setIsSpeaking(agentSpeaking);
+        setIsListening(candidateSpeaking && !agentSpeaking);
+      });
+
+      // Collect transcript from LiveKit transcription events + detect [END_INTERVIEW]
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      room.on('transcription_received' as any, (segments: any[], participant: any) => {
+        const isAgent = participant && !participant.isLocal;
+        const speaker = isAgent ? 'Atlas' : candidateName;
+        for (const seg of segments) {
+          if (seg.final && seg.text?.trim()) {
+            const text = seg.text.trim();
+            transcriptRef.current += `\n${speaker}: ${text}`;
+            // Auto-end when Atlas delivers closing script
+            if (isAgent && text.includes('[END_INTERVIEW]')) {
+              setTimeout(() => endInterview(), 2000);
+            }
+          }
+        }
+      });
+
+      // Handle agent-initiated end (data message from Python agent)
+      room.on(RoomEvent.DataReceived, (payload) => {
+        try {
+          const msg = JSON.parse(new TextDecoder().decode(payload));
+          if (msg.type === 'interview_ended') {
+            setTimeout(() => endInterview(), 2000);
+          }
+        } catch { /* ignore */ }
+      });
+
+      room.on(RoomEvent.ConnectionStateChanged, (state) => {
+        if (state === ConnectionState.Disconnected && stage === 'active') {
+          endInterview();
+        }
+      });
+
+      await room.connect(url, token);
+
+      // Publish candidate's camera + mic to the room
+      await room.localParticipant.enableCameraAndMicrophone();
 
       // 6. Update candidate status
       await supabase
@@ -232,18 +390,10 @@ export default function AvatarInterview({
         .eq('id', candidateId);
 
       setStage('active');
+      setStatusText('Connecting avatar...');
 
       // 7. Start timer
       timerRef.current = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
-
-      // 8. Build system prompt from dossier
-      const systemPrompt = buildSystemPrompt();
-
-      // 9. Welcome message (after brief delay to let iframe load)
-      setTimeout(async () => {
-        const welcome = `Hello ${candidateName.split(' ')[0]}, thank you for joining us for the final stage of your interview. I've had a chance to review your previous conversations with our team, and today we're going to go much deeper. This session will be about 40 minutes. Let's begin — can you start by giving me a brief overview of your background?`;
-        await avatarSpeak(welcome, systemPrompt);
-      }, 3000);
 
     } catch (err) {
       console.error('[AvatarInterview] Start failed:', err);
@@ -251,201 +401,7 @@ export default function AvatarInterview({
       setScreenError('Failed to start interview. Please try again.');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candidateId, candidateName, dossier]);
-
-  // ── System prompt from dossier ───────────────────────────────────────────────
-  const buildSystemPrompt = useCallback((): string => {
-    const probeSection = dossier?.probeAreas.map((a, i) =>
-      `${i + 1}. [${a.priority.toUpperCase()}] ${a.topic}\n   Context: ${a.context}\n   Why probe: ${a.whyProbe}\n   Angles: ${a.suggestedAngles.join(' | ')}`
-    ).join('\n\n') ?? 'Assess the candidate thoroughly based on their stated experience and the job requirements.';
-
-    const redFlagsSection = dossier?.redFlags.length
-      ? `\nRED FLAGS TO ADDRESS:\n${dossier.redFlags.map((f, i) => `${i + 1}. ${f}`).join('\n')}`
-      : '';
-
-    return `=== YOUR IDENTITY ===
-NAME: Atlas
-ROLE: Senior Interviewer, Final Vetting Round at Printerpix.
-VIBE: You are thorough, precise, and impossible to bluff. You have read every word this candidate has said in their previous two interviews. You are warm but relentless — you WILL find out what they actually know.
-
-=== THE CANDIDATE ===
-NAME: ${candidateName}
-JOB: ${jobTitle}
-${jobDescription ? `DESCRIPTION: ${jobDescription.substring(0, 500)}` : ''}
-
-=== CANDIDATE RESUME ===
-${resumeText?.substring(0, 800) || 'Not provided'}
-
-=== YOUR MISSION ===
-${dossier?.interviewerBrief ?? 'Conduct a thorough deep-dive interview to verify the candidate\'s claims and assess their true depth of knowledge.'}
-
-=== PROBE AREAS (in priority order) ===
-${probeSection}
-${redFlagsSection}
-
-=== INTERVIEW RULES ===
-1. Work through the probe areas systematically — do not skip any HIGH priority items.
-2. When they give a surface answer, push deeper immediately: "Walk me through exactly how you did that."
-3. Test for real understanding: ask about tradeoffs, failures, alternative approaches.
-4. If an answer contradicts what they said before, surface it directly but professionally.
-5. Do NOT accept buzzwords — ask them to explain every technical term they use.
-6. NEVER pretend to be the candidate. You are Atlas. You ask questions.
-7. After 2 follow-up probes on any topic, move to the next probe area — breadth matters.
-
-=== TOPIC BREADTH & DEPTH BALANCE ===
-You must cover all HIGH priority probe areas before the interview ends.
-RULE: Max 2 follow-up probes per topic before moving on. A 3rd is allowed only if the answer was clearly evasive or contradictory — once per topic maximum.
-PRIORITY: Missing a probe area entirely is worse than leaving one topic slightly unexplored.
-
-=== INTERVIEW DURATION ===
-This interview lasts 40 minutes. Pace yourself to cover all probe areas.
-At the 38-minute mark, wrap up with: "${candidateName.split(' ')[0]}, we're coming to the end of our time. You've given me a detailed picture today. Our team will be in touch with final decisions. Thank you for your patience through this thorough process — take care! [END_INTERVIEW]"
-You MUST include [END_INTERVIEW] at the very end.`;
-  }, [candidateName, jobTitle, jobDescription, resumeText, dossier]);
-
-  // ── Deepgram STT ─────────────────────────────────────────────────────────────
-  const startDeepgram = async (camStream: MediaStream) => {
-    const keyRes = await fetch('/api/deepgram');
-    const { key } = await keyRes.json();
-
-    const socket = new WebSocket(
-      `wss://api.deepgram.com/v1/listen?encoding=webm-opus&model=nova-2&language=en-US&smart_format=true&interim_results=true&endpointing=400&utterance_end_ms=1200&vad_events=true`,
-      ['token', key]
-    );
-
-    socket.onopen = () => {
-      const sttMime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
-        .find(t => MediaRecorder.isTypeSupported(t)) ?? 'audio/mp4';
-      const micRecorder = new MediaRecorder(
-        new MediaStream(camStream.getAudioTracks()),
-        { mimeType: sttMime }
-      );
-      micRecorder.ondataavailable = (e) => {
-        if (socket.readyState === WebSocket.OPEN && e.data.size > 0)
-          socket.send(e.data);
-      };
-      micRecorder.start(250);
-      micRecorderRef.current = micRecorder;
-      setIsListening(true);
-    };
-
-    socket.onmessage = (msg) => {
-      try {
-        const data = JSON.parse(msg.data);
-        if (data.type === 'Results') {
-          const alt = data.channel?.alternatives?.[0];
-          if (!alt) return;
-          const text = alt.transcript ?? '';
-          const isFinal = data.is_final;
-          if (isFinal && text.trim()) {
-            finalTranscriptRef.current += ' ' + text;
-            interimTranscriptRef.current = '';
-            setTranscript(finalTranscriptRef.current.trim());
-          } else if (!isFinal) {
-            interimTranscriptRef.current = text;
-          }
-        } else if (data.type === 'UtteranceEnd') {
-          const full = (finalTranscriptRef.current + ' ' + interimTranscriptRef.current).trim();
-          if (full.length > 2 && !isSpeaking) {
-            finalTranscriptRef.current = '';
-            interimTranscriptRef.current = '';
-            setTranscript('');
-            handleCandidateUtterance(full);
-          }
-        }
-      } catch { /* ignore parse errors */ }
-    };
-
-    socket.onerror = (e) => console.error('[Deepgram] Error:', e);
-    deepgramSocketRef.current = socket;
-  };
-
-  // ── Handle candidate speech → Gemini → avatar speak ─────────────────────────
-  const handleCandidateUtterance = useCallback(async (text: string) => {
-    if (stage !== 'active' || isSpeaking) return;
-    setStatusText('Thinking...');
-
-    const systemPrompt = buildSystemPrompt();
-
-    // Add to history
-    historyRef.current.push({ role: 'user', content: text });
-
-    try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: text,
-          systemPrompt,
-          history: historyRef.current.slice(-12), // keep last 12 turns
-        }),
-      });
-
-      const data = await res.json();
-      const reply: string = data.response || data.message || '';
-
-      if (reply) {
-        historyRef.current.push({ role: 'assistant', content: reply });
-        await avatarSpeak(reply, systemPrompt);
-
-        // Check for end signal
-        if (reply.includes('[END_INTERVIEW]')) {
-          setTimeout(() => endInterview(), 2000);
-        }
-      }
-    } catch (err) {
-      console.error('[AvatarInterview] Gemini error:', err);
-      setStatusText('');
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stage, isSpeaking, buildSystemPrompt]);
-
-  // ── Avatar speak via BitHuman ────────────────────────────────────────────────
-  const avatarSpeak = async (text: string, _systemPrompt?: string) => {
-    speakCancelledRef.current = false;
-    setIsSpeaking(true);
-    setIsListening(false);
-    setStatusText('');
-
-    // Pause Deepgram mic while avatar speaks
-    if (micRecorderRef.current?.state === 'recording') {
-      micRecorderRef.current.pause();
-    }
-
-    try {
-      await fetch('/api/avatar-speak', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: text.replace('[END_INTERVIEW]', ''), roomId: roomIdRef.current }),
-      });
-    } catch (err) {
-      console.error('[AvatarInterview] avatar-speak failed:', err);
-    }
-
-    // Estimate speaking duration then resume listening
-    const duration = estimateSpeakDuration(text);
-    speakTimeoutRef.current = setTimeout(() => {
-      if (speakCancelledRef.current) return;
-      setIsSpeaking(false);
-      setIsListening(true);
-      if (micRecorderRef.current?.state === 'paused') {
-        micRecorderRef.current.resume();
-      }
-    }, duration);
-  };
-
-  // ── Upload chunk ─────────────────────────────────────────────────────────────
-  const uploadChunk = (idx: number, chunk: Blob): Promise<void> => {
-    const fd = new FormData();
-    fd.append('candidateId', candidateId);
-    fd.append('chunkIndex', String(idx));
-    fd.append('round', '3');
-    fd.append('mimeType', recordingMimeRef.current);
-    fd.append('chunk', chunk, `chunk_${idx}.webm`);
-    return fetch('/api/save-recording-chunk', { method: 'POST', body: fd })
-      .then(() => {})
-      .catch(() => {});
-  };
+  }, [candidateId, candidateName, buildSystemPrompt]);
 
   // ── End interview ────────────────────────────────────────────────────────────
   const endInterview = useCallback(async () => {
@@ -455,13 +411,21 @@ You MUST include [END_INTERVIEW] at the very end.`;
     setIsSubmitting(true);
     setStage('analyzing');
 
-    // Clear timers
     if (timerRef.current) clearInterval(timerRef.current);
-    if (speakTimeoutRef.current) clearTimeout(speakTimeoutRef.current);
 
-    // Stop Deepgram
-    if (micRecorderRef.current?.state !== 'inactive') micRecorderRef.current?.stop();
-    if (deepgramSocketRef.current?.readyState === WebSocket.OPEN) deepgramSocketRef.current.close();
+    // Disconnect LiveKit and delete room (terminates agent + avatar session immediately)
+    if (roomRef.current) {
+      await roomRef.current.disconnect();
+      roomRef.current = null;
+    }
+    if (roomNameRef.current) {
+      fetch('/api/livekit-end', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomName: roomNameRef.current }),
+      }).catch(() => {});
+      roomNameRef.current = '';
+    }
 
     // Stop recording
     const totalChunks = chunkIndexRef.current;
@@ -474,14 +438,16 @@ You MUST include [END_INTERVIEW] at the very end.`;
       isRecordingRef.current = false;
     }
 
-    // Stop streams
+    // Stop streams and release screen share (dismisses browser sharing banner)
     screenStreamRef.current?.getTracks().forEach(t => t.stop());
     camStreamRef.current?.getTracks().forEach(t => t.stop());
+    screenStreamRef.current = null;
+    camStreamRef.current = null;
 
-    // Build transcript from history
-    const fullTranscript = historyRef.current
-      .map(m => `${m.role === 'user' ? candidateName : 'Atlas'}: ${m.content}`)
-      .join('\n\n');
+    // Close AudioContext
+    audioCtxRef.current?.close();
+    audioCtxRef.current = null;
+    recordingDestRef.current = null;
 
     if (totalChunks > 0) {
       try {
@@ -501,16 +467,19 @@ You MUST include [END_INTERVIEW] at the very end.`;
         });
         setUploadProgress(80);
       } catch {
-        // Non-fatal — chunks are in Supabase for manual recovery
+        // Non-fatal
       }
     }
 
-    // Store transcript and trigger scoring
+    // Submit transcript + trigger scoring
     try {
       await fetch('/api/end-round3', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ candidateId, transcript: fullTranscript }),
+        body: JSON.stringify({
+          candidateId,
+          transcript: transcriptRef.current || '[Interview conducted via avatar — see recording]',
+        }),
       });
     } catch (err) {
       console.error('[AvatarInterview] end-round3 failed:', err);
@@ -524,25 +493,31 @@ You MUST include [END_INTERVIEW] at the very end.`;
     setUploadProgress(null);
     setStage('ended');
     setIsSubmitting(false);
-  }, [candidateId, candidateName]);
+  }, [candidateId]);
 
-  // ── Hard cutoff at 55 minutes ────────────────────────────────────────────────
+  // Hard cutoff at 55 minutes
   useEffect(() => {
     if (elapsedSeconds === 3300 && stage === 'active') endInterview();
   }, [elapsedSeconds, stage, endInterview]);
 
-  // ── Cleanup on unmount ───────────────────────────────────────────────────────
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      if (speakTimeoutRef.current) clearTimeout(speakTimeoutRef.current);
-      if (deepgramSocketRef.current?.readyState === WebSocket.OPEN) deepgramSocketRef.current.close();
+      roomRef.current?.disconnect();
+      if (roomNameRef.current) {
+        fetch('/api/livekit-end', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ roomName: roomNameRef.current }),
+        }).catch(() => {});
+      }
       screenStreamRef.current?.getTracks().forEach(t => t.stop());
       camStreamRef.current?.getTracks().forEach(t => t.stop());
     };
   }, []);
 
-  // ── Render: Screen Setup ─────────────────────────────────────────────────────
+  // ── Render: Screen Setup / Ready ─────────────────────────────────────────────
   if (stage === 'screen-setup' || stage === 'ready') {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
@@ -557,41 +532,29 @@ You MUST include [END_INTERVIEW] at the very end.`;
             </div>
           </div>
 
-          <div className="space-y-4 mb-8">
-            <p className="text-foreground">
-              Before we begin, you need to <strong>share your entire screen</strong>. This allows us to record the session and ensure a fair process.
-            </p>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              <li className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xs font-bold">1</span>
-                Click "Share Screen" below
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xs font-bold">2</span>
-                Select <strong>Entire Screen</strong> (not a window or tab)
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xs font-bold">3</span>
-                Click Share in the browser prompt
-              </li>
-            </ul>
-          </div>
+          {stage === 'screen-setup' && (
+            <div className="mb-6">
+              <p className="text-sm text-foreground mb-4">
+                Before we begin, you need to <strong>share your entire screen</strong>. This allows us to record the session and ensure a fair process.
+              </p>
+              <ol className="space-y-2 text-sm text-muted-foreground mb-6">
+                {['Click "Share Screen" below', 'Select Entire Screen (not a window or tab)', 'Click Share in the browser prompt'].map((step, i) => (
+                  <li key={i} className="flex items-start gap-3">
+                    <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
 
           {screenError && (
-            <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/30 rounded-lg p-3 mb-4">
-              <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
-              <p className="text-sm text-red-400">{screenError}</p>
+            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
+              {screenError}
             </div>
           )}
 
-          {stage === 'ready' && (
-            <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3 mb-4">
-              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <p className="text-sm text-emerald-400">Screen sharing active — your entire screen is ready</p>
-            </div>
-          )}
-
-          <div className="flex flex-col gap-3">
+          <div className="space-y-3">
             {stage === 'screen-setup' && (
               <button
                 onClick={requestScreenShare}
@@ -635,7 +598,7 @@ You MUST include [END_INTERVIEW] at the very end.`;
         <div className="text-center">
           <Loader2 className="w-12 h-12 text-cyan-500 animate-spin mx-auto mb-4" />
           <p className="text-foreground text-lg">Setting up your interview...</p>
-          <p className="text-muted-foreground text-sm mt-2">Starting avatar session</p>
+          <p className="text-muted-foreground text-sm mt-2">Connecting to avatar</p>
         </div>
       </div>
     );
@@ -654,10 +617,7 @@ You MUST include [END_INTERVIEW] at the very end.`;
               {uploadProgress !== null && (
                 <div className="mt-6">
                   <div className="h-2 bg-muted rounded-full overflow-hidden max-w-xs mx-auto">
-                    <div
-                      className="h-full bg-cyan-500 rounded-full transition-all duration-300"
-                      style={{ width: `${uploadProgress}%` }}
-                    />
+                    <div className="h-full bg-cyan-500 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">{uploadProgress}%</p>
                 </div>
@@ -684,11 +644,13 @@ You MUST include [END_INTERVIEW] at the very end.`;
 
   // ── Render: Active interview ─────────────────────────────────────────────────
   const wrapUpAt = 2280; // 38 min
-  const timeRemaining = Math.max(0, wrapUpAt - elapsedSeconds);
-  const isNearEnd = elapsedSeconds >= wrapUpAt - 300; // last 5 min
+  const isNearEnd = elapsedSeconds >= wrapUpAt - 300;
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
+      {/* Hidden audio element for agent TTS */}
+      <audio ref={agentAudioRef} autoPlay />
+
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-card/50 shrink-0">
         <div className="flex items-center gap-3">
@@ -709,91 +671,72 @@ You MUST include [END_INTERVIEW] at the very end.`;
         </button>
       </div>
 
-      {/* Main area */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Avatar iframe */}
-        <div className="relative flex-1">
-          {bithumanToken ? (
-            <iframe
-              src={`https://agent.viewer.bithuman.ai/${process.env.NEXT_PUBLIC_BITHUMAN_AGENT_ID ?? 'A46JXE7400'}?token=${bithumanToken}`}
-              className="w-full h-full border-0"
-              allow="camera; microphone; autoplay"
-              title="AI Interviewer"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center bg-muted/10">
-              <Loader2 className="w-8 h-8 text-cyan-500 animate-spin" />
-            </div>
-          )}
+      {/* Main area — full screen video like R1/R2 */}
+      <div className="relative flex-1 bg-black overflow-hidden">
+        {/* Blurred background fill */}
+        <video
+          ref={agentVideoBgRef}
+          autoPlay
+          playsInline
+          muted
+          className={`absolute inset-0 w-full h-full object-cover scale-110 blur-2xl transition-opacity duration-500 ${agentConnected ? 'opacity-100' : 'opacity-0'}`}
+        />
+        {/* Sharp foreground */}
+        <video
+          ref={agentVideoRef}
+          autoPlay
+          playsInline
+          className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-500 ${agentConnected ? 'opacity-100' : 'opacity-0'}`}
+        />
 
-          {/* Candidate cam PiP — bottom right */}
-          <div className="absolute bottom-4 right-4 w-36 h-24 rounded-xl overflow-hidden border-2 border-border shadow-xl bg-card">
-            <video
-              ref={camVideoRef}
-              autoPlay
-              playsInline
-              muted
-              className={`w-full h-full object-cover ${camReady ? 'opacity-100' : 'opacity-0'}`}
-            />
-            {!camReady && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
-              </div>
+        {/* Connecting state */}
+        {!agentConnected && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+            <Loader2 className="w-10 h-10 text-cyan-500 animate-spin" />
+            <p className="text-muted-foreground text-sm">Connecting avatar...</p>
+          </div>
+        )}
+
+        {/* Status indicator overlay — bottom left */}
+        {agentConnected && (
+          <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-black/50 backdrop-blur-sm rounded-full px-3 py-1.5">
+            {isSpeaking ? (
+              <>
+                <div className="flex gap-0.5 items-end">
+                  {[0,1,2].map(i => (
+                    <div key={i} className="w-1 bg-cyan-400 rounded-full animate-pulse" style={{ height: `${8 + i * 3}px`, animationDelay: `${i * 0.15}s` }} />
+                  ))}
+                </div>
+                <span className="text-xs text-cyan-400">Atlas is speaking</span>
+              </>
+            ) : isListening ? (
+              <>
+                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-xs text-emerald-400">Listening...</span>
+              </>
+            ) : (
+              <>
+                <Mic className="w-3 h-3 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Speak naturally</span>
+              </>
             )}
           </div>
-        </div>
+        )}
 
-        {/* Right panel */}
-        <div className="w-72 border-l border-border bg-card/30 flex flex-col p-4 gap-4 shrink-0">
-          {/* Status */}
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</p>
-            <div className="flex items-center gap-2">
-              {isSpeaking ? (
-                <>
-                  <div className="flex gap-0.5">
-                    {[0,1,2].map(i => (
-                      <div key={i} className="w-1 bg-cyan-400 rounded-full animate-pulse" style={{ height: `${12 + i * 4}px`, animationDelay: `${i * 0.15}s` }} />
-                    ))}
-                  </div>
-                  <span className="text-sm text-cyan-400">Atlas is speaking</span>
-                </>
-              ) : isListening ? (
-                <>
-                  <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="text-sm text-emerald-400">Listening...</span>
-                </>
-              ) : statusText ? (
-                <>
-                  <Loader2 className="w-3 h-3 text-muted-foreground animate-spin" />
-                  <span className="text-sm text-muted-foreground">{statusText}</span>
-                </>
-              ) : null}
-            </div>
-          </div>
-
-          {/* Transcript */}
-          {transcript && (
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">You said</p>
-              <p className="text-sm text-foreground bg-muted/30 rounded-lg p-2 leading-relaxed">
-                {transcript}
-              </p>
+        {/* Candidate cam PiP — bottom right */}
+        <div className="absolute bottom-4 right-4 w-36 h-24 rounded-xl overflow-hidden border-2 border-border shadow-xl bg-card">
+          <video
+            ref={camVideoRef}
+            autoPlay
+            playsInline
+            muted
+            className={`w-full h-full object-cover ${camReady ? 'opacity-100' : 'opacity-0'}`}
+          />
+          {!camReady && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
             </div>
           )}
-
-          {/* Mic indicator */}
-          <div className="mt-auto">
-            <div className={`flex items-center gap-2 text-sm p-2 rounded-lg ${isListening ? 'bg-emerald-500/10 text-emerald-400' : 'bg-muted/20 text-muted-foreground'}`}>
-              {isListening ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
-              {isListening ? 'Microphone active' : 'Microphone paused'}
-            </div>
-            {isNearEnd && (
-              <div className="mt-2 bg-amber-500/10 border border-amber-500/30 rounded-lg p-2">
-                <p className="text-xs text-amber-400">Interview wrapping up soon</p>
-              </div>
-            )}
-          </div>
         </div>
       </div>
     </div>

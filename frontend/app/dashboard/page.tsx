@@ -144,6 +144,8 @@ interface Candidate {
   video_url: string | null;
   round_2_video_url: string | null;
   round_3_status: string | null;
+  round_3_transcript: string | null;
+  round_3_recording_url: string | null;
   full_verdict: FullVerdict | null;
   round_1_full_dossier: FullDossier | null;
   hr_notes: string | null;
@@ -295,9 +297,9 @@ export default function DashboardPage() {
   }, [selectedCandidate]);
 
   // Stitch recording
-  const [stitchingRound, setStitchingRound] = useState<1 | 2 | null>(null);
+  const [stitchingRound, setStitchingRound] = useState<1 | 2 | 3 | null>(null);
 
-  const handleStitchRecording = async (round: 1 | 2) => {
+  const handleStitchRecording = async (round: 1 | 2 | 3) => {
     if (!selectedCandidate) return;
     setStitchingRound(round);
     try {
@@ -308,7 +310,7 @@ export default function DashboardPage() {
       });
       const data = await res.json();
       if (data.success) {
-        const videoColumn = round === 2 ? 'round_2_video_url' : 'video_url';
+        const videoColumn = round === 3 ? 'round_3_recording_url' : round === 2 ? 'round_2_video_url' : 'video_url';
         setSelectedCandidate(prev => prev ? { ...prev, [videoColumn]: data.url } : prev);
         setCandidates(prev => prev.map(c => c.id === selectedCandidate.id ? { ...c, [videoColumn]: data.url } : c));
         setToastModal({ title: 'Recording stitched', description: `Round ${round} recording assembled successfully.`, variant: 'success' });
@@ -467,7 +469,7 @@ export default function DashboardPage() {
 
       let query = supabase
         .from('candidates')
-        .select('id, full_name, email, rating, round_2_rating, combined_score, jd_match_score, ai_summary, interview_notes, status, current_stage, interview_transcript, round_2_transcript, resume_text, resume_url, job_id, final_verdict, full_verdict, round_1_full_dossier, hr_notes, interview_token, created_at, video_url, round_2_video_url, round_3_status, applied_at, round_1_completed_at, round_2_completed_at', { count: isBooleanActive ? undefined : 'exact' });
+        .select('id, full_name, email, rating, round_2_rating, combined_score, jd_match_score, ai_summary, interview_notes, status, current_stage, interview_transcript, round_2_transcript, resume_text, resume_url, job_id, final_verdict, full_verdict, round_1_full_dossier, hr_notes, interview_token, created_at, video_url, round_2_video_url, round_3_status, round_3_transcript, round_3_recording_url, applied_at, round_1_completed_at, round_2_completed_at', { count: isBooleanActive ? undefined : 'exact' });
 
       if (searchQuery) {
         query = query.or(`full_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
@@ -2080,8 +2082,8 @@ export default function DashboardPage() {
             )}
 
             {/* Video Recordings */}
-            {(selectedCandidate?.video_url || selectedCandidate?.round_2_video_url || selectedCandidate?.interview_transcript || selectedCandidate?.round_2_transcript) && <Separator />}
-            {(selectedCandidate?.video_url || selectedCandidate?.round_2_video_url || selectedCandidate?.interview_transcript || selectedCandidate?.round_2_transcript) && (
+            {(selectedCandidate?.video_url || selectedCandidate?.round_2_video_url || selectedCandidate?.round_3_recording_url || selectedCandidate?.interview_transcript || selectedCandidate?.round_2_transcript || selectedCandidate?.round_3_transcript) && <Separator />}
+            {(selectedCandidate?.video_url || selectedCandidate?.round_2_video_url || selectedCandidate?.round_3_recording_url || selectedCandidate?.interview_transcript || selectedCandidate?.round_2_transcript || selectedCandidate?.round_3_transcript) && (
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <Video className="w-5 h-5 text-purple-400" />
@@ -2144,6 +2146,37 @@ export default function DashboardPage() {
                               <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Stitching…</>
                             ) : (
                               <><RotateCcw className="w-4 h-4 mr-2" />Stitch Round 2</>
+                            )}
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    )
+                  )}
+                  {/* Round 3 */}
+                  {selectedCandidate?.round_3_transcript && (
+                    selectedCandidate.round_3_recording_url ? (
+                      <Card>
+                        <CardContent className="pt-4">
+                          <VideoPlayer
+                            src={selectedCandidate.round_3_recording_url}
+                            title="Round 3 Recording"
+                          />
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      <Card>
+                        <CardContent className="pt-4 flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">Round 3 recording not yet assembled</span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleStitchRecording(3)}
+                            disabled={stitchingRound !== null}
+                          >
+                            {stitchingRound === 3 ? (
+                              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Stitching…</>
+                            ) : (
+                              <><RotateCcw className="w-4 h-4 mr-2" />Stitch Round 3</>
                             )}
                           </Button>
                         </CardContent>

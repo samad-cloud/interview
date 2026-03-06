@@ -1,0 +1,5 @@
+python-dotenv~=1.1
+bithuman>=1.7.0
+livekit-agents[bithuman,silero]~=1.4
+livekit-plugins-google>=0.3
+livekit-plugins-deepgram>=0.6

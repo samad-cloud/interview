@@ -133,20 +133,18 @@ def run_video_fixer() -> int:
     # was already fixed still gets their R2 recording processed.
     result = (
         supabase.table("candidates")
-        .select("id, video_url, round_2_video_url, video_remuxed, round_2_video_remuxed")
-        .or_("video_url.not.is.null,round_2_video_url.not.is.null")
+        .select("id, video_url, round_2_video_url, round_3_recording_url, video_remuxed, round_2_video_remuxed, round_3_video_remuxed")
+        .or_("video_url.not.is.null,round_2_video_url.not.is.null,round_3_recording_url.not.is.null")
         .execute()
     )
 
-    # Filter to only those with at least one unremuxed recording
     all_candidates = result.data or []
     candidates = [
         c for c in all_candidates
         if (c.get("video_url") and not c.get("video_remuxed"))
         or (c.get("round_2_video_url") and not c.get("round_2_video_remuxed"))
+        or (c.get("round_3_recording_url") and not c.get("round_3_video_remuxed"))
     ]
-
-    candidates = result.data or []
     log("INFO", f"[VideoFixer] Found {len(candidates)} candidate(s) with unremuxed recordings")
 
     if not candidates:
@@ -165,8 +163,13 @@ def run_video_fixer() -> int:
 
         if candidate.get("round_2_video_url") and not candidate.get("round_2_video_remuxed"):
             result = fix_recording(supabase, candidate_id, candidate["round_2_video_url"], "round_2_video_url")
-            if result is not False:  # True = remuxed, None = file missing — both stop retrying
+            if result is not False:
                 updates["round_2_video_remuxed"] = True
+
+        if candidate.get("round_3_recording_url") and not candidate.get("round_3_video_remuxed"):
+            result = fix_recording(supabase, candidate_id, candidate["round_3_recording_url"], "round_3_recording_url")
+            if result is not False:
+                updates["round_3_video_remuxed"] = True
 
         if updates:
             supabase.table("candidates").update(updates).eq("id", candidate_id).execute()

@@ -24,6 +24,9 @@ interface CandidateData {
   resume_text: string | null;
   round_3_status: string | null;
   round_3_dossier: Round3Dossier | null;
+  rating: number | null;
+  round_2_rating: number | null;
+  final_verdict: string | null;
 }
 
 export default function Round3Page() {
@@ -33,6 +36,7 @@ export default function Round3Page() {
   const [isMobile] = useState<boolean>(() => detectMobile());
   const [candidate, setCandidate] = useState<CandidateData | null>(null);
   const [jobTitle, setJobTitle] = useState('Open Position');
+  const [r3Rubric, setR3Rubric] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,7 +46,7 @@ export default function Round3Page() {
 
       const { data, error: dbErr } = await supabase
         .from('candidates')
-        .select('id, full_name, job_id, job_description, resume_text, round_3_status, round_3_dossier')
+        .select('id, full_name, job_id, job_description, resume_text, round_3_status, round_3_dossier, rating, round_2_rating, final_verdict')
         .eq('round_3_token', token)
         .single();
 
@@ -55,8 +59,13 @@ export default function Round3Page() {
       setCandidate(data);
 
       if (data.job_id) {
-        const { data: job } = await supabase.from('jobs').select('title').eq('id', data.job_id).single();
+        const { data: job } = await supabase
+          .from('jobs')
+          .select('title, r2_rubric')
+          .eq('id', data.job_id)
+          .single();
         if (job?.title) setJobTitle(job.title);
+        if (job?.r2_rubric) setR3Rubric(job.r2_rubric);
       }
 
       setIsLoading(false);
@@ -127,6 +136,10 @@ export default function Round3Page() {
       jobDescription={candidate.job_description || ''}
       resumeText={candidate.resume_text || ''}
       dossier={candidate.round_3_dossier}
+      r3Rubric={r3Rubric}
+      round1Score={candidate.rating}
+      round2Score={candidate.round_2_rating}
+      round2Verdict={candidate.final_verdict}
     />
   );
 }
