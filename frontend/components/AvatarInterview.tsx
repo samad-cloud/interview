@@ -279,6 +279,22 @@ ${candidateName} is the candidate. They answer. You probe.`;
         .find(t => MediaRecorder.isTypeSupported(t))) ?? 'video/webm';
       recordingMimeRef.current = mimeType;
 
+      // 4. Get LiveKit token BEFORE starting recording — fail fast if not configured
+      const roomName = `round3-${candidateId}-${Date.now()}`;
+      roomNameRef.current = roomName;
+      const systemPrompt = buildSystemPrompt();
+
+      const tokenRes = await fetch('/api/livekit-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ candidateId, candidateName, roomName, systemPrompt }),
+      });
+      const tokenData = await tokenRes.json();
+      if (tokenRes.status === 429) throw new Error(tokenData.error);
+      if (!tokenData.token) throw new Error(tokenData.error || 'Failed to get LiveKit token');
+      const { token, url } = tokenData;
+
+      // 5. Start recording only after token is confirmed
       const recorder = new MediaRecorder(recordingStream, { mimeType, videoBitsPerSecond: 1_000_000 });
       recorder.ondataavailable = async (e) => {
         if (e.data?.size > 0) {
@@ -292,19 +308,6 @@ ${candidateName} is the candidate. They answer. You probe.`;
       recorderRef.current = recorder;
       recorder.start(30_000);
       isRecordingRef.current = true;
-
-      // 4. Get LiveKit token and create room with system prompt as metadata
-      const roomName = `round3-${candidateId}-${Date.now()}`;
-      roomNameRef.current = roomName;
-      const systemPrompt = buildSystemPrompt();
-
-      const tokenRes = await fetch('/api/livekit-token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ candidateId, candidateName, roomName, systemPrompt }),
-      });
-      const { token, url } = await tokenRes.json();
-      if (!token) throw new Error('Failed to get LiveKit token');
 
       // 5. Connect to LiveKit room
       const room = new Room({
@@ -397,8 +400,21 @@ ${candidateName} is the candidate. They answer. You probe.`;
 
     } catch (err) {
       console.error('[AvatarInterview] Start failed:', err);
+      // Clean up any streams/recorder that were acquired before the failure
+      if (recorderRef.current && isRecordingRef.current) {
+        recorderRef.current.stop();
+        isRecordingRef.current = false;
+        recorderRef.current = null;
+      }
+      camStreamRef.current?.getTracks().forEach(t => t.stop());
+      camStreamRef.current = null;
+      audioCtxRef.current?.close();
+      audioCtxRef.current = null;
+      recordingDestRef.current = null;
+      setCamReady(false);
       setStage('ready');
-      setScreenError('Failed to start interview. Please try again.');
+      const msg = err instanceof Error ? err.message : 'Failed to start interview';
+      setScreenError(msg.includes('not configured') ? 'Interview service is not available. Please contact support.' : 'Failed to start interview. Please try again.');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candidateId, candidateName, buildSystemPrompt]);

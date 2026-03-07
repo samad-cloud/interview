@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
+import { createClient } from '@supabase/supabase-js';
+
+const MAX_CONCURRENT_ROUND3 = 4;
 
 export async function POST(request: Request) {
   try {
@@ -15,6 +18,24 @@ export async function POST(request: Request) {
 
     if (!apiKey || !apiSecret || !livekitUrl) {
       return NextResponse.json({ error: 'LiveKit not configured' }, { status: 500 });
+    }
+
+    // Check concurrent Round 3 capacity
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (supabaseUrl && supabaseKey) {
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      const { count } = await supabase
+        .from('candidates')
+        .select('id', { count: 'exact', head: true })
+        .eq('round_3_status', 'IN_PROGRESS');
+
+      if ((count ?? 0) >= MAX_CONCURRENT_ROUND3) {
+        return NextResponse.json(
+          { error: 'All interview slots are currently in use. Please try again in a few minutes.' },
+          { status: 429 }
+        );
+      }
     }
 
     // Create the room with the system prompt as metadata so the agent reads it
