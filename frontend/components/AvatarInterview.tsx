@@ -676,6 +676,7 @@ ${candidateName} is the candidate. They answer. You probe.`;
         <div className="flex items-center gap-3">
           <div className={`w-2 h-2 rounded-full ${isRecordingRef.current ? 'bg-red-500 animate-pulse' : 'bg-muted'}`} />
           <span className="text-sm text-muted-foreground font-medium">Round 3 — {jobTitle}</span>
+          <span className="text-xs text-amber-400/80 border border-amber-400/30 rounded px-1.5 py-0.5 font-medium">Windows / macOS only</span>
         </div>
         <div className={`flex items-center gap-1.5 text-sm font-mono ${isNearEnd ? 'text-amber-400' : 'text-muted-foreground'}`}>
           <Clock className="w-3.5 h-3.5" />
