@@ -310,9 +310,14 @@ ${candidateName} is the candidate. They answer. You probe.`;
       isRecordingRef.current = true;
 
       // 5. Connect to LiveKit room
+      // Force TURN relay over TCP/443 so restrictive corporate networks
+      // (which block WebRTC UDP) can still reach the LiveKit media server.
       const room = new Room({
         adaptiveStream: true,
         dynacast: true,
+        rtcConfig: {
+          iceTransportPolicy: 'relay',
+        },
       });
       roomRef.current = room;
 
@@ -740,7 +745,7 @@ ${candidateName} is the candidate. They answer. You probe.`;
         )}
 
         {/* Candidate cam PiP — bottom right */}
-        <div className="absolute bottom-4 right-4 w-36 h-24 rounded-xl overflow-hidden border-2 border-border shadow-xl bg-card">
+        <div className="absolute bottom-4 right-4 w-56 h-40 rounded-xl overflow-hidden border-2 border-border shadow-xl bg-card">
           <video
             ref={camVideoRef}
             autoPlay

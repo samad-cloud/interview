@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { generateRound3Verdict } from '@/app/actions/generateRound3Verdict';
 
 export async function POST(request: Request) {
   try {
@@ -17,15 +18,19 @@ export async function POST(request: Request) {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Store transcript and mark as completed
+    const transcriptText = Array.isArray(transcript) ? transcript.join('\n') : (transcript || '');
+
+    // Fetch candidate info for logging
+    const { data: candidate } = await supabase
+      .from('candidates')
+      .select('full_name')
+      .eq('id', candidateId)
+      .single();
+
+    // Save transcript first
     const { error: updateError } = await supabase
       .from('candidates')
-      .update({
-        round_3_transcript: transcript || '',
-        round_3_status: 'COMPLETED',
-        current_stage: 'completed',
-        status: 'COMPLETED',
-      })
+      .update({ round_3_transcript: transcriptText })
       .eq('id', candidateId);
 
     if (updateError) {
@@ -33,8 +38,35 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to save interview' }, { status: 500 });
     }
 
-    console.log(`[End Round 3] Candidate ${candidateId} completed Round 3`);
-    return NextResponse.json({ success: true });
+    console.log(`[End Round 3] Saved transcript for ${candidate?.full_name} (${candidateId})`);
+
+    // Generate Round 3 verdict — scores all 3 rounds, updates final_verdict, round_3_rating, round_3_full_verdict
+    let verdictResult = null;
+    try {
+      verdictResult = await generateRound3Verdict(String(candidateId));
+      if (verdictResult.success) {
+        console.log(`[End Round 3] Verdict for ${candidate?.full_name} (${candidateId}): ${verdictResult.ultimateVerdict} (R3 score: ${verdictResult.round3Score}/100)`);
+      } else {
+        console.error(`[End Round 3] Verdict failed for ${candidate?.full_name} (${candidateId}): ${verdictResult.error}`);
+        // Fall back to marking completed without a score
+        await supabase
+          .from('candidates')
+          .update({ round_3_status: 'COMPLETED', current_stage: 'completed', status: 'COMPLETED' })
+          .eq('id', candidateId);
+      }
+    } catch (err) {
+      console.error(`[End Round 3] Verdict error for ${candidate?.full_name} (${candidateId}):`, err);
+      await supabase
+        .from('candidates')
+        .update({ round_3_status: 'COMPLETED', current_stage: 'completed', status: 'COMPLETED' })
+        .eq('id', candidateId);
+    }
+
+    return NextResponse.json({
+      success: true,
+      round3Score: verdictResult?.success ? verdictResult.round3Score : undefined,
+      ultimateVerdict: verdictResult?.success ? verdictResult.ultimateVerdict : undefined,
+    });
 
   } catch (error) {
     console.error('[End Round 3] Error:', error);

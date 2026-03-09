@@ -118,6 +118,17 @@ interface FullDossier {
   overallAssessment: string;
 }
 
+interface Round3FullVerdict {
+  round3Score: number;
+  ultimateVerdict: string;
+  executiveSummary: string;
+  keyStrengths: string[];
+  keyGaps: string[];
+  redFlagsResolved: string[];
+  remainingConcerns: string[];
+  finalRecommendation: string;
+}
+
 type SortColumn = 'created_at' | 'jd_match_score' | 'combined_score' | 'round_1_completed_at' | 'round_2_completed_at';
 type SortDirection = 'asc' | 'desc';
 
@@ -146,6 +157,8 @@ interface Candidate {
   round_3_status: string | null;
   round_3_transcript: string | null;
   round_3_recording_url: string | null;
+  round_3_rating: number | null;
+  round_3_full_verdict: Round3FullVerdict | null;
   full_verdict: FullVerdict | null;
   round_1_full_dossier: FullDossier | null;
   hr_notes: string | null;
@@ -469,7 +482,7 @@ export default function DashboardPage() {
 
       let query = supabase
         .from('candidates')
-        .select('id, full_name, email, rating, round_2_rating, combined_score, jd_match_score, ai_summary, interview_notes, status, current_stage, interview_transcript, round_2_transcript, resume_text, resume_url, job_id, final_verdict, full_verdict, round_1_full_dossier, hr_notes, interview_token, created_at, video_url, round_2_video_url, round_3_status, round_3_transcript, round_3_recording_url, applied_at, round_1_completed_at, round_2_completed_at', { count: isBooleanActive ? undefined : 'exact' });
+        .select('id, full_name, email, rating, round_2_rating, combined_score, jd_match_score, ai_summary, interview_notes, status, current_stage, interview_transcript, round_2_transcript, resume_text, resume_url, job_id, final_verdict, full_verdict, round_1_full_dossier, hr_notes, interview_token, created_at, video_url, round_2_video_url, round_3_status, round_3_transcript, round_3_recording_url, round_3_rating, round_3_full_verdict, applied_at, round_1_completed_at, round_2_completed_at', { count: isBooleanActive ? undefined : 'exact' });
 
       if (searchQuery) {
         query = query.or(`full_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
@@ -1864,19 +1877,22 @@ export default function DashboardPage() {
 
           <div className="overflow-y-auto flex-1 space-y-6 px-6 pb-6 pt-4">
             {/* Radial Score Gauges */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className={`grid gap-4 ${selectedCandidate?.round_3_rating !== null && selectedCandidate?.round_3_rating !== undefined ? 'grid-cols-3' : 'grid-cols-2'}`}>
               {[
                 { label: 'Round 1: Hunger', score: selectedCandidate?.rating ?? null, color: 'emerald' },
                 { label: 'Round 2: Skills', score: selectedCandidate?.round_2_rating ?? null, color: 'blue' },
+                ...(selectedCandidate?.round_3_rating !== null && selectedCandidate?.round_3_rating !== undefined
+                  ? [{ label: 'Round 3: Deep-Dive', score: selectedCandidate.round_3_rating, color: 'purple' }]
+                  : []),
               ].map(({ label, score, color }) => {
                 const pct = score !== null ? score : 0;
                 const circumference = 2 * Math.PI * 40;
                 const strokeDashoffset = circumference - (pct / 100) * circumference;
                 const strokeColor = score === null ? 'stroke-muted' :
-                  score >= 70 ? (color === 'blue' ? 'stroke-blue-500' : 'stroke-emerald-500') :
+                  score >= 70 ? (color === 'blue' ? 'stroke-blue-500' : color === 'purple' ? 'stroke-purple-500' : 'stroke-emerald-500') :
                   score >= 50 ? 'stroke-yellow-500' : 'stroke-red-500';
                 const textColor = score === null ? 'text-muted-foreground' :
-                  score >= 70 ? (color === 'blue' ? 'text-blue-400' : 'text-emerald-400') :
+                  score >= 70 ? (color === 'blue' ? 'text-blue-400' : color === 'purple' ? 'text-purple-400' : 'text-emerald-400') :
                   score >= 50 ? 'text-yellow-400' : 'text-red-400';
 
                 return (
@@ -1920,7 +1936,9 @@ export default function DashboardPage() {
             {selectedCandidate?.final_verdict && (
               <Card>
                 <CardContent className="pt-4">
-                  <p className="text-muted-foreground text-sm mb-1">Final Verdict</p>
+                  <p className="text-muted-foreground text-sm mb-1">
+                    {selectedCandidate.round_3_full_verdict ? 'Ultimate Verdict (All 3 Rounds)' : 'Final Verdict'}
+                  </p>
                   <p className={`text-2xl font-bold ${
                     selectedCandidate.final_verdict === 'Hired' ? 'text-emerald-400' :
                     selectedCandidate.final_verdict.includes('Strong') ? 'text-emerald-400' :
@@ -1930,8 +1948,63 @@ export default function DashboardPage() {
                   }`}>
                     {selectedCandidate.final_verdict}
                   </p>
-                  {/* Expanded verdict details from Round 2 */}
-                  {selectedCandidate.full_verdict && (
+
+                  {/* Round 3 full verdict details */}
+                  {selectedCandidate.round_3_full_verdict && (
+                    <div className="mt-4 space-y-3 border-t border-border pt-3">
+                      <p className="text-sm">{selectedCandidate.round_3_full_verdict.executiveSummary}</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <p className="text-xs font-medium text-emerald-400 mb-1">Key Strengths</p>
+                          <ul className="space-y-0.5">
+                            {selectedCandidate.round_3_full_verdict.keyStrengths.map((s, i) => (
+                              <li key={i} className="text-xs flex items-start gap-1.5">
+                                <span className="text-emerald-400 mt-0.5">+</span>{s}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-red-400 mb-1">Key Gaps</p>
+                          <ul className="space-y-0.5">
+                            {selectedCandidate.round_3_full_verdict.keyGaps.map((g, i) => (
+                              <li key={i} className="text-xs flex items-start gap-1.5">
+                                <span className="text-red-400 mt-0.5">-</span>{g}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                      {selectedCandidate.round_3_full_verdict.redFlagsResolved.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium text-blue-400 mb-1">Red Flags Resolved in R3</p>
+                          <ul className="space-y-0.5">
+                            {selectedCandidate.round_3_full_verdict.redFlagsResolved.map((r, i) => (
+                              <li key={i} className="text-xs flex items-start gap-1.5">
+                                <span className="text-blue-400 mt-0.5">✓</span>{r}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {selectedCandidate.round_3_full_verdict.remainingConcerns.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium text-yellow-400 mb-1">Remaining Concerns</p>
+                          <ul className="space-y-0.5">
+                            {selectedCandidate.round_3_full_verdict.remainingConcerns.map((c, i) => (
+                              <li key={i} className="text-xs flex items-start gap-1.5">
+                                <span className="text-yellow-400 mt-0.5">!</span>{c}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground"><span className="font-medium text-foreground">Recommendation:</span> {selectedCandidate.round_3_full_verdict.finalRecommendation}</p>
+                    </div>
+                  )}
+
+                  {/* Round 2 verdict details (shown only when R3 hasn't replaced it) */}
+                  {!selectedCandidate.round_3_full_verdict && selectedCandidate.full_verdict && (
                     <div className="mt-4 space-y-3 border-t border-border pt-3">
                       <p className="text-sm">{selectedCandidate.full_verdict.summary}</p>
                       <div className="grid grid-cols-2 gap-3">

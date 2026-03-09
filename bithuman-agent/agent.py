@@ -47,18 +47,31 @@ async def entrypoint(ctx: JobContext):
         )
 
     # Read dynamic system prompt and candidate name from room metadata (set by Next.js)
+    prompt_source = "default"
     try:
         room_metadata = json.loads(ctx.room.metadata or "{}")
-        system_prompt = room_metadata.get("system_prompt") or os.getenv("AGENT_PROMPT") or DEFAULT_PROMPT
+        raw_prompt = room_metadata.get("system_prompt")
         candidate_name = room_metadata.get("candidate_name") or ""
+        if raw_prompt:
+            system_prompt = raw_prompt
+            prompt_source = "room_metadata"
+        elif os.getenv("AGENT_PROMPT"):
+            system_prompt = os.getenv("AGENT_PROMPT")
+            prompt_source = "env_AGENT_PROMPT"
+        else:
+            system_prompt = DEFAULT_PROMPT
+            prompt_source = "default"
     except (json.JSONDecodeError, AttributeError):
         system_prompt = os.getenv("AGENT_PROMPT") or DEFAULT_PROMPT
         candidate_name = ""
+        prompt_source = "fallback_default"
 
     first_name = candidate_name.split()[0] if candidate_name else "there"
 
     logger.info(f"Cloud Essence mode -- avatar_id: {avatar_id}")
-    logger.info(f"System prompt length: {len(system_prompt)} chars")
+    logger.info(f"[SystemPrompt] Source: {prompt_source} | Candidate: {candidate_name or '(unknown)'} | Length: {len(system_prompt)} chars")
+    logger.info(f"[SystemPrompt] First 300 chars: {system_prompt[:300].replace(chr(10), ' ')}")
+    logger.info(f"[SystemPrompt] Contains probe areas: {'PROBE AREAS' in system_prompt} | Contains rubric: {'RUBRIC' in system_prompt} | Contains red flags: {'RED FLAGS' in system_prompt}")
 
     avatar = bithuman.AvatarSession(
         avatar_id=avatar_id,
@@ -170,6 +183,6 @@ if __name__ == "__main__":
             entrypoint_fnc=entrypoint,
             worker_type=WorkerType.ROOM,
             job_memory_warn_mb=1500,
-            num_idle_processes=1,
+            num_idle_processes=3,
         )
     )
