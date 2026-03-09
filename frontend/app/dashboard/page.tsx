@@ -821,7 +821,16 @@ export default function DashboardPage() {
     let updateFields: Record<string, unknown>;
     let confirmMsg: string;
 
-    if (candidate.round_2_rating !== null) {
+    if (candidate.round_3_rating !== null || candidate.round_3_status === 'COMPLETED') {
+      confirmMsg = `Revert ${candidate.full_name} from R3 completed back to R3 Invited? This clears their Round 3 score and verdict so they can retake the avatar interview with the same link.`;
+      updateFields = {
+        round_3_status: 'INVITED',
+        round_3_transcript: null,
+        round_3_recording_url: null,
+        round_3_rating: null,
+        round_3_full_verdict: null,
+      };
+    } else if (candidate.round_2_rating !== null) {
       confirmMsg = `Revert ${candidate.full_name} from R2 completed back to R2 Invited? This clears their Round 2 score and verdict so they can retake the technical interview.`;
       updateFields = {
         round_2_rating: null,
@@ -1738,7 +1747,7 @@ export default function DashboardPage() {
                                     <DropdownMenuSeparator />
                                   )}
 
-                                  {candidate.rating !== null && (
+                                  {(candidate.rating !== null || candidate.round_3_rating !== null || candidate.round_3_status === 'COMPLETED') && (
                                     <DropdownMenuItem
                                       onClick={() => handleRevertStage(candidate)}
                                       disabled={revertingCandidate === candidate.id}
