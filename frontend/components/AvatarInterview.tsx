@@ -58,7 +58,7 @@ interface AvatarInterviewProps {
   round2Verdict: string | null;
 }
 
-type Stage = 'screen-setup' | 'ready' | 'starting' | 'active' | 'analyzing' | 'ended' | 'incomplete';
+type Stage = 'screen-setup' | 'ready' | 'starting' | 'active' | 'analyzing' | 'ended' | 'incomplete' | 'connection-error';
 
 function formatTime(s: number): string {
   const m = Math.floor(s / 60);
@@ -416,9 +416,19 @@ ${candidateName} is the candidate. They answer. You probe.`;
       audioCtxRef.current = null;
       recordingDestRef.current = null;
       setCamReady(false);
-      setStage('ready');
-      const msg = err instanceof Error ? err.message : 'Failed to start interview';
-      setScreenError(msg.includes('not configured') ? 'Interview service is not available. Please contact support.' : 'Failed to start interview. Please try again.');
+
+      // Detect network/connectivity failures and show a dedicated screen
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const isNetworkError = errMsg.includes('Failed to fetch') || errMsg.includes('ERR_NAME_NOT_RESOLVED') || errMsg.includes('NetworkError') || errMsg.includes('network') || errMsg.includes('ECONNREFUSED') || err instanceof TypeError;
+      if (isNetworkError) {
+        setStage('connection-error');
+      } else if (errMsg.includes('not configured')) {
+        setStage('ready');
+        setScreenError('Interview service is not available. Please contact support.');
+      } else {
+        setStage('ready');
+        setScreenError('Failed to start interview. Please try again.');
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candidateId, candidateName, buildSystemPrompt]);
@@ -622,6 +632,32 @@ ${candidateName} is the candidate. They answer. You probe.`;
           <Loader2 className="w-12 h-12 text-cyan-500 animate-spin mx-auto mb-4" />
           <p className="text-foreground text-lg">Setting up your interview...</p>
           <p className="text-muted-foreground text-sm mt-2">Connecting to avatar</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Render: Connection Error ─────────────────────────────────────────────────
+  if (stage === 'connection-error') {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="text-center max-w-md mx-auto">
+          <div className="w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Monitor className="w-10 h-10 text-red-400" />
+          </div>
+          <h2 className="text-2xl font-bold text-foreground mb-3">Connection Failed</h2>
+          <p className="text-muted-foreground mb-2">
+            The avatar interview couldn&apos;t connect. This is usually caused by a network or internet connectivity issue.
+          </p>
+          <p className="text-muted-foreground/70 text-sm mb-6">
+            Please check your internet connection and try again. If the problem persists, try on a different network or contact your recruiter.
+          </p>
+          <button
+            onClick={() => setStage('ready')}
+            className="px-6 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+          >
+            Try Again
+          </button>
         </div>
       </div>
     );
