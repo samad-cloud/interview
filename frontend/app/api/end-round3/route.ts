@@ -2,6 +2,16 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { generateRound3Verdict } from '@/app/actions/generateRound3Verdict';
 
+const INCOMPLETE_TRANSCRIPT = '[Interview conducted via avatar — see recording]';
+const MIN_INTERVIEWER_TURNS = 2;
+
+function isIncomplete(transcript: string): boolean {
+  if (!transcript || transcript === INCOMPLETE_TRANSCRIPT) return true;
+  // Count how many times the interviewer spoke — fewer than 2 means the interview barely started
+  const atlasCount = (transcript.match(/\nAtlas:/g) || []).length;
+  return atlasCount < MIN_INTERVIEWER_TURNS;
+}
+
 export async function POST(request: Request) {
   try {
     const { candidateId, transcript } = await request.json();
@@ -20,14 +30,23 @@ export async function POST(request: Request) {
 
     const transcriptText = Array.isArray(transcript) ? transcript.join('\n') : (transcript || '');
 
-    // Fetch candidate info for logging
     const { data: candidate } = await supabase
       .from('candidates')
       .select('full_name')
       .eq('id', candidateId)
       .single();
 
-    // Save transcript first
+    // Detect incomplete interview — revert to INVITED so candidate can retake, store nothing
+    if (isIncomplete(transcriptText)) {
+      console.log(`[End Round 3] Incomplete interview for ${candidate?.full_name} (${candidateId}) — reverting to INVITED`);
+      await supabase
+        .from('candidates')
+        .update({ round_3_status: 'INVITED' })
+        .eq('id', candidateId);
+      return NextResponse.json({ success: true, incomplete: true });
+    }
+
+    // Save transcript
     const { error: updateError } = await supabase
       .from('candidates')
       .update({ round_3_transcript: transcriptText })

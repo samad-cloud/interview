@@ -2015,12 +2015,13 @@ export default function DashboardPage() {
                   {/* Round 2 verdict details (shown only when R3 hasn't replaced it) */}
                   {!selectedCandidate.round_3_full_verdict && selectedCandidate.full_verdict && (
                     <div className="mt-4 space-y-3 border-t border-border pt-3">
-                      <p className="text-sm">{selectedCandidate.full_verdict.summary}</p>
+                      {/* Support both old shape (technicalSummary) and new shape (summary) */}
+                      <p className="text-sm">{selectedCandidate.full_verdict.summary || (selectedCandidate.full_verdict as unknown as Record<string, string>).technicalSummary}</p>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <p className="text-xs font-medium text-emerald-400 mb-1">Technical Strengths</p>
                           <ul className="space-y-0.5">
-                            {selectedCandidate.full_verdict.technicalStrengths.map((s, i) => (
+                            {(selectedCandidate.full_verdict.technicalStrengths || (selectedCandidate.full_verdict as unknown as Record<string, string[]>).strengthAreas || []).map((s, i) => (
                               <li key={i} className="text-xs flex items-start gap-1.5">
                                 <span className="text-emerald-400 mt-0.5">+</span>{s}
                               </li>
@@ -2030,7 +2031,7 @@ export default function DashboardPage() {
                         <div>
                           <p className="text-xs font-medium text-red-400 mb-1">Technical Gaps</p>
                           <ul className="space-y-0.5">
-                            {selectedCandidate.full_verdict.technicalGaps.map((g, i) => (
+                            {(selectedCandidate.full_verdict.technicalGaps || (selectedCandidate.full_verdict as unknown as Record<string, string[]>).concernAreas || []).map((g, i) => (
                               <li key={i} className="text-xs flex items-start gap-1.5">
                                 <span className="text-red-400 mt-0.5">-</span>{g}
                               </li>
@@ -2038,7 +2039,9 @@ export default function DashboardPage() {
                           </ul>
                         </div>
                       </div>
-                      <p className="text-xs text-muted-foreground"><span className="font-medium text-foreground">Recommendation:</span> {selectedCandidate.full_verdict.recommendation}</p>
+                      {selectedCandidate.full_verdict.recommendation && (
+                        <p className="text-xs text-muted-foreground"><span className="font-medium text-foreground">Recommendation:</span> {selectedCandidate.full_verdict.recommendation}</p>
+                      )}
                     </div>
                   )}
                 </CardContent>
@@ -2379,12 +2382,14 @@ export default function DashboardPage() {
                         </ul>
                       </div>
                     )}
-                    {/* Technical gaps from full verdict (after Round 2) */}
-                    {selectedCandidate?.full_verdict?.technicalGaps && selectedCandidate.full_verdict.technicalGaps.length > 0 && (
+                    {/* Technical gaps from full verdict (after Round 2) — supports both old and new field names */}
+                    {(() => {
+                      const gaps = selectedCandidate?.full_verdict?.technicalGaps || (selectedCandidate?.full_verdict as unknown as Record<string, string[]> | null)?.concernAreas;
+                      return gaps && gaps.length > 0 ? (
                       <div>
                         <p className="text-sm font-medium text-red-400 mb-2">Technical Gaps to Explore</p>
                         <ul className="space-y-1">
-                          {selectedCandidate.full_verdict.technicalGaps.map((gap, i) => (
+                          {gaps.map((gap, i) => (
                             <li key={i} className="text-sm flex items-start gap-2">
                               <span className="text-red-400 mt-0.5">-</span>
                               {gap}
@@ -2392,7 +2397,8 @@ export default function DashboardPage() {
                           ))}
                         </ul>
                       </div>
-                    )}
+                      ) : null;
+                    })()}
                   </CardContent>
                 </Card>
               </div>

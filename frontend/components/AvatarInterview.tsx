@@ -58,7 +58,7 @@ interface AvatarInterviewProps {
   round2Verdict: string | null;
 }
 
-type Stage = 'screen-setup' | 'ready' | 'starting' | 'active' | 'analyzing' | 'ended';
+type Stage = 'screen-setup' | 'ready' | 'starting' | 'active' | 'analyzing' | 'ended' | 'incomplete';
 
 function formatTime(s: number): string {
   const m = Math.floor(s / 60);
@@ -492,8 +492,9 @@ ${candidateName} is the candidate. They answer. You probe.`;
     }
 
     // Submit transcript + trigger scoring
+    let isIncomplete = false;
     try {
-      await fetch('/api/end-round3', {
+      const res = await fetch('/api/end-round3', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -501,6 +502,8 @@ ${candidateName} is the candidate. They answer. You probe.`;
           transcript: transcriptRef.current || '[Interview conducted via avatar — see recording]',
         }),
       });
+      const data = await res.json();
+      if (data.incomplete) isIncomplete = true;
     } catch (err) {
       console.error('[AvatarInterview] end-round3 failed:', err);
     }
@@ -511,7 +514,7 @@ ${candidateName} is the candidate. They answer. You probe.`;
     }
 
     setUploadProgress(null);
-    setStage('ended');
+    setStage(isIncomplete ? 'incomplete' : 'ended');
     setIsSubmitting(false);
   }, [candidateId]);
 
@@ -619,6 +622,26 @@ ${candidateName} is the candidate. They answer. You probe.`;
           <Loader2 className="w-12 h-12 text-cyan-500 animate-spin mx-auto mb-4" />
           <p className="text-foreground text-lg">Setting up your interview...</p>
           <p className="text-muted-foreground text-sm mt-2">Connecting to avatar</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Render: Incomplete ───────────────────────────────────────────────────────
+  if (stage === 'incomplete') {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-8">
+          <div className="w-20 h-20 bg-amber-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <span className="text-4xl">⚠</span>
+          </div>
+          <h2 className="text-2xl font-bold text-foreground mb-3">Interview Incomplete</h2>
+          <p className="text-muted-foreground mb-2">
+            It looks like the session ended before enough responses were recorded.
+          </p>
+          <p className="text-muted-foreground/70 text-sm">
+            No data has been saved. Please use the same link to retake the interview when you&apos;re ready.
+          </p>
         </div>
       </div>
     );
