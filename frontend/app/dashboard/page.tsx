@@ -101,6 +101,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { FunnelRow } from '@/components/dashboard/FunnelRow';
 
 interface FullVerdict {
   technicalScore: number;
@@ -1157,100 +1158,15 @@ export default function DashboardPage() {
         </div>
 
         {/* Funnel Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
-          <Card className="border-l-4 border-l-muted-foreground/40">
-            <CardContent className="pt-4 pb-3">
-              <div className="flex items-center gap-1.5 mb-1">
-                <Users className="w-3.5 h-3.5 text-muted-foreground" />
-                <p className="text-muted-foreground text-xs">Applied</p>
-              </div>
-              <p className="text-2xl font-bold">{stats.applied}</p>
-            </CardContent>
-          </Card>
-          <Card className="border-l-4 border-l-violet-500">
-            <CardContent className="pt-4 pb-3">
-              <div className="flex items-center gap-1.5 mb-1">
-                <FileText className="w-3.5 h-3.5 text-violet-400" />
-                <p className="text-muted-foreground text-xs">Passed CV Filter</p>
-              </div>
-              <div className="flex items-baseline gap-1.5">
-                <p className="text-2xl font-bold text-violet-400">{stats.passedCvFilter}</p>
-                {stats.applied > 0 && (
-                  <span className="text-[10px] text-muted-foreground">{Math.round((stats.passedCvFilter / stats.applied) * 100)}%</span>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-l-4 border-l-sky-500">
-            <CardContent className="pt-4 pb-3">
-              <div className="flex items-center gap-1.5 mb-1">
-                <Send className="w-3.5 h-3.5 text-sky-400" />
-                <p className="text-muted-foreground text-xs">Invited to R1</p>
-              </div>
-              <div className="flex items-baseline gap-1.5">
-                <p className="text-2xl font-bold text-sky-400">{stats.invitedR1}</p>
-                {stats.applied > 0 && (
-                  <span className="text-[10px] text-muted-foreground">{Math.round((stats.invitedR1 / stats.applied) * 100)}%</span>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-l-4 border-l-cyan-500">
-            <CardContent className="pt-4 pb-3">
-              <div className="flex items-center gap-1.5 mb-1">
-                <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400" />
-                <p className="text-muted-foreground text-xs">Completed R1</p>
-              </div>
-              <div className="flex items-baseline gap-1.5">
-                <p className="text-2xl font-bold text-cyan-400">{stats.completedR1}</p>
-                {stats.applied > 0 && (
-                  <span className="text-[10px] text-muted-foreground">{Math.round((stats.completedR1 / stats.applied) * 100)}%</span>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-l-4 border-l-blue-500">
-            <CardContent className="pt-4 pb-3">
-              <div className="flex items-center gap-1.5 mb-1">
-                <ArrowRight className="w-3.5 h-3.5 text-blue-400" />
-                <p className="text-muted-foreground text-xs">Invited to R2</p>
-              </div>
-              <div className="flex items-baseline gap-1.5">
-                <p className="text-2xl font-bold text-blue-400">{stats.invitedR2}</p>
-                {stats.applied > 0 && (
-                  <span className="text-[10px] text-muted-foreground">{Math.round((stats.invitedR2 / stats.applied) * 100)}%</span>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-l-4 border-l-indigo-500">
-            <CardContent className="pt-4 pb-3">
-              <div className="flex items-center gap-1.5 mb-1">
-                <UserCheck className="w-3.5 h-3.5 text-indigo-400" />
-                <p className="text-muted-foreground text-xs">Completed R2</p>
-              </div>
-              <div className="flex items-baseline gap-1.5">
-                <p className="text-2xl font-bold text-indigo-400">{stats.completedR2}</p>
-                {stats.applied > 0 && (
-                  <span className="text-[10px] text-muted-foreground">{Math.round((stats.completedR2 / stats.applied) * 100)}%</span>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-l-4 border-l-emerald-500">
-            <CardContent className="pt-4 pb-3">
-              <div className="flex items-center gap-1.5 mb-1">
-                <Target className="w-3.5 h-3.5 text-emerald-400" />
-                <p className="text-muted-foreground text-xs">Successful</p>
-              </div>
-              <div className="flex items-baseline gap-1.5">
-                <p className="text-2xl font-bold text-emerald-400">{stats.successful}</p>
-                {stats.applied > 0 && (
-                  <span className="text-[10px] text-muted-foreground">{Math.round((stats.successful / stats.applied) * 100)}%</span>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+        <div className="mb-6">
+          <FunnelRow
+            stats={stats}
+            activeStage={stageFilter}
+            onStageClick={(value) => {
+              setStageFilter(value);
+              setCurrentPage(1);
+            }}
+          />
         </div>
 
         {/* Search & Filters */}
