@@ -102,6 +102,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { FunnelRow } from '@/components/dashboard/FunnelRow';
+import { CandidateTableRow } from '@/components/dashboard/CandidateTableRow';
 
 interface FullVerdict {
   technicalScore: number;
@@ -723,6 +724,23 @@ export default function DashboardPage() {
     }
     setSendingInvite(null);
   };
+
+  // Row-level invite handler (used by CandidateTableRow onInvite)
+  const handleInviteClick = useCallback((candidate: Candidate) => {
+    handleSendInvite(candidate.id);
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Row-level reject handler (used by CandidateTableRow onReject)
+  const handleRejectClick = useCallback(async (candidate: Candidate) => {
+    const { error } = await supabase.from('candidates').update({ final_verdict: 'Rejected', status: 'REJECTED' }).eq('id', candidate.id);
+    if (!error) {
+      setCandidates(prev => prev.map(c =>
+        c.id === candidate.id ? { ...c, final_verdict: 'Rejected', status: 'REJECTED' } : c
+      ));
+    } else {
+      setToastModal({ title: 'Failed to Reject', description: 'Could not update candidate status.', variant: 'error' });
+    }
+  }, []);
 
   const handleInviteRound2 = async (candidateId: number) => {
     setSendingInvite(candidateId);
@@ -1442,248 +1460,32 @@ export default function DashboardPage() {
 
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-10">
-                        <Checkbox
-                          checked={candidates.length > 0 && selectedIds.size === candidates.length}
-                          onCheckedChange={toggleSelectAll}
-                          aria-label="Select all"
-                        />
-                      </TableHead>
-                      <TableHead className="w-12">#</TableHead>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('created_at')}>
-                        <div className="flex items-center gap-1">
-                          Applied
-                          <SortIcon column="created_at" />
-                        </div>
-                      </TableHead>
-                      <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('round_1_completed_at')}>
-                        <div className="flex items-center gap-1">
-                          R1 Date
-                          <SortIcon column="round_1_completed_at" />
-                        </div>
-                      </TableHead>
-                      <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('round_2_completed_at')}>
-                        <div className="flex items-center gap-1">
-                          R2 Date
-                          <SortIcon column="round_2_completed_at" />
-                        </div>
-                      </TableHead>
-                      <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('jd_match_score')}>
-                        <div className="flex items-center gap-1">
-                          CV
-                          <SortIcon column="jd_match_score" />
-                        </div>
-                      </TableHead>
-                      <TableHead>Stage</TableHead>
-                      <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('combined_score')}>
-                        <div className="flex items-center gap-1">
-                          Scores
-                          <SortIcon column="combined_score" />
-                        </div>
-                      </TableHead>
-                      <TableHead>Verdict</TableHead>
-                      <TableHead>Actions</TableHead>
+                    <TableRow className="border-b border-[#1E293B] hover:bg-transparent">
+                      <TableHead className="pl-4 text-[11px] font-medium text-[#6B7280] uppercase tracking-wider">Candidate</TableHead>
+                      <TableHead className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wider">Role</TableHead>
+                      <TableHead className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wider">Applied</TableHead>
+                      <TableHead className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wider">R1 Score</TableHead>
+                      <TableHead className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wider">R2 Score</TableHead>
+                      <TableHead className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wider">Stage</TableHead>
+                      <TableHead className="w-24" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {candidates.map((candidate, index) => {
-                      const stageDisplay = getStageDisplay(candidate);
-                      // R1 invite: show for any candidate without R1 rating who doesn't already have an active invite
-                      const canSendInvite = candidate.rating === null &&
-                        !['INVITE_SENT', 'INTERVIEW_STARTED', 'FORM_COMPLETED'].includes(candidate.status);
-                      // R2 invite: show for any R1-completed candidate not already in R2 (enables override for R1 Failed)
-                      const canInviteR2 = candidate.rating !== null &&
-                        candidate.round_2_rating === null &&
-                        candidate.current_stage !== 'round_2' &&
-                        candidate.current_stage !== 'completed' &&
-                        candidate.status !== 'ROUND_2_INVITED' &&
-                        candidate.status !== 'ROUND_2_APPROVED';
-                      // Override detection for visual distinction
-                      const isR1Override = canSendInvite && ['CV_REJECTED', 'QUESTIONNAIRE_SENT', 'REJECTED_VISA'].includes(candidate.status);
-                      const isR2Override = canInviteR2 && candidate.rating !== null && candidate.rating < 70;
-                      // R3 invite: show for R2-completed candidates not already invited/completed
-                      const canInviteR3 = candidate.round_2_rating !== null &&
-                        candidate.round_3_status !== 'INVITED' &&
-                        candidate.round_3_status !== 'COMPLETED';
-                      const rowNumber = startIndex + index;
-
-                      return (
-                        <TableRow key={candidate.id} className={`transition-colors duration-150 ${selectedIds.has(candidate.id) ? 'bg-muted/30' : ''}`}>
-                          <TableCell>
-                            <Checkbox
-                              checked={selectedIds.has(candidate.id)}
-                              onCheckedChange={() => toggleSelect(candidate.id)}
-                              aria-label={`Select ${candidate.full_name}`}
-                            />
-                          </TableCell>
-                          <TableCell className="text-muted-foreground font-medium">
-                            {rowNumber}
-                          </TableCell>
-
-                          <TableCell>
-                            <div>
-                              <p className="font-medium">{candidate.full_name}</p>
-                              <p className="text-muted-foreground text-sm">{candidate.email}</p>
-                            </div>
-                          </TableCell>
-
-                          <TableCell className="text-sm">
-                            {candidate.job_title || '—'}
-                          </TableCell>
-
-                          <TableCell className="text-muted-foreground text-sm">
-                            {candidate.created_at
-                              ? new Date(candidate.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
-                              : '—'}
-                          </TableCell>
-
-                          <TableCell className="text-muted-foreground text-sm">
-                            {candidate.round_1_completed_at
-                              ? new Date(candidate.round_1_completed_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
-                              : '—'}
-                          </TableCell>
-
-                          <TableCell className="text-muted-foreground text-sm">
-                            {candidate.round_2_completed_at
-                              ? new Date(candidate.round_2_completed_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
-                              : '—'}
-                          </TableCell>
-
-                          <TableCell>
-                            {candidate.jd_match_score !== null ? (
-                              <Badge className={`${
-                                candidate.jd_match_score >= 70 ? 'bg-emerald-500/20 text-emerald-400' :
-                                candidate.jd_match_score >= 50 ? 'bg-yellow-500/20 text-yellow-400' :
-                                'bg-red-500/20 text-red-400'
-                              }`}>
-                                {candidate.jd_match_score}
-                              </Badge>
-                            ) : (
-                              <span className="text-muted-foreground text-sm">—</span>
-                            )}
-                          </TableCell>
-
-                          <TableCell>
-                            <Badge variant={stageDisplay.variant} className={`whitespace-nowrap ${stageDisplay.className}`}>
-                              {stageDisplay.label}
-                            </Badge>
-                          </TableCell>
-
-                          <TableCell>
-                            <div className="space-y-1">
-                              <ScoreBar
-                                score={candidate.rating}
-                                label="Hunger"
-                                color={candidate.rating && candidate.rating >= 70 ? 'bg-emerald-500' : candidate.rating && candidate.rating >= 50 ? 'bg-yellow-500' : 'bg-red-500'}
-                              />
-                              <ScoreBar
-                                score={candidate.round_2_rating}
-                                label="Skills"
-                                color={candidate.round_2_rating && candidate.round_2_rating >= 70 ? 'bg-blue-500' : candidate.round_2_rating && candidate.round_2_rating >= 50 ? 'bg-yellow-500' : 'bg-red-500'}
-                              />
-                            </div>
-                          </TableCell>
-
-                          <TableCell>
-                            {candidate.final_verdict === 'Hired' ? (
-                              <Badge className="bg-emerald-500/20 text-emerald-400">Advanced</Badge>
-                            ) : candidate.final_verdict === 'Rejected' ? (
-                              <Badge className="bg-red-500/20 text-red-400">Rejected</Badge>
-                            ) : (
-                              <span className="text-muted-foreground text-sm">—</span>
-                            )}
-                          </TableCell>
-
-                          <TableCell>
-                            <div className="flex items-center gap-1.5">
-                              <TooltipProvider delayDuration={300}>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="secondary"
-                                      size="icon"
-                                      className="h-8 w-8"
-                                      onClick={() => setSelectedCandidate(candidate)}
-                                    >
-                                      <Eye className="w-3.5 h-3.5" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>View Details</TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-
-                              {(candidate.video_url || candidate.round_2_video_url) && (
-                                <span className="w-2 h-2 rounded-full bg-purple-400 shrink-0" title="Has recording" />
-                              )}
-
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                                    <MoreHorizontal className="w-3.5 h-3.5" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-48">
-                                  {canSendInvite && (
-                                    <DropdownMenuItem
-                                      onClick={() => handleSendInvite(candidate.id)}
-                                      disabled={sendingInvite === candidate.id}
-                                      className={isR1Override ? 'text-amber-400' : 'text-blue-400'}
-                                    >
-                                      <Send className="w-3.5 h-3.5 mr-2" />
-                                      {isR1Override ? 'Override: Send R1 Invite' : 'Send R1 Invite'}
-                                    </DropdownMenuItem>
-                                  )}
-
-                                  {canInviteR2 && (
-                                    <DropdownMenuItem
-                                      onClick={() => handleInviteRound2(candidate.id)}
-                                      disabled={sendingInvite === candidate.id}
-                                      className={isR2Override ? 'text-amber-400' : 'text-emerald-400'}
-                                    >
-                                      <ArrowRight className="w-3.5 h-3.5 mr-2" />
-                                      {isR2Override ? 'Override: Invite to R2' : 'Invite to Round 2'}
-                                    </DropdownMenuItem>
-                                  )}
-
-                                  {canInviteR3 && (
-                                    <DropdownMenuItem
-                                      onClick={() => handleInviteRound3(candidate.id)}
-                                      disabled={sendingInvite === candidate.id}
-                                      className="text-purple-400"
-                                    >
-                                      <ArrowRight className="w-3.5 h-3.5 mr-2" />
-                                      Invite to Round 3
-                                    </DropdownMenuItem>
-                                  )}
-
-                                  {(canSendInvite || canInviteR2 || canInviteR3) && candidate.rating !== null && (
-                                    <DropdownMenuSeparator />
-                                  )}
-
-                                  {(candidate.rating !== null || candidate.round_3_rating !== null || candidate.round_3_status === 'COMPLETED') && (
-                                    <DropdownMenuItem
-                                      onClick={() => handleRevertStage(candidate)}
-                                      disabled={revertingCandidate === candidate.id}
-                                      className="text-orange-400"
-                                    >
-                                      {revertingCandidate === candidate.id ? (
-                                        <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />
-                                      ) : (
-                                        <RotateCcw className="w-3.5 h-3.5 mr-2" />
-                                      )}
-                                      Revert Stage
-                                    </DropdownMenuItem>
-                                  )}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                    {candidates.map((candidate) => (
+                      <CandidateTableRow
+                        key={candidate.id}
+                        candidate={candidate}
+                        onView={(c) => setSelectedCandidate(c as Candidate)}
+                        onInvite={(e, c) => {
+                          e.stopPropagation();
+                          handleInviteClick(c as Candidate);
+                        }}
+                        onReject={(e, c) => {
+                          e.stopPropagation();
+                          handleRejectClick(c as Candidate);
+                        }}
+                      />
+                    ))}
                   </TableBody>
                 </Table>
 
