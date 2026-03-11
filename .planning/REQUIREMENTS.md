@@ -32,9 +32,9 @@
 - [x] **JOB-04**: Step 3 (AI Generate) generates a job description from entered details with a refine text field and live preview
 - [ ] **JOB-05**: Step 4 (Interview Config) lets HR configure number of rounds (1/2/3) and per-round theme, duration, voice, and avatar toggle
 - [x] **JOB-06**: Step 5 (Screening) shows AI-generated eligibility questions (Yes/No) that HR can edit, remove, or add to
-- [ ] **JOB-07**: Step 6 (Scoring) lets HR select a hiring bar preset (Growth 35+ / Standard 50+ / High Bar 75+ / Elite 90+) and publish the job
+- [x] **JOB-07**: Step 6 (Scoring) lets HR select a hiring bar preset (Growth 35+ / Standard 50+ / High Bar 75+ / Elite 90+) and publish the job
 - [x] **JOB-08**: Wizard sidebar shows step progress with completed (emerald ✓), active (indigo), and pending (gray) states
-- [ ] **JOB-09**: HR manager can save a job as draft at any wizard step
+- [x] **JOB-09**: HR manager can save a job as draft at any wizard step
 
 ### Settings Panel
 
@@ -103,9 +103,9 @@
 | JOB-04 | Phase 3 | Complete |
 | JOB-05 | Phase 3 | Pending |
 | JOB-06 | Phase 3 | Complete |
-| JOB-07 | Phase 3 | Pending |
+| JOB-07 | Phase 3 | Complete |
 | JOB-08 | Phase 3 | Complete |
-| JOB-09 | Phase 3 | Pending |
+| JOB-09 | Phase 3 | Complete |
 | SETT-01 | Phase 4 | Pending |
 | SETT-02 | Phase 4 | Pending |
 | SETT-03 | Phase 4 | Pending |
