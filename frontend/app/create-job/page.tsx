@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { WizardSidebar } from '@/components/wizard/WizardSidebar';
+import { StepBasics } from '@/components/wizard/StepBasics';
+import { StepRequirements } from '@/components/wizard/StepRequirements';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -203,10 +205,24 @@ export default function CreateJobPage() {
       {/* Main content area */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-3xl mx-auto px-8 py-8">
-          {/* Step placeholder — replaced in subsequent plans */}
-          <div style={{ color: '#94A3B8' }}>
-            Step {activeStep} content — coming in next plans
-          </div>
+          {activeStep === 1 && (
+            <StepBasics
+              state={wizardState}
+              onChange={updateWizardState}
+              onNext={() => setActiveStep(2)}
+            />
+          )}
+          {activeStep === 2 && (
+            <StepRequirements
+              state={wizardState}
+              onChange={updateWizardState}
+              onNext={() => setActiveStep(3)}
+              onPrev={() => setActiveStep(1)}
+            />
+          )}
+          {activeStep > 2 && (
+            <div style={{ color: '#94A3B8' }}>Step {activeStep} — coming soon</div>
+          )}
         </div>
       </div>
     </div>
