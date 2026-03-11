@@ -3,11 +3,11 @@
 ## Current Position
 
 Phase: 01-dashboard-rebuild
-Plan: 01 of N (01-01 complete)
-Status: In progress — Plan 01-01 complete, ready for Plan 01-02
-Last activity: 2026-03-10 — 01-01 FunnelRow component complete
-Last session: 2026-03-10T12:03:00Z
-Stopped at: Completed 01-01-PLAN.md
+Plan: 03 of N (01-02 complete, 01-03 next)
+Status: In progress — Plan 01-02 complete, ready for Plan 01-03
+Last activity: 2026-03-11 — 01-02 SUMMARY committed; state and roadmap updated
+Last session: 2026-03-11T00:00:00Z
+Stopped at: Completed 01-02-PLAN.md
 
 ## Project Reference
 
@@ -48,3 +48,6 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 - FunnelCard uses style={{color}} for hex colors to avoid Tailwind purge in production — 2026-03-10
 - r2inv and r2done both map to r2_pending stageFilter (no distinct r2_done status yet) — 2026-03-10
 - r1done maps to r1_done filter value; fetchCandidates handler deferred to Plan 01-03 — 2026-03-10
+- CandidateRow subset interface defined in CandidateTableRow.tsx; page passes full Candidate via structural typing — 2026-03-10
+- getStageBadge() defined inline in CandidateTableRow.tsx (getStageDisplay not exported from page.tsx) — 2026-03-10
+- Legacy checkbox/row#/CV score/verdict columns removed; bulk toolbar kept above table — 2026-03-10

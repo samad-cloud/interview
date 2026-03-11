@@ -9,8 +9,8 @@
 
 - [x] **DASH-01**: HR manager sees pipeline funnel stats as connected cards with conversion percentages
 - [x] **DASH-02**: HR manager can click a funnel stat card to filter the candidate table to that stage
-- [ ] **DASH-03**: Candidate table rows display avatar circle with initials, name, email, role, applied date, R1/R2 score bars, stage badge, and action icons
-- [ ] **DASH-04**: Candidate table rows show hover state (background highlight) and row-level action icons (View / Invite / Reject)
+- [x] **DASH-03**: Candidate table rows display avatar circle with initials, name, email, role, applied date, R1/R2 score bars, stage badge, and action icons
+- [x] **DASH-04**: Candidate table rows show hover state (background highlight) and row-level action icons (View / Invite / Reject)
 - [ ] **DASH-05**: HR manager can filter candidates by stage using tab strip (All / R1 Pending / R1 Done / R2 / Final)
 
 ### Candidate Panel
@@ -86,8 +86,8 @@
 |-------------|-------|--------|
 | DASH-01 | Phase 1 | Complete |
 | DASH-02 | Phase 1 | Complete |
-| DASH-03 | Phase 1 | Pending |
-| DASH-04 | Phase 1 | Pending |
+| DASH-03 | Phase 1 | Complete |
+| DASH-04 | Phase 1 | Complete |
 | DASH-05 | Phase 1 | Pending |
 | PANEL-01 | Phase 2 | Pending |
 | PANEL-02 | Phase 2 | Pending |

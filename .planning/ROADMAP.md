@@ -30,11 +30,11 @@ Five phases of frontend-only UI work that migrate the SynchroHire HR dashboard f
   2. Each candidate table row displays an avatar circle with initials, name, email, role, applied date, R1/R2 score progress bars, a stage badge, and View/Invite/Reject action icons that appear on hover.
   3. The tab strip (All / R1 Pending / R1 Done / R2 / Final) filters the candidate table and reflects the active tab visually.
   4. Hover state on a table row produces a visible background highlight and surfaces the action icons without layout shift.
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
-- [ ] 01-01-PLAN.md — FunnelRow component (connected funnel cards, conversion %, clickable stage filter)
-- [ ] 01-02-PLAN.md — CandidateTableRow component (avatar, score bars, stage badge, hover + action icons)
+- [x] 01-01-PLAN.md — FunnelRow component (connected funnel cards, conversion %, clickable stage filter)
+- [x] 01-02-PLAN.md — CandidateTableRow component (avatar, score bars, stage badge, hover + action icons)
 - [ ] 01-03-PLAN.md — StageTabStrip component and r1_done filter case wired to table
 
 ---
@@ -135,7 +135,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Dashboard Rebuild | 1/3 | In Progress|  |
+| 1. Dashboard Rebuild | 2/3 | In Progress|  |
 | 2. Candidate Panel Slide-Over | 0/4 | Not started | - |
 | 3. Create Job Wizard | 0/6 | Not started | - |
 | 4. Settings Panel | 0/5 | Not started | - |
