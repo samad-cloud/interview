@@ -3,14 +3,16 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Stitch UI Implementation
 status: in_progress
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-03-11T08:20:00.000Z"
-last_activity: 2026-03-11 — 03-02 StepBasics, StepRequirements, SkillChipInput wired into create-job page
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-03-11T08:25:00.000Z"
+last_activity: 2026-03-11 — 03-03 StepAIGenerate component, wire Step 3 into page.tsx
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 13
-  completed_plans: 9
+  completed_plans: 11
+  percent: 77
+  bar: "[████████░░] 77%"
 ---
 
 # SynchroHire — GSD State
@@ -18,11 +20,11 @@ progress:
 ## Current Position
 
 Phase: 03-create-job-wizard
-Plan: 2 of 6 (complete)
-Status: Phase 3 active — 03-02 StepBasics + StepRequirements + SkillChipInput complete; steps 3-6 pending (03-03 through 03-06)
-Last activity: 2026-03-11 — 03-02 SkillChipInput, StepBasics, StepRequirements, page.tsx conditional step rendering
-Last session: 2026-03-11T08:20:00.000Z
-Stopped at: Completed 03-02-PLAN.md
+Plan: 3 of 6 (complete)
+Status: Phase 3 active — 03-03 StepAIGenerate complete; steps 4-6 pending (03-04 through 03-06)
+Last activity: 2026-03-11 — 03-03 StepAIGenerate component with generate/refine/preview flow
+Last session: 2026-03-11T08:25:00.000Z
+Stopped at: Completed 03-03-PLAN.md
 
 ## Project Reference
 
@@ -86,3 +88,5 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 - [Phase 03-create-job-wizard 03-02]: SkillChipInput chip colors use inline style (background+20, border+40 alpha) — never dynamic Tailwind class interpolation
 - [Phase 03-create-job-wizard 03-02]: Native <input type="date"> for targetStartDate — no date picker library installed
 - [Phase 03-create-job-wizard 03-02]: Step components import WizardState from @/app/create-job/page (exported interface); each step exports named function
+- [Phase 03-create-job-wizard]: Pre-wrap monospace div for job description preview — no markdown parser dependency added
+- [Phase 03-create-job-wizard]: Citations are local state in StepAIGenerate (not in WizardState) — cosmetic only, re-fetched on regenerate

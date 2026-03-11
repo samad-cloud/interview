@@ -74,7 +74,7 @@ Plans:
   5. Step 5 (Screening) shows AI-generated Yes/No eligibility questions that HR can edit, remove, and add to.
   6. Step 6 (Scoring) presents the four hiring bar presets as selectable cards; clicking Publish creates the job record and redirects to the Jobs page.
   7. "Save as Draft" is available at every step and persists the current wizard state without publishing.
-**Plans:** 2/6 plans executed
+**Plans:** 4/6 plans executed
 
 Plans:
 - [ ] 03-01-PLAN.md — Scaffold wizard layout, sidebar progress component, step routing/state management
@@ -137,7 +137,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Dashboard Rebuild | 3/3 | Complete | 2026-03-11 |
 | 2. Candidate Panel Slide-Over | 4/4 | Complete | 2026-03-11 |
-| 3. Create Job Wizard | 2/6 | In Progress|  |
+| 3. Create Job Wizard | 4/6 | In Progress|  |
 | 4. Settings Panel | 0/5 | Not started | - |
 | 5. Jobs Page Refresh | 0/2 | Not started | - |
 

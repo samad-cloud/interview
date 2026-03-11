@@ -29,7 +29,7 @@
 - [x] **JOB-01**: HR manager can create a job via a 6-step wizard: Basics → Requirements → AI Generate → Interview Config → Screening → Scoring & Publish
 - [x] **JOB-02**: Step 1 (Basics) captures job title, department, location, work arrangement, employment type, urgency, headcount, target start date
 - [x] **JOB-03**: Step 2 (Requirements) captures salary range, education, experience, must-have skills (chips), nice-to-have skills (chips), visa sponsorship toggle
-- [ ] **JOB-04**: Step 3 (AI Generate) generates a job description from entered details with a refine text field and live preview
+- [x] **JOB-04**: Step 3 (AI Generate) generates a job description from entered details with a refine text field and live preview
 - [ ] **JOB-05**: Step 4 (Interview Config) lets HR configure number of rounds (1/2/3) and per-round theme, duration, voice, and avatar toggle
 - [ ] **JOB-06**: Step 5 (Screening) shows AI-generated eligibility questions (Yes/No) that HR can edit, remove, or add to
 - [ ] **JOB-07**: Step 6 (Scoring) lets HR select a hiring bar preset (Growth 35+ / Standard 50+ / High Bar 75+ / Elite 90+) and publish the job
@@ -100,7 +100,7 @@
 | JOB-01 | Phase 3 | Complete |
 | JOB-02 | Phase 3 | Complete |
 | JOB-03 | Phase 3 | Complete |
-| JOB-04 | Phase 3 | Pending |
+| JOB-04 | Phase 3 | Complete |
 | JOB-05 | Phase 3 | Pending |
 | JOB-06 | Phase 3 | Pending |
 | JOB-07 | Phase 3 | Pending |
