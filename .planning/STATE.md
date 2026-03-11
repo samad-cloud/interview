@@ -3,11 +3,11 @@
 ## Current Position
 
 Phase: 02-candidate-panel-slide-over
-Plan: 02 of 4 (complete)
-Status: Phase 2 in progress — 02-02 panel content sections complete, ready for 02-03
-Last activity: 2026-03-11 — 02-02 header, ScoreGauge, VerdictBanner, StrengthsGaps implemented
-Last session: 2026-03-11T06:50:02Z
-Stopped at: Completed 02-02-PLAN.md
+Plan: 03 of 4 (complete)
+Status: Phase 2 in progress — 02-03 recordings section and transcript accordions complete, ready for 02-04
+Last activity: 2026-03-11 — 02-03 RecordingCard, VideoPlayer integration, TranscriptAccordion implemented
+Last session: 2026-03-11T06:55:30Z
+Stopped at: Completed 02-03-PLAN.md
 
 ## Project Reference
 
@@ -59,3 +59,6 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 - AVATAR_GRADIENTS/getInitials/getAvatarGradient copied (not imported) into CandidatePanel to avoid inter-component coupling — 2026-03-11
 - getStageBadge in CandidatePanel returns hex color/bg strings (not Tailwind classes) — consistent with panel's inline style approach — 2026-03-11
 - SVG ring gauge: r=30, viewBox 72x72, strokeDashoffset animates on mount; null score shows gray ring with "Pending" label — 2026-03-11
+- RecordingCard/TranscriptAccordion defined as module-internal functions in CandidatePanel.tsx (not exported) — 2026-03-11
+- ChevronRight uses static `rotate-90` class conditionally — never dynamic rotate-${var} (Tailwind v4 purge-safe) — 2026-03-11
+- State resets (activeRecording + accordion open states) via useEffect on candidate?.id — 2026-03-11
