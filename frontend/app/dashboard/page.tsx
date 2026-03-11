@@ -104,6 +104,7 @@ import {
 import { FunnelRow } from '@/components/dashboard/FunnelRow';
 import { CandidateTableRow } from '@/components/dashboard/CandidateTableRow';
 import { StageTabStrip } from '@/components/dashboard/StageTabStrip';
+import { CandidatePanel } from '@/components/dashboard/CandidatePanel';
 
 interface FullVerdict {
   technicalScore: number;
@@ -2191,6 +2192,17 @@ export default function DashboardPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Candidate slide-over panel — replaces Dialog in plan 02-04 */}
+      <CandidatePanel
+        candidate={selectedCandidate}
+        open={!!selectedCandidate}
+        onClose={() => { setSelectedCandidate(null); setInterviewNotes(null); }}
+        onInviteR2={(id) => handleInviteRound2(id)}
+        onInviteR3={(id) => handleInviteRound3(id)}
+        onReject={(c) => handleRejectClick(c as Parameters<typeof handleRejectClick>[0])}
+        onSaveNote={(id, _noteText) => handleSaveNote(id)}
+      />
 
       {/* Unified Bulk Action Modal: confirm → progress → done */}
       <Dialog
