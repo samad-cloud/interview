@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { X, ChevronRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import VideoPlayer from '@/components/VideoPlayer';
 
 // Inline re-declarations of the types needed (page.tsx does not export them)
@@ -263,6 +264,9 @@ export function CandidatePanel({
   const [r1Open, setR1Open] = useState(false);
   const [r2Open, setR2Open] = useState(false);
   const [r3Open, setR3Open] = useState(false);
+  const [showNote, setShowNote] = useState(false);
+  const [noteText, setNoteText] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
 
   // Escape key dismiss
   useEffect(() => {
@@ -274,12 +278,14 @@ export function CandidatePanel({
     return () => document.removeEventListener('keydown', handler);
   }, [open, onClose]);
 
-  // Reset recording and accordion state when candidate changes
+  // Reset recording, accordion, and note state when candidate changes
   useEffect(() => {
     setActiveRecording(null);
     setR1Open(false);
     setR2Open(false);
     setR3Open(false);
+    setShowNote(false);
+    setNoteText(candidate?.hr_notes || '');
   }, [candidate?.id]);
 
   if (!candidate) return null;
@@ -477,11 +483,86 @@ export function CandidatePanel({
             </div>
           )}
 
+          {/* Add Note inline textarea — shown when showNote is true */}
+          {showNote && (
+            <div className="bg-[#1A2332] border border-[#1E293B] rounded-[10px] p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280] mb-2">HR Notes</p>
+              <textarea
+                value={noteText}
+                onChange={(e) => setNoteText(e.target.value)}
+                placeholder="Add notes about this candidate..."
+                rows={4}
+                className="w-full bg-[#0F172A] border border-[#1E293B] rounded-lg px-3 py-2 text-[12px] text-[#F9FAFB] placeholder:text-[#6B7280] resize-none focus:outline-none focus:border-[#6366F1] transition-colors"
+              />
+              <div className="flex gap-2 mt-2">
+                <Button
+                  size="sm"
+                  disabled={savingNote || noteText === (candidate?.hr_notes || '')}
+                  onClick={async () => {
+                    setSavingNote(true);
+                    await onSaveNote(candidate!.id, noteText);
+                    setSavingNote(false);
+                  }}
+                  className="h-[28px] text-[11px] bg-[#6366F1] hover:bg-[#4F46E5] text-white"
+                >
+                  {savingNote ? 'Saving…' : 'Save Note'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setShowNote(false)}
+                  className="h-[28px] text-[11px] text-[#6B7280]"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+
         </div>
 
-        {/* Footer — flex-shrink-0, implemented in plan 02-04 */}
-        <div className="px-5 py-3 border-t border-[#1E293B] flex gap-2 flex-shrink-0">
-          <p className="text-[12px] text-[#6B7280]">Actions — implemented in plan 02-04</p>
+        {/* Footer — pinned action bar with Invite/Reject/Add Note */}
+        <div className="px-5 py-3 border-t border-[#1E293B] flex gap-2 flex-shrink-0 flex-wrap">
+          {/* Primary action: Invite to R2 or R3 depending on candidate stage */}
+          {!candidate.round_2_rating ? (
+            <Button
+              size="sm"
+              title="Invite to Round 2"
+              onClick={() => { onInviteR2(candidate.id); onClose(); }}
+              className="h-[34px] text-[12px] bg-[#6366F1] hover:bg-[#4F46E5] text-white"
+            >
+              Invite to R2
+            </Button>
+          ) : !candidate.round_3_rating ? (
+            <Button
+              size="sm"
+              title="Invite to Round 3"
+              onClick={() => { onInviteR3(candidate.id); onClose(); }}
+              className="h-[34px] text-[12px] bg-[#6366F1] hover:bg-[#4F46E5] text-white"
+            >
+              Invite to R3
+            </Button>
+          ) : null}
+
+          {/* Reject button */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => { onReject(candidate); onClose(); }}
+            className="h-[34px] text-[12px] border-[#EF4444] text-[#EF4444] hover:bg-red-500/10"
+          >
+            Reject
+          </Button>
+
+          {/* Add Note toggle */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowNote(p => !p)}
+            className="h-[34px] text-[12px] border-[#1E293B] text-[#94A3B8] hover:bg-[#1E293B]"
+          >
+            {showNote ? 'Hide Note' : 'Add Note'}
+          </Button>
         </div>
       </div>
     </>
