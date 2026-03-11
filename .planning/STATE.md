@@ -3,11 +3,11 @@
 ## Current Position
 
 Phase: 02-candidate-panel-slide-over
-Plan: 03 of 4 (complete)
-Status: Phase 2 in progress — 02-03 recordings section and transcript accordions complete, ready for 02-04
-Last activity: 2026-03-11 — 02-03 RecordingCard, VideoPlayer integration, TranscriptAccordion implemented
-Last session: 2026-03-11T06:55:30Z
-Stopped at: Completed 02-03-PLAN.md
+Plan: 4 of 4 (complete)
+Status: Phase 2 complete — all 8 PANEL requirements satisfied; Phase 3 (Create Job Wizard) not started
+Last activity: 2026-03-11 — 02-04 pinned footer action bar, Dialog removal, completion dates on gauges
+Last session: 2026-03-11
+Stopped at: Completed 02-04-PLAN.md
 
 ## Project Reference
 
@@ -62,3 +62,7 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 - RecordingCard/TranscriptAccordion defined as module-internal functions in CandidatePanel.tsx (not exported) — 2026-03-11
 - ChevronRight uses static `rotate-90` class conditionally — never dynamic rotate-${var} (Tailwind v4 purge-safe) — 2026-03-11
 - State resets (activeRecording + accordion open states) via useEffect on candidate?.id — 2026-03-11
+- Footer flex-shrink-0 pins without structural change — panel was already flex-col with flex-1 body from 02-01 — 2026-03-11
+- Invite button: three-way conditional (no round_2_rating → R2, has round_2_rating but no round_3_rating → R3, both complete → hidden) — 2026-03-11
+- Dialog block removed from page.tsx (~630 LOC); dead imports and interviewNotes/generateNotes state cleaned up — 2026-03-11
+- noteText initialized from candidate?.hr_notes in candidate-change useEffect alongside other state resets — 2026-03-11

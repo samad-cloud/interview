@@ -14,7 +14,7 @@ Five phases of frontend-only UI work that migrate the SynchroHire HR dashboard f
 
 ## Phases
 
-### 🚧 v2.0 Stitch UI Implementation (Phase 1 Complete)
+### 🚧 v2.0 Stitch UI Implementation (Phases 1–2 Complete)
 
 **Milestone Goal:** Replace every v1.0 HR dashboard screen with the Stitch-designed UI — delivering a polished, cohesive recruiter experience while leaving interview pages, the backend pipeline, and the database untouched.
 
@@ -51,13 +51,13 @@ Plans:
   4. Strengths and Gaps appear in a two-column grid; interview recordings show as video cards with an inline player.
   5. Round 1 and Round 2 transcript accordions are expandable inline within the panel.
   6. Footer action buttons (Invite to R2 / Reject / Add Note) are pinned to the bottom of the panel and remain visible while scrolling content above.
-**Plans:** 4 plans
+**Plans:** 4/4 plans executed
 
 Plans:
 - [x] 02-01: Build slide-over shell (640px, full-height, open/close, overlay, keyboard dismiss)
 - [x] 02-02: Implement header, score gauges, Final Verdict banner, Strengths/Gaps grid
 - [x] 02-03: Implement recordings section (video cards, inline player) and transcript accordions
-- [ ] 02-04: Implement pinned footer action bar (Invite to R2 / Reject / Add Note) wired to existing actions
+- [x] 02-04: Implement pinned footer action bar (Invite to R2 / Reject / Add Note) wired to existing actions
 
 ---
 
@@ -136,7 +136,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Dashboard Rebuild | 3/3 | Complete | 2026-03-11 |
-| 2. Candidate Panel Slide-Over | 3/4 | In progress | - |
+| 2. Candidate Panel Slide-Over | 4/4 | Complete | 2026-03-11 |
 | 3. Create Job Wizard | 0/6 | Not started | - |
 | 4. Settings Panel | 0/5 | Not started | - |
 | 5. Jobs Page Refresh | 0/2 | Not started | - |
@@ -159,7 +159,7 @@ Plans:
 | PANEL-05 | Phase 2 | Complete |
 | PANEL-06 | Phase 2 | Complete |
 | PANEL-07 | Phase 2 | Complete |
-| PANEL-08 | Phase 2 | Pending |
+| PANEL-08 | Phase 2 | Complete |
 | JOB-01 | Phase 3 | Pending |
 | JOB-02 | Phase 3 | Pending |
 | JOB-03 | Phase 3 | Pending |
