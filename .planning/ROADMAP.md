@@ -14,7 +14,7 @@ Five phases of frontend-only UI work that migrate the SynchroHire HR dashboard f
 
 ## Phases
 
-### 🚧 v2.0 Stitch UI Implementation
+### 🚧 v2.0 Stitch UI Implementation (Phase 1 Complete)
 
 **Milestone Goal:** Replace every v1.0 HR dashboard screen with the Stitch-designed UI — delivering a polished, cohesive recruiter experience while leaving interview pages, the backend pipeline, and the database untouched.
 
@@ -30,12 +30,12 @@ Five phases of frontend-only UI work that migrate the SynchroHire HR dashboard f
   2. Each candidate table row displays an avatar circle with initials, name, email, role, applied date, R1/R2 score progress bars, a stage badge, and View/Invite/Reject action icons that appear on hover.
   3. The tab strip (All / R1 Pending / R1 Done / R2 / Final) filters the candidate table and reflects the active tab visually.
   4. Hover state on a table row produces a visible background highlight and surfaces the action icons without layout shift.
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans executed
 
 Plans:
 - [x] 01-01-PLAN.md — FunnelRow component (connected funnel cards, conversion %, clickable stage filter)
 - [x] 01-02-PLAN.md — CandidateTableRow component (avatar, score bars, stage badge, hover + action icons)
-- [ ] 01-03-PLAN.md — StageTabStrip component and r1_done filter case wired to table
+- [x] 01-03-PLAN.md — StageTabStrip component and r1_done filter case wired to table
 
 ---
 
@@ -135,7 +135,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Dashboard Rebuild | 2/3 | In Progress|  |
+| 1. Dashboard Rebuild | 3/3 | Complete | 2026-03-11 |
 | 2. Candidate Panel Slide-Over | 0/4 | Not started | - |
 | 3. Create Job Wizard | 0/6 | Not started | - |
 | 4. Settings Panel | 0/5 | Not started | - |

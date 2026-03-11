@@ -3,11 +3,11 @@
 ## Current Position
 
 Phase: 01-dashboard-rebuild
-Plan: 03 of N (01-02 complete, 01-03 next)
-Status: In progress — Plan 01-02 complete, ready for Plan 01-03
-Last activity: 2026-03-11 — 01-02 SUMMARY committed; state and roadmap updated
+Plan: 03 of 3 (all complete)
+Status: Phase 1 complete — all 3 plans executed, ready for Phase 2
+Last activity: 2026-03-11 — 01-03 StageTabStrip integrated, Phase 1 complete
 Last session: 2026-03-11T00:00:00Z
-Stopped at: Completed 01-02-PLAN.md
+Stopped at: Phase 1 complete, Phase 2 not started
 
 ## Project Reference
 
@@ -51,3 +51,5 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 - CandidateRow subset interface defined in CandidateTableRow.tsx; page passes full Candidate via structural typing — 2026-03-10
 - getStageBadge() defined inline in CandidateTableRow.tsx (getStageDisplay not exported from page.tsx) — 2026-03-10
 - Legacy checkbox/row#/CV score/verdict columns removed; bulk toolbar kept above table — 2026-03-10
+- StageTabStrip placed as full-width row between filter bar and Advanced Filters panel — 2026-03-11
+- r1_done case: query.not('rating', 'is', null) — all candidates who completed R1 regardless of score — 2026-03-11
