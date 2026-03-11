@@ -9,6 +9,7 @@ import { StepRequirements } from '@/components/wizard/StepRequirements';
 import { StepScreening } from '@/components/wizard/StepScreening';
 import { StepAIGenerate } from '@/components/wizard/StepAIGenerate';
 import { StepInterviewConfig } from '@/components/wizard/StepInterviewConfig';
+import { StepScoring } from '@/components/wizard/StepScoring';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -190,6 +191,47 @@ export default function CreateJobPage() {
     setActiveStep(step);
   }
 
+  async function handlePublish() {
+    if (!wizardState.title.trim() || !wizardState.location.trim()) {
+      setPublishError('Title and location are required to publish.');
+      return;
+    }
+    setIsPublishing(true);
+    setPublishError(null);
+    try {
+      const { error } = await supabase.from('jobs').insert({
+        title: wizardState.title,
+        description: wizardState.generatedDescription || null,
+        is_active: true,
+        department: wizardState.department || null,
+        location: wizardState.location,
+        work_arrangement: wizardState.workArrangement,
+        urgency: wizardState.urgency,
+        salary_min: wizardState.salaryMin ? parseInt(wizardState.salaryMin) : null,
+        salary_max: wizardState.salaryMax ? parseInt(wizardState.salaryMax) : null,
+        salary_currency: wizardState.salaryCurrency || 'AED',
+        salary_period: wizardState.salaryPeriod || 'monthly',
+        visa_sponsorship: wizardState.visaSponsorship,
+        education_required: wizardState.education || null,
+        experience_min: parseInt(wizardState.experienceMin) || 0,
+        experience_max: wizardState.experienceMax ? parseInt(wizardState.experienceMax) : null,
+        skills_must_have: wizardState.skillsMustHave.length > 0 ? wizardState.skillsMustHave : null,
+        skills_nice_to_have: wizardState.skillsNiceToHave.length > 0 ? wizardState.skillsNiceToHave : null,
+        headcount: wizardState.headcount || 1,
+        target_start_date: wizardState.targetStartDate || null,
+        employment_type: wizardState.employmentType || null,
+      });
+      if (error) throw error;
+      localStorage.removeItem('synchrohire_job_draft');
+      router.push('/jobs');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to publish job. Please try again.';
+      setPublishError(message);
+    } finally {
+      setIsPublishing(false);
+    }
+  }
+
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -248,7 +290,14 @@ export default function CreateJobPage() {
             />
           )}
           {activeStep === 6 && (
-            <div style={{ color: '#94A3B8' }}>Step 6 — coming soon</div>
+            <StepScoring
+              state={wizardState}
+              onChange={updateWizardState}
+              onPrev={() => setActiveStep(5)}
+              onPublish={handlePublish}
+              isPublishing={isPublishing}
+              publishError={publishError}
+            />
           )}
         </div>
       </div>
