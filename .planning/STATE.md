@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Stitch UI Implementation
-status: completed
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-03-11T07:52:38.544Z"
-last_activity: 2026-03-11 — 02-04 pinned footer action bar, Dialog removal, completion dates on gauges
+status: in_progress
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-03-11T08:20:00.000Z"
+last_activity: 2026-03-11 — 03-02 StepBasics, StepRequirements, SkillChipInput wired into create-job page
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 13
-  completed_plans: 8
+  completed_plans: 9
 ---
 
 # SynchroHire — GSD State
@@ -18,11 +18,11 @@ progress:
 ## Current Position
 
 Phase: 03-create-job-wizard
-Plan: 1 of 6 (complete)
-Status: Phase 3 active — 03-01 scaffold complete; steps 1-6 panels pending (03-02 through 03-06)
-Last activity: 2026-03-11 — 03-01 wizard scaffold, WizardSidebar, create-job page, AppSidebar nav update
-Last session: 2026-03-11T07:52:38.540Z
-Stopped at: Completed 03-01-PLAN.md
+Plan: 2 of 6 (complete)
+Status: Phase 3 active — 03-02 StepBasics + StepRequirements + SkillChipInput complete; steps 3-6 pending (03-03 through 03-06)
+Last activity: 2026-03-11 — 03-02 SkillChipInput, StepBasics, StepRequirements, page.tsx conditional step rendering
+Last session: 2026-03-11T08:20:00.000Z
+Stopped at: Completed 03-02-PLAN.md
 
 ## Project Reference
 
@@ -83,3 +83,6 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 - noteText initialized from candidate?.hr_notes in candidate-change useEffect alongside other state resets — 2026-03-11
 - [Phase 03-create-job-wizard]: Used named { supabase } import from supabaseClient (not default export)
 - [Phase 03-create-job-wizard]: Inline style props for sidebar step colors — no dynamic Tailwind class strings (Tailwind v4 purge-safe)
+- [Phase 03-create-job-wizard 03-02]: SkillChipInput chip colors use inline style (background+20, border+40 alpha) — never dynamic Tailwind class interpolation
+- [Phase 03-create-job-wizard 03-02]: Native <input type="date"> for targetStartDate — no date picker library installed
+- [Phase 03-create-job-wizard 03-02]: Step components import WizardState from @/app/create-job/page (exported interface); each step exports named function
