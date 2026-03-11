@@ -55,7 +55,7 @@ Plans:
 
 Plans:
 - [x] 02-01: Build slide-over shell (640px, full-height, open/close, overlay, keyboard dismiss)
-- [ ] 02-02: Implement header, score gauges, Final Verdict banner, Strengths/Gaps grid
+- [x] 02-02: Implement header, score gauges, Final Verdict banner, Strengths/Gaps grid
 - [ ] 02-03: Implement recordings section (video cards, inline player) and transcript accordions
 - [ ] 02-04: Implement pinned footer action bar (Invite to R2 / Reject / Add Note) wired to existing actions
 
@@ -136,7 +136,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Dashboard Rebuild | 3/3 | Complete | 2026-03-11 |
-| 2. Candidate Panel Slide-Over | 1/4 | In progress | - |
+| 2. Candidate Panel Slide-Over | 2/4 | In progress | - |
 | 3. Create Job Wizard | 0/6 | Not started | - |
 | 4. Settings Panel | 0/5 | Not started | - |
 | 5. Jobs Page Refresh | 0/2 | Not started | - |
@@ -153,10 +153,10 @@ Plans:
 | DASH-04 | Phase 1 | Planned |
 | DASH-05 | Phase 1 | Planned |
 | PANEL-01 | Phase 2 | Complete |
-| PANEL-02 | Phase 2 | Pending |
-| PANEL-03 | Phase 2 | Pending |
-| PANEL-04 | Phase 2 | Pending |
-| PANEL-05 | Phase 2 | Pending |
+| PANEL-02 | Phase 2 | Complete |
+| PANEL-03 | Phase 2 | Complete |
+| PANEL-04 | Phase 2 | Complete |
+| PANEL-05 | Phase 2 | Complete |
 | PANEL-06 | Phase 2 | Pending |
 | PANEL-07 | Phase 2 | Pending |
 | PANEL-08 | Phase 2 | Pending |
