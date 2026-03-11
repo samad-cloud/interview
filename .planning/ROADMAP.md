@@ -51,7 +51,7 @@ Plans:
   4. Strengths and Gaps appear in a two-column grid; interview recordings show as video cards with an inline player.
   5. Round 1 and Round 2 transcript accordions are expandable inline within the panel.
   6. Footer action buttons (Invite to R2 / Reject / Add Note) are pinned to the bottom of the panel and remain visible while scrolling content above.
-**Plans**: TBD
+**Plans:** 4 plans
 
 Plans:
 - [ ] 02-01: Build slide-over shell (640px, full-height, open/close, overlay, keyboard dismiss)
@@ -74,7 +74,7 @@ Plans:
   5. Step 5 (Screening) shows AI-generated Yes/No eligibility questions that HR can edit, remove, and add to.
   6. Step 6 (Scoring) presents the four hiring bar presets as selectable cards; clicking Publish creates the job record and redirects to the Jobs page.
   7. "Save as Draft" is available at every step and persists the current wizard state without publishing.
-**Plans**: TBD
+**Plans:** 4 plans
 
 Plans:
 - [ ] 03-01: Scaffold wizard layout, sidebar progress component, step routing/state management
@@ -99,7 +99,7 @@ Plans:
   5. Scoring tab shows four hiring bar preset cards (Growth / Standard / High Bar / Elite) as selectable cards and per-round threshold number inputs.
   6. Job Boards tab shows connection cards for LinkedIn, Indeed, Glassdoor, and Bayt.com with enable toggles; no OAuth flow is triggered.
   7. No field value persists after a page refresh (UI shell only — SETT-09 is satisfied by design).
-**Plans**: TBD
+**Plans:** 4 plans
 
 Plans:
 - [ ] 04-01: Create /settings route, page shell, and five-tab navigation component
@@ -120,7 +120,7 @@ Plans:
   2. Each job card has a left border that is green for active jobs and gray for inactive jobs, visible without hovering.
   3. Each job card shows a candidate count progress pill and displays skills as compact chips with a "+N more" overflow label when there are more than 8 skills.
   4. Each job card footer row shows the created date, an active/inactive toggle, an edit button, and a "View Candidates →" link that navigates to the dashboard filtered to that job.
-**Plans**: TBD
+**Plans:** 4 plans
 
 Plans:
 - [ ] 05-01: Add status tab strip (Active / Inactive / All with counts) and filter logic to jobs page
