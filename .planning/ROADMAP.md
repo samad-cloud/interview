@@ -74,15 +74,15 @@ Plans:
   5. Step 5 (Screening) shows AI-generated Yes/No eligibility questions that HR can edit, remove, and add to.
   6. Step 6 (Scoring) presents the four hiring bar presets as selectable cards; clicking Publish creates the job record and redirects to the Jobs page.
   7. "Save as Draft" is available at every step and persists the current wizard state without publishing.
-**Plans:** 4 plans
+**Plans:** 6 plans
 
 Plans:
-- [ ] 03-01: Scaffold wizard layout, sidebar progress component, step routing/state management
-- [ ] 03-02: Implement Step 1 (Basics) and Step 2 (Requirements) with all fields and skill chip inputs
-- [ ] 03-03: Implement Step 3 (AI Generate) — wire to existing generateJob action, live preview, refine loop
-- [ ] 03-04: Implement Step 4 (Interview Config) — round count selector, per-round config rows
-- [ ] 03-05: Implement Step 5 (Screening) — AI-generated question list, edit/remove/add controls
-- [ ] 03-06: Implement Step 6 (Scoring) — hiring bar preset cards, Publish action, Save as Draft at all steps
+- [ ] 03-01-PLAN.md — Scaffold wizard layout, sidebar progress component, step routing/state management
+- [ ] 03-02-PLAN.md — Implement Step 1 (Basics) and Step 2 (Requirements) with all fields and skill chip inputs
+- [ ] 03-03-PLAN.md — Implement Step 3 (AI Generate) — wire to existing generateJob action, live preview, refine loop
+- [ ] 03-04-PLAN.md — Implement Step 4 (Interview Config) — round count selector, per-round config rows
+- [ ] 03-05-PLAN.md — Implement Step 5 (Screening) — AI-generated question list, edit/remove/add controls
+- [ ] 03-06-PLAN.md — Implement Step 6 (Scoring) — hiring bar preset cards, Publish action, Save as Draft at all steps
 
 ---
 
@@ -99,14 +99,14 @@ Plans:
   5. Scoring tab shows four hiring bar preset cards (Growth / Standard / High Bar / Elite) as selectable cards and per-round threshold number inputs.
   6. Job Boards tab shows connection cards for LinkedIn, Indeed, Glassdoor, and Bayt.com with enable toggles; no OAuth flow is triggered.
   7. No field value persists after a page refresh (UI shell only — SETT-09 is satisfied by design).
-**Plans:** 4 plans
+**Plans:** 5 plans
 
 Plans:
-- [ ] 04-01: Create /settings route, page shell, and five-tab navigation component
-- [ ] 04-02: Implement Company tab (logo upload UI, colour picker, all profile fields)
-- [ ] 04-03: Implement Email & Comms tab (Gmail status, sender field, template editors with placeholder pills, send rule toggles)
-- [ ] 04-04: Implement Interviews tab (round count selector, per-round defaults) and Scoring tab (preset cards, threshold inputs)
-- [ ] 04-05: Implement Job Boards tab (platform connection cards with enable toggles)
+- [ ] 04-01-PLAN.md — Create /settings route, page shell, and five-tab navigation component
+- [ ] 04-02-PLAN.md — Implement Company tab (logo upload UI, colour picker, all profile fields)
+- [ ] 04-03-PLAN.md — Implement Email & Comms tab (Gmail status, sender field, template editors with placeholder pills, send rule toggles)
+- [ ] 04-04-PLAN.md — Implement Interviews tab (round count selector, per-round defaults) and Scoring tab (preset cards, threshold inputs)
+- [ ] 04-05-PLAN.md — Implement Job Boards tab (platform connection cards with enable toggles)
 
 ---
 
@@ -120,11 +120,11 @@ Plans:
   2. Each job card has a left border that is green for active jobs and gray for inactive jobs, visible without hovering.
   3. Each job card shows a candidate count progress pill and displays skills as compact chips with a "+N more" overflow label when there are more than 8 skills.
   4. Each job card footer row shows the created date, an active/inactive toggle, an edit button, and a "View Candidates →" link that navigates to the dashboard filtered to that job.
-**Plans:** 4 plans
+**Plans:** 2 plans
 
 Plans:
-- [ ] 05-01: Add status tab strip (Active / Inactive / All with counts) and filter logic to jobs page
-- [ ] 05-02: Rebuild job card component (left border, candidate count pill, skill chips with overflow, footer action row)
+- [ ] 05-01-PLAN.md — Add status tab strip (Active / Inactive / All with counts) and filter logic to jobs page
+- [ ] 05-02-PLAN.md — Rebuild job card component (left border, candidate count pill, skill chips with overflow, footer action row)
 
 ---
 
