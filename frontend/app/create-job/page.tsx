@@ -6,6 +6,9 @@ import { supabase } from '@/lib/supabaseClient';
 import { WizardSidebar } from '@/components/wizard/WizardSidebar';
 import { StepBasics } from '@/components/wizard/StepBasics';
 import { StepRequirements } from '@/components/wizard/StepRequirements';
+import { StepScreening } from '@/components/wizard/StepScreening';
+import { StepAIGenerate } from '@/components/wizard/StepAIGenerate';
+import { StepInterviewConfig } from '@/components/wizard/StepInterviewConfig';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -220,8 +223,32 @@ export default function CreateJobPage() {
               onPrev={() => setActiveStep(1)}
             />
           )}
-          {activeStep > 2 && (
-            <div style={{ color: '#94A3B8' }}>Step {activeStep} — coming soon</div>
+          {activeStep === 5 && (
+            <StepScreening
+              state={wizardState}
+              onChange={updateWizardState}
+              onNext={() => setActiveStep(6)}
+              onPrev={() => setActiveStep(4)}
+            />
+          )}
+          {activeStep === 3 && (
+            <StepAIGenerate
+              state={wizardState}
+              onChange={updateWizardState}
+              onNext={() => setActiveStep(4)}
+              onPrev={() => setActiveStep(2)}
+            />
+          )}
+          {activeStep === 4 && (
+            <StepInterviewConfig
+              state={wizardState}
+              onChange={updateWizardState}
+              onNext={() => setActiveStep(5)}
+              onPrev={() => setActiveStep(3)}
+            />
+          )}
+          {activeStep === 6 && (
+            <div style={{ color: '#94A3B8' }}>Step 6 — coming soon</div>
           )}
         </div>
       </div>
