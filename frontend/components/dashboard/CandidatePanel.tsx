@@ -55,6 +55,8 @@ interface PanelCandidate {
   round_2_transcript: string | null;
   hr_notes: string | null;
   final_verdict: string | null;
+  round_1_completed_at: string | null;
+  round_2_completed_at: string | null;
 }
 
 interface CandidatePanelProps {
@@ -108,7 +110,7 @@ function getStageBadge(status: string): { label: string; color: string; bg: stri
 }
 
 // ── ScoreGauge — SVG ring chart, r=30, circumference=188.5 ──
-function ScoreGauge({ label, score }: { label: string; score: number | null }) {
+function ScoreGauge({ label, score, date }: { label: string; score: number | null; date?: string | null }) {
   const r = 30;
   const circ = 2 * Math.PI * r; // 188.5
   const offset = score !== null ? circ - (score / 100) * circ : circ;
@@ -139,6 +141,11 @@ function ScoreGauge({ label, score }: { label: string; score: number | null }) {
       >
         {score === null ? 'Pending' : passing ? '✓ Passed' : '✗ Below threshold'}
       </div>
+      {date && (
+        <div className="text-[10px] text-[#6B7280]">
+          {new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+        </div>
+      )}
     </div>
   );
 }
@@ -360,8 +367,8 @@ export function CandidatePanel({
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280] mb-2">Interview Scores</p>
             <div className="flex gap-3">
-              <ScoreGauge label="Round 1 — Personality" score={candidate.rating} />
-              <ScoreGauge label="Round 2 — Technical" score={candidate.round_2_rating} />
+              <ScoreGauge label="Round 1 — Personality" score={candidate.rating} date={candidate.round_1_completed_at} />
+              <ScoreGauge label="Round 2 — Technical" score={candidate.round_2_rating} date={candidate.round_2_completed_at} />
               {candidate.round_3_rating !== null && candidate.round_3_rating !== undefined && (
                 <ScoreGauge label="Round 3 — Deep Dive" score={candidate.round_3_rating} />
               )}
