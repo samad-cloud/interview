@@ -103,6 +103,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { FunnelRow } from '@/components/dashboard/FunnelRow';
 import { CandidateTableRow } from '@/components/dashboard/CandidateTableRow';
+import { StageTabStrip } from '@/components/dashboard/StageTabStrip';
 
 interface FullVerdict {
   technicalScore: number;
@@ -510,6 +511,9 @@ export default function DashboardPage() {
             break;
           case 'r1_pending':
             query = query.is('rating', null).in('status', ['INVITE_SENT', 'INTERVIEW_STARTED', 'FORM_COMPLETED']);
+            break;
+          case 'r1_done':
+            query = query.not('rating', 'is', null);
             break;
           case 'r1_failed':
             query = query.not('rating', 'is', null).lt('rating', 70).is('round_2_rating', null)
@@ -1219,24 +1223,6 @@ export default function DashboardPage() {
             </SelectContent>
           </Select>
 
-          <Select value={stageFilter} onValueChange={setStageFilter}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="All Stages" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Stages</SelectItem>
-              <SelectItem value="screening">Screening</SelectItem>
-              <SelectItem value="cv_rejected">CV Rejected</SelectItem>
-              <SelectItem value="eligibility_pending">Eligibility Pending</SelectItem>
-              <SelectItem value="eligibility_failed">Eligibility Failed</SelectItem>
-              <SelectItem value="r1_pending">R1 Pending</SelectItem>
-              <SelectItem value="r1_failed">R1 Failed</SelectItem>
-              <SelectItem value="r2_pending">R2 Pending</SelectItem>
-              <SelectItem value="r2_failed">R2 Failed</SelectItem>
-              <SelectItem value="successful">Successful</SelectItem>
-            </SelectContent>
-          </Select>
-
           <Button
             variant={showAdvancedFilters ? 'secondary' : 'outline'}
             size="sm"
@@ -1251,6 +1237,17 @@ export default function DashboardPage() {
               </Badge>
             )}
           </Button>
+        </div>
+
+        {/* Stage Tab Strip */}
+        <div className="mb-4">
+          <StageTabStrip
+            value={stageFilter}
+            onValueChange={(value) => {
+              setStageFilter(value);
+              setCurrentPage(1);
+            }}
+          />
         </div>
 
         {/* Advanced Filters Panel */}
