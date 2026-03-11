@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Stitch UI Implementation
 status: in_progress
-stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-03-11T08:25:00.000Z"
-last_activity: 2026-03-11 — 03-03 StepAIGenerate component, wire Step 3 into page.tsx
+stopped_at: Completed 03-05-PLAN.md
+last_updated: "2026-03-11T08:06:00.000Z"
+last_activity: 2026-03-11 — 03-05 generateScreeningQuestions server action, StepScreening component wired at step 5
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 13
-  completed_plans: 11
-  percent: 77
-  bar: "[████████░░] 77%"
+  completed_plans: 12
+  percent: 85
+  bar: "[█████████░] 85%"
 ---
 
 # SynchroHire — GSD State
@@ -20,11 +20,11 @@ progress:
 ## Current Position
 
 Phase: 03-create-job-wizard
-Plan: 3 of 6 (complete)
-Status: Phase 3 active — 03-03 StepAIGenerate complete; steps 4-6 pending (03-04 through 03-06)
-Last activity: 2026-03-11 — 03-03 StepAIGenerate component with generate/refine/preview flow
-Last session: 2026-03-11T08:25:00.000Z
-Stopped at: Completed 03-03-PLAN.md
+Plan: 5 of 6 (complete)
+Status: Phase 3 active — 03-05 StepScreening complete; step 6 pending (03-06)
+Last activity: 2026-03-11 — 03-05 generateScreeningQuestions server action, StepScreening with edit/remove/add controls wired at step 5
+Last session: 2026-03-11T08:06:00.000Z
+Stopped at: Completed 03-05-PLAN.md
 
 ## Project Reference
 
@@ -90,3 +90,6 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 - [Phase 03-create-job-wizard 03-02]: Step components import WizardState from @/app/create-job/page (exported interface); each step exports named function
 - [Phase 03-create-job-wizard]: Pre-wrap monospace div for job description preview — no markdown parser dependency added
 - [Phase 03-create-job-wizard]: Citations are local state in StepAIGenerate (not in WizardState) — cosmetic only, re-fetched on regenerate
+- [Phase 03-create-job-wizard 03-05]: hasGenerated ref initialized from screeningQuestions.length > 0 — prevents re-generation on re-mount
+- [Phase 03-create-job-wizard 03-05]: editingValues held in local state (not wizardState) — transient edit buffer is ephemeral
+- [Phase 03-create-job-wizard 03-05]: Yes/No badge uses inline style background '#6366F180' — Tailwind v4 purge-safe
