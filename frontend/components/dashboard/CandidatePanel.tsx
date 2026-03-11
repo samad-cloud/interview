@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
-import { X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { X, ChevronRight } from 'lucide-react';
+import VideoPlayer from '@/components/VideoPlayer';
 
 // Inline re-declarations of the types needed (page.tsx does not export them)
 interface FullVerdict {
@@ -170,6 +171,74 @@ function VerdictBanner({ verdict, summary }: { verdict: string; summary: string 
   );
 }
 
+// ── RecordingCard — clickable card that toggles VideoPlayer inline ──
+function RecordingCard({
+  roundLabel,
+  roundKey,
+  videoUrl,
+  activeRecording,
+  onToggle,
+}: {
+  roundLabel: string;
+  roundKey: 'r1' | 'r2' | 'r3';
+  videoUrl: string | null;
+  activeRecording: 'r1' | 'r2' | 'r3' | null;
+  onToggle: (key: 'r1' | 'r2' | 'r3') => void;
+}) {
+  const isActive = activeRecording === roundKey;
+  if (!videoUrl) return null;
+  return (
+    <button
+      onClick={() => onToggle(roundKey)}
+      className="bg-[#1A2332] border border-[#1E293B] rounded-[10px] p-3 flex items-center gap-2.5 text-left w-full transition-colors hover:border-[#6366F1]/50"
+      style={{ borderColor: isActive ? 'rgba(99,102,241,0.5)' : undefined }}
+    >
+      <div className="w-8 h-8 rounded-lg bg-[#6366F1]/10 flex items-center justify-center flex-shrink-0">
+        <svg className="w-4 h-4" style={{ color: '#6366F1' }} fill="currentColor" viewBox="0 0 20 20">
+          <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
+        </svg>
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[12px] font-semibold text-[#F9FAFB]">{roundLabel}</p>
+        <p className="text-[11px] text-[#6B7280]">{isActive ? 'Click to hide' : 'Click to play'}</p>
+      </div>
+    </button>
+  );
+}
+
+// ── TranscriptAccordion — expandable transcript section ──
+function TranscriptAccordion({
+  label,
+  transcript,
+  isOpen,
+  onToggle,
+}: {
+  label: string;
+  transcript: string | null;
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
+  if (!transcript) return null;
+  return (
+    <div className="bg-[#1A2332] border border-[#1E293B] rounded-lg overflow-hidden">
+      <button
+        className="w-full px-3.5 py-2.5 flex items-center justify-between text-[12px] hover:bg-[#1E293B] transition-colors"
+        onClick={onToggle}
+      >
+        <span className="text-[#F9FAFB] font-medium">{label}</span>
+        <ChevronRight
+          className={`w-3.5 h-3.5 text-[#6B7280] transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}
+        />
+      </button>
+      {isOpen && (
+        <div className="px-3.5 pb-3.5 pt-1 border-t border-[#1E293B] text-[12px] text-[#94A3B8] leading-relaxed whitespace-pre-wrap max-h-64 overflow-y-auto">
+          {transcript}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Strengths/Gaps helper — reads from full_verdict with fallback to round_1_full_dossier ──
 function getStrengthsAndGaps(candidate: PanelCandidate): { strengths: string[]; gaps: string[] } {
   const strengths = candidate.full_verdict?.technicalStrengths
@@ -190,6 +259,11 @@ export function CandidatePanel({
   onReject,
   onSaveNote,
 }: CandidatePanelProps) {
+  const [activeRecording, setActiveRecording] = useState<'r1' | 'r2' | 'r3' | null>(null);
+  const [r1Open, setR1Open] = useState(false);
+  const [r2Open, setR2Open] = useState(false);
+  const [r3Open, setR3Open] = useState(false);
+
   // Escape key dismiss
   useEffect(() => {
     if (!open) return;
@@ -199,6 +273,14 @@ export function CandidatePanel({
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, [open, onClose]);
+
+  // Reset recording and accordion state when candidate changes
+  useEffect(() => {
+    setActiveRecording(null);
+    setR1Open(false);
+    setR2Open(false);
+    setR3Open(false);
+  }, [candidate?.id]);
 
   if (!candidate) return null;
 
@@ -319,6 +401,81 @@ export function CandidatePanel({
               </div>
             );
           })()}
+
+          {/* Recordings section */}
+          {(candidate.video_url || candidate.round_2_video_url || candidate.round_3_recording_url) && (
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280] mb-2">Recordings</p>
+              <div className="flex flex-col gap-2">
+                <RecordingCard
+                  roundLabel="Round 1 — Personality"
+                  roundKey="r1"
+                  videoUrl={candidate.video_url}
+                  activeRecording={activeRecording}
+                  onToggle={(key) => setActiveRecording(prev => prev === key ? null : key)}
+                />
+                <RecordingCard
+                  roundLabel="Round 2 — Technical"
+                  roundKey="r2"
+                  videoUrl={candidate.round_2_video_url}
+                  activeRecording={activeRecording}
+                  onToggle={(key) => setActiveRecording(prev => prev === key ? null : key)}
+                />
+                {candidate.round_3_recording_url && (
+                  <RecordingCard
+                    roundLabel="Round 3 — Deep Dive"
+                    roundKey="r3"
+                    videoUrl={candidate.round_3_recording_url}
+                    activeRecording={activeRecording}
+                    onToggle={(key) => setActiveRecording(prev => prev === key ? null : key)}
+                  />
+                )}
+                {/* Inline player — renders below cards when a recording is active */}
+                {activeRecording && (
+                  <VideoPlayer
+                    src={
+                      activeRecording === 'r1' ? candidate.video_url! :
+                      activeRecording === 'r2' ? candidate.round_2_video_url! :
+                      candidate.round_3_recording_url!
+                    }
+                    title={
+                      activeRecording === 'r1' ? 'Round 1 — Personality' :
+                      activeRecording === 'r2' ? 'Round 2 — Technical' :
+                      'Round 3 — Deep Dive'
+                    }
+                    className="mt-2 rounded-[10px] overflow-hidden"
+                  />
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Transcript accordions */}
+          {(candidate.interview_transcript || candidate.round_2_transcript || candidate.round_3_transcript) && (
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280] mb-2">Transcripts</p>
+              <div className="flex flex-col gap-2">
+                <TranscriptAccordion
+                  label="Round 1 — Personality Interview"
+                  transcript={candidate.interview_transcript}
+                  isOpen={r1Open}
+                  onToggle={() => setR1Open(p => !p)}
+                />
+                <TranscriptAccordion
+                  label="Round 2 — Technical Interview"
+                  transcript={candidate.round_2_transcript}
+                  isOpen={r2Open}
+                  onToggle={() => setR2Open(p => !p)}
+                />
+                <TranscriptAccordion
+                  label="Round 3 — Deep Dive Interview"
+                  transcript={candidate.round_3_transcript}
+                  isOpen={r3Open}
+                  onToggle={() => setR3Open(p => !p)}
+                />
+              </div>
+            </div>
+          )}
 
         </div>
 
