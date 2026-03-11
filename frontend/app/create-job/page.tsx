@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
+import { createClient } from '@/lib/supabase-browser';
 import { WizardSidebar } from '@/components/wizard/WizardSidebar';
 import { StepBasics } from '@/components/wizard/StepBasics';
 import { StepRequirements } from '@/components/wizard/StepRequirements';
@@ -139,7 +139,7 @@ export default function CreateJobPage() {
 
   // Auth guard
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    createClient().auth.getSession().then(({ data: { session } }) => {
       if (!session) router.push('/login?redirect=/create-job');
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -199,7 +199,7 @@ export default function CreateJobPage() {
     setIsPublishing(true);
     setPublishError(null);
     try {
-      const { error } = await supabase.from('jobs').insert({
+      const { error } = await createClient().from('jobs').insert({
         title: wizardState.title,
         description: wizardState.generatedDescription || null,
         is_active: true,
