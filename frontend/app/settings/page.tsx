@@ -9,6 +9,7 @@ import CompanyTab from '@/components/settings/CompanyTab';
 import EmailCommsTab from '@/components/settings/EmailCommsTab';
 import { InterviewsTab } from '@/components/settings/InterviewsTab';
 import { ScoringTab } from '@/components/settings/ScoringTab';
+import { JobBoardsTab } from '@/components/settings/JobBoardsTab';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -85,7 +86,7 @@ export default function SettingsPage() {
           <ScoringTab />
         </TabsContent>
         <TabsContent value="job-boards">
-          <div className="py-8 text-muted-foreground text-sm">Job Boards settings coming soon</div>
+          <JobBoardsTab />
         </TabsContent>
       </Tabs>
     </div>
