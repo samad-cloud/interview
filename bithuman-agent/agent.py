@@ -16,10 +16,10 @@ from livekit.agents import (
     Agent,
     AgentSession,
     JobContext,
-    RoomInputOptions,
     WorkerOptions,
     WorkerType,
     cli,
+    room_io,
 )
 from livekit.plugins import bithuman, deepgram, google, silero
 
@@ -97,7 +97,7 @@ async def entrypoint(ctx: JobContext):
     await session.start(
         agent=Agent(instructions=system_prompt),
         room=ctx.room,
-        room_options=RoomInputOptions(audio_enabled=False),
+        room_options=room_io.RoomOptions(audio_output=False),
     )
 
     # Trigger opening greeting immediately — don't wait for candidate to speak
