@@ -9,6 +9,7 @@ import {
   Zap,
   FileText,
   SlidersHorizontal,
+  Settings,
   LogOut,
   ChevronLeft,
   ChevronRight,
@@ -53,6 +54,11 @@ const navItems: NavItem[] = [
     label: 'AI Prompts',
     href: '/prompts',
     icon: <SlidersHorizontal className="w-4 h-4 shrink-0" />,
+  },
+  {
+    label: 'Settings',
+    href: '/settings',
+    icon: <Settings className="w-4 h-4 shrink-0" />,
   },
 ];
 
