@@ -1637,7 +1637,7 @@ Round: ${round}
   // ── ROUND 1: Wayne layout ──────────────────────────────────────────────────
   if (round === 1) {
     return (
-      <div className="min-h-screen flex flex-col" style={{ background: '#080B14' }}>
+      <div className="h-screen flex flex-col overflow-hidden" style={{ background: '#080B14' }}>
         <style>{`
           @keyframes wavePulse {
             0% { transform: scaleY(0.4); opacity: 0.5; }
@@ -1703,7 +1703,7 @@ Round: ${round}
 
           {/* Name + Speaking status */}
           <h2 className="text-2xl font-bold text-white mb-2">{interviewerName}</h2>
-          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium mb-8 transition-all ${
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium mb-4 transition-all ${
             isSpeaking
               ? 'bg-indigo-600/20 border-indigo-500/30 text-indigo-300'
               : isListening
@@ -1715,11 +1715,12 @@ Round: ${round}
           </div>
 
           {/* Subtitle / Transcript card */}
-          <div className="max-w-2xl w-full rounded-2xl border border-white/10 bg-white/5 px-8 py-6 text-center min-h-[5rem] flex items-center justify-center">
+
+          <div className="max-w-2xl w-full rounded-2xl border border-white/10 bg-white/5 px-8 py-4 text-center h-[5rem] flex items-center justify-center overflow-hidden">
             {isSpeaking && subtitle ? (
-              <p className="text-white text-lg font-medium leading-relaxed">&ldquo;{subtitle}&rdquo;</p>
+              <p className="text-white text-lg font-medium leading-snug line-clamp-2">&ldquo;{subtitle}&rdquo;</p>
             ) : !isSpeaking && transcript ? (
-              <p className="text-indigo-300 text-lg italic leading-relaxed">&ldquo;{transcript}&rdquo;</p>
+              <p className="text-indigo-300 text-lg italic leading-snug line-clamp-2">&ldquo;{transcript}&rdquo;</p>
             ) : !isSpeaking && isListening ? (
               <p className="text-white/30 text-base">Listening for your response...</p>
             ) : (
