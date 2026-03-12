@@ -38,7 +38,7 @@
 
 ### Settings Panel
 
-- [ ] **SETT-01**: New /settings page accessible from sidebar with 5 tabs: Company, Email & Comms, Interviews, Scoring, Job Boards
+- [x] **SETT-01**: New /settings page accessible from sidebar with 5 tabs: Company, Email & Comms, Interviews, Scoring, Job Boards
 - [ ] **SETT-02**: Company tab shows logo upload, brand colour picker, company name, about, industry, website, HQ, company size fields
 - [ ] **SETT-03**: Email & Comms tab shows Gmail connection status, sender display name, and 4 email template editors (Interview Invite / Follow-up / Rejection / Shortlist)
 - [ ] **SETT-04**: Email template editor shows subject, heading, body, footer fields with {{variable}} placeholder pills displayed below each field
@@ -46,7 +46,7 @@
 - [ ] **SETT-06**: Interviews tab shows default round count selector and per-round defaults (theme, duration, voice, avatar)
 - [ ] **SETT-07**: Scoring tab shows hiring bar preset cards (Growth / Standard / High Bar / Elite) and per-round custom threshold inputs
 - [ ] **SETT-08**: Job Boards tab shows LinkedIn, Indeed, Glassdoor, Bayt.com connection cards with enable toggles
-- [ ] **SETT-09**: All settings tabs are UI-only in v2.0 (no backend persistence — values do not save to database)
+- [x] **SETT-09**: All settings tabs are UI-only in v2.0 (no backend persistence — values do not save to database)
 
 ### Jobs Page
 
@@ -106,7 +106,7 @@
 | JOB-07 | Phase 3 | Complete |
 | JOB-08 | Phase 3 | Complete |
 | JOB-09 | Phase 3 | Complete |
-| SETT-01 | Phase 4 | Pending |
+| SETT-01 | Phase 4 | Complete |
 | SETT-02 | Phase 4 | Pending |
 | SETT-03 | Phase 4 | Pending |
 | SETT-04 | Phase 4 | Pending |
@@ -114,7 +114,7 @@
 | SETT-06 | Phase 4 | Pending |
 | SETT-07 | Phase 4 | Pending |
 | SETT-08 | Phase 4 | Pending |
-| SETT-09 | Phase 4 | Pending |
+| SETT-09 | Phase 4 | Complete |
 | JOBS-01 | Phase 5 | Pending |
 | JOBS-02 | Phase 5 | Pending |
 | JOBS-03 | Phase 5 | Pending |
