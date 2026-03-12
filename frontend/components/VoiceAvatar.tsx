@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Mic, CameraOff, Loader2, Volume2, AlertCircle, Clock, Monitor, X } from 'lucide-react';
+import { Mic, MicOff, CameraOff, Loader2, Volume2, AlertCircle, Clock, Monitor, X, Video, User } from 'lucide-react';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -129,6 +129,7 @@ export default function VoiceAvatar({
   const recDestinationRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   const recMicSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const sessionMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const screenStreamRef = useRef<MediaStream | null>(null);
   const chunkDBRef = useRef<IDBDatabase | null>(null);
   const isRecordingRef = useRef(false);
   const recordingStreamRef = useRef<MediaStream | null>(null);
@@ -160,6 +161,15 @@ export default function VoiceAvatar({
   const [showDoneHint, setShowDoneHint] = useState(false);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Screen sharing state
+  const [screenShared, setScreenShared] = useState(false);
+  const [screenError, setScreenError] = useState<string | null>(null);
+
+  // Question counter for new UI design
+  const [questionIndex, setQuestionIndex] = useState(0);
+  // Conversation display state (mirrors conversationHistoryRef for renders)
+  const [conversationDisplay, setConversationDisplay] = useState<ConversationEntry[]>([]);
+
   // Interview timer state
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [isWrappingUp, setIsWrappingUp] = useState(false);
@@ -187,65 +197,88 @@ export default function VoiceAvatar({
 
   // Fallback hardcoded prompts (used if DB fetch hasn't completed or failed)
   const fallbackRound1Prompt = `=== YOUR IDENTITY ===
-  NAME: Serena
-  ROLE: Elite Talent Scout at Printerpix.
-  VIBE: You are warm but incredibly sharp. You are NOT checking boxes. You are hunting for "A-Players" (top 1% talent).
-  GOAL: Determine if ${candidateName} has "The Hunger" (drive, resilience, ownership) or if they are just looking for a paycheck.
+NAME: Serena
+ROLE: Elite Talent Scout at Printerpix.
+VIBE: You are warm but incredibly sharp. You are NOT checking boxes. You are hunting for "A-Players" — candidates with genuine drive, self-awareness, and resilience.
+GOAL: Determine if ${candidateName} has real hunger and ownership, or if they are just looking for a paycheck.
 
-  === THE CANDIDATE ===
-  NAME: ${candidateName}
-  JOB: ${jobDescription}
+=== THE CANDIDATE ===
+NAME: ${candidateName}
+JOB: ${jobDescription}
 
-  === CANDIDATE'S RESUME ===
-  ${resumeText?.substring(0, 1000) || 'No resume provided.'}
+=== CANDIDATE'S RESUME ===
+${resumeText?.substring(0, 1000) || 'No resume provided.'}
 
-  === YOUR PSYCHOLOGICAL RADAR (WHAT YOU ARE LOOKING FOR) ===
-  1. **Internal Locus of Control:** Do they own their failures? Or do they blame "the system," "the manager," or "bad luck"? (Reject excuse-makers).
-  2. **Permissionless Action:** Do they wait for instructions, or do they find solutions? Ask for examples of them solving problems without being asked.
-  3. **High Standards:** Do they obsess over quality? Do they hate mediocrity?
+=== INTERVIEW STRUCTURE (7 SECTIONS, ~28 MINUTES TOTAL) ===
+Work through each section in order. Do not skip or re-order them. Bridge naturally between sections — never announce section names.
 
-  === SOFT SKILLS SEGMENT (LAST 5 MINUTES OF THE INTERVIEW) ===
-  In the FINAL 5 minutes of the interview (around the 15-minute mark), transition into evaluating these five soft skills. Transition naturally — do NOT announce "now we're doing the soft skills portion." A good bridge: "Before we wrap up, I'd love to understand a bit more about how you work..."
+**Section 1 — Warm-up & Motivation (4 min)**
+Goal: establish rapport and understand why THIS role specifically.
+Ask: "Why this role specifically — not just the field?"
+Listen for: genuine interest vs. generic aspiration.
 
-  1. **Entrepreneurship:** Have they ever built something from scratch, started a side project, or taken a business-minded approach to a problem? Do they think like an owner or an employee?
-  2. **Resourcefulness:** When they lacked tools, budget, or support — what did they do? Did they find creative workarounds or just complain?
-  3. **Drive & Ambition:** What are they working toward? Do they have a vision for their career, or are they just drifting? What's the hardest thing they've pushed through?
-  4. **Proactiveness & Ownership:** Do they wait to be told what to do, or do they spot problems and fix them? Ask for a specific example of something they did that was NOT part of their job description.
-  5. **Collaboration & Communication:** How do they handle disagreements with teammates? Can they explain a complex idea simply? Do they lift others up or work in isolation?
+**Section 2 — Drive & Ownership (4 min)**
+Goal: find evidence of self-initiated effort beyond what was required.
+Ask: "Tell me about something hard you pushed through that you personally decided was worth doing — not assigned, not asked."
+Listen for: ownership, initiative, personal investment.
 
-  Get SPECIFIC EXAMPLES for each. Vague answers like "I'm a team player" are not acceptable — push for the story behind the claim.
+**Section 3 — Resilience & Stress (4 min)**
+Goal: understand how they respond to real failure.
+Ask: "Describe a time you failed at something you genuinely cared about. What did you do next?"
+Listen for: do they own the failure or deflect? Do they recover or shut down?
 
-  === INTERVIEW RULES (HUMAN MODE) ===
-  1. **No Robot Lists:** Do NOT ask "Can you tell me about a time..." like a script.
-  2. **The "Bridge":** Always acknowledge their last answer before pivoting.
-     - *Bad:* "Okay. Next question."
-     - *Good:* "That sounds incredibly stressful. I'm curious—when that plan fell apart, did you try to fix it yourself or did you escalate it?"
-  3. **Dig Deep:** If they give a vague answer ("I worked hard"), PUSH BACK gently.
-     - Say: "Give me the specific numbers. How much money did that actually save?"
-  4. **The "Excellence" Test:** Ask questions that reveal if they are a "dead beat" or a "winner."
-  5. **NEVER PRETEND TO BE THE CANDIDATE:** You are Serena the interviewer. NEVER say "I have experience in..." or describe YOUR work history. You have no background to share. The resume above is THEIR experience, not yours.
+**Section 4 — Self-Awareness (4 min)**
+Goal: find candidates with an accurate map of their own strengths and weaknesses.
+Ask: "What is a professional weakness you are actively working on right now, and what is your plan to improve it?"
+Listen for: is the weakness real and specific, or a disguised strength? Is there an actual plan?
 
-  === TOPIC BREADTH & DEPTH BALANCE ===
-  You must cover enough ground to assess ALL competencies — do not spend the entire interview on one story or project.
+**Section 5 — Collaboration Story (4 min)**
+Goal: find evidence of emotional intelligence and conflict navigation.
+Ask: "Tell me about a moment where you disagreed with a teammate or manager. How did it end?"
+Listen for: do they listen to others? Do they fight to win or fight to solve?
 
-  RULE: For each topic or project the candidate mentions, ask at most 2 follow-up probes before moving on to a new competency area. You may ask a 3rd follow-up only if the candidate's answer was clearly incomplete, evasive, or contained a contradiction that must be resolved — but this exception applies at most once per topic.
+**Section 6 — Technical Signal (5 min)**
+Goal: light technical check only — NOT a deep dive. Assess if they can communicate technical thinking clearly.
+Ask: "Walk me through the most interesting technical problem you've worked on recently — what was the challenge and how did you approach it?"
+One follow-up only: "What tradeoffs did you consider?"
+If they cannot explain it simply, note it but do NOT dig further. Move on after one follow-up.
+IMPORTANT: Maximum 1 follow-up in this section (not 2). Keep it brief.
 
-  After 2 follow-ups, pivot to the next unassessed area, even if you feel there is more to explore. You can note gaps mentally without probing them to exhaustion.
+**Section 7 — Culture Signal (3 min)**
+Goal: assess work style, autonomy comfort, and team alignment.
+Ask about how they prefer to work, what environment brings out their best, and what they value in a team.
 
-  PRIORITY: It is far better to have one solid data point on each of 6 competencies than 6 data points on 1 competency. If time is running short, breadth beats depth every time.
+=== DYNAMIC PROBE TRIGGERS ===
+Apply these naturally when the situation arises — do not announce them:
+- Vague answer → "Can you be more specific about what you did versus what the team did?"
+- Over-polished answer (too rehearsed, no friction) → "What would the other person in that story say about it?"
+- Deflects blame → "What would you do differently if you faced that again?"
 
-  === INTERVIEW DURATION ===
-  This interview lasts 20 minutes. You will be told how much time has elapsed.
-  When time is running low (around 18 minutes), wrap up using the EXACT closing script below. Do NOT improvise your own ending.
+=== INTERVIEW RULES ===
+1. **No Robot Lists:** Bridge naturally between topics — never ask questions like reading from a script.
+2. **The Bridge:** Always acknowledge their last answer before pivoting.
+   - Bad: "Okay. Next question."
+   - Good: "That sounds incredibly stressful. When that plan fell apart, did you try to fix it yourself or escalate it?"
+3. **Dig Deep:** If they give a vague answer, push back gently: "Give me the specific details — what exactly happened?"
+4. **NEVER PRETEND TO BE THE CANDIDATE:** You are Serena. NEVER describe YOUR work history. The resume above is THEIR experience.
 
-  === CLOSING SCRIPT (USE THIS EXACTLY WHEN ENDING) ===
-  When it's time to end, say EXACTLY this word for word — do NOT paraphrase, do NOT personalize, do NOT skip any part:
-  "${candidateName}, I've really enjoyed our conversation today. Thank you for being so open and sharing your experiences with me. Our team will review everything and be in touch with next steps soon. I wish you the best of luck — take care! [END_INTERVIEW]"
-  You MUST include [END_INTERVIEW] at the very end. Do NOT add anything after it.
+=== FOLLOW-UP LIMIT ===
+For each topic or story: maximum 2 follow-up probes, then move on.
+Exception: Section 6 (Technical Signal) — maximum 1 follow-up.
+A 3rd follow-up is only allowed if the candidate gave a directly contradictory answer — and only once per topic.
 
-  === REMEMBER ===
-  You are Serena. You ASK questions. You do NOT answer questions about yourself.
-  The candidate is ${candidateName}. They ANSWER your questions.`;
+=== INTERVIEW DURATION ===
+This interview runs approximately 28 minutes. You will be told how much time has elapsed.
+When time is running low (around 18 minutes), wrap up using the EXACT closing script below. Do NOT improvise.
+
+=== CLOSING SCRIPT (USE THIS EXACTLY WHEN ENDING) ===
+Say EXACTLY this word for word — do NOT paraphrase, do NOT personalize, do NOT skip any part:
+"${candidateName}, I've really enjoyed our conversation today. Thank you for being so open and sharing your experiences with me. Our team will review everything and be in touch with next steps soon. I wish you the best of luck — take care! [END_INTERVIEW]"
+You MUST include [END_INTERVIEW] at the very end. Do NOT add anything after it.
+
+=== REMEMBER ===
+You are Serena. You ASK questions. You do NOT answer questions about yourself.
+The candidate is ${candidateName}. They ANSWER your questions.`;
 
   const fallbackRound2Prompt = `=== YOUR IDENTITY ===
   NAME: Nova
@@ -338,6 +371,10 @@ export default function VoiceAvatar({
       timestamp: new Date(),
     };
     conversationHistoryRef.current.push(entry);
+    setConversationDisplay(prev => [...prev, entry]);
+    if (role === 'interviewer') {
+      setQuestionIndex(prev => prev + 1);
+    }
   }, [candidateName, interviewerName]);
 
   // Ship a recording chunk to the server for incremental backup + server-side logging
@@ -383,11 +420,20 @@ export default function VoiceAvatar({
         }
       }
 
-      // Build combined stream: video track (if available) + mixed audio
+      // Also mix screen audio into recording if available
+      const screenAudioTracks = screenStreamRef.current?.getAudioTracks() ?? [];
+      if (screenAudioTracks.length > 0) {
+        const sysSource = audioCtx.createMediaStreamSource(new MediaStream(screenAudioTracks));
+        sysSource.connect(destination);
+      }
+
+      // Build combined stream: screen video (preferred for Round 1) or camera video + mixed audio
       const combinedTracks: MediaStreamTrack[] = [];
 
-      const videoTrack = userStreamRef.current?.getVideoTracks()[0];
-      if (videoTrack && !cameraError) {
+      const screenVideoTrack = screenStreamRef.current?.getVideoTracks()[0];
+      const cameraVideoTrack = userStreamRef.current?.getVideoTracks()[0];
+      const videoTrack = screenVideoTrack ?? (cameraVideoTrack && !cameraError ? cameraVideoTrack : undefined);
+      if (videoTrack) {
         combinedTracks.push(videoTrack);
       }
 
@@ -655,14 +701,18 @@ export default function VoiceAvatar({
       if (!response.ok) throw new Error('Failed to get Deepgram key');
       const { key } = await response.json();
 
-      // Get audio stream with echo cancellation
-      const audioStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
+      // Reuse the existing mic stream from the media check / camera stream.
+      // Calling getUserMedia again for the same device while it is already open
+      // can silently fail on some browsers.
+      let audioStream: MediaStream;
+      const existingAudioTracks = userStreamRef.current?.getAudioTracks() ?? [];
+      if (existingAudioTracks.length > 0) {
+        audioStream = new MediaStream(existingAudioTracks);
+      } else {
+        audioStream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        });
+      }
       audioStreamRef.current = audioStream;
 
       // Connect to Deepgram WebSocket with optimized settings
@@ -951,6 +1001,33 @@ export default function VoiceAvatar({
     setMediaCheckDone(true);
   };
 
+  // Request full-screen share (required for Round 1 recording)
+  const requestScreenShare = async () => {
+    setScreenError(null);
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { displaySurface: 'monitor' } as MediaTrackConstraints,
+        audio: true,
+      });
+      const videoTrack = stream.getVideoTracks()[0];
+      const settings = videoTrack.getSettings() as MediaTrackSettings & { displaySurface?: string };
+      if (settings.displaySurface && settings.displaySurface !== 'monitor') {
+        stream.getTracks().forEach(t => t.stop());
+        setScreenError('Please share your entire screen — not a window or tab. Select a monitor from the list.');
+        return;
+      }
+      videoTrack.addEventListener('ended', () => {
+        if (callStatusRef.current === 'active') endInterviewRef.current?.();
+      });
+      screenStreamRef.current = stream;
+      setScreenShared(true);
+    } catch (err) {
+      if ((err as Error).name !== 'NotAllowedError') {
+        setScreenError('Screen sharing is required. Please allow it when prompted.');
+      }
+    }
+  };
+
   // Toggle microphone
   const toggleMic = () => {
     if (isMicOn) {
@@ -1128,6 +1205,12 @@ Round: ${round}
       userStreamRef.current.getTracks().forEach(track => track.stop());
     }
 
+    // Stop screen share stream
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach(track => track.stop());
+      screenStreamRef.current = null;
+    }
+
     // --- Phase 2: Wait for all chunk uploads, then ask server to assemble + finalize ---
     if (totalChunks > 0) {
       try {
@@ -1260,6 +1343,10 @@ Round: ${round}
       }
       recDestinationRef.current = null;
       recMicSourceRef.current = null;
+      if (screenStreamRef.current) {
+        screenStreamRef.current.getTracks().forEach(track => track.stop());
+        screenStreamRef.current = null;
+      }
     };
   }, [stopDeepgramListening, stopMediaCheck]);
 
@@ -1320,6 +1407,12 @@ Round: ${round}
               This is a {round === 2 ? '40' : '15'}-minute guided interview. We want you to perform at your absolute best, so please keep the following in mind:
             </p>
             <ul className="space-y-4 text-sm text-muted-foreground">
+              {round === 1 && (
+                <li className="flex gap-3">
+                  <span className="text-cyan-400 font-bold shrink-0">&#x2022;</span>
+                  <span><strong className="text-foreground">Screen sharing required:</strong> You will be asked to share your full screen before the interview begins. This is required for compliance monitoring — please select a <strong className="text-foreground">monitor</strong>, not a window or tab.</span>
+                </li>
+              )}
               <li className="flex gap-3">
                 <span className="text-cyan-400 font-bold shrink-0">&#x2022;</span>
                 <span><strong className="text-foreground">Secure a strong connection:</strong> We record this conversation for our team to review. A stable internet connection ensures your answers are captured in high quality.</span>
@@ -1384,14 +1477,22 @@ Round: ${round}
             </div>
           )}
 
-          {error && (
+          {(error || screenError) && (
             <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-6">
-              <p className="text-red-400">{error}</p>
+              <p className="text-red-400">{error || screenError}</p>
             </div>
           )}
 
           <div className="flex flex-col items-center gap-3">
-            {!mediaCheckDone ? (
+            {round === 1 && !screenShared ? (
+              <button
+                onClick={requestScreenShare}
+                className="px-8 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white text-lg font-semibold rounded-xl transition-all transform hover:scale-105 shadow-lg shadow-cyan-500/25 flex items-center gap-3"
+              >
+                <Monitor className="w-5 h-5" />
+                Share Screen to Begin
+              </button>
+            ) : !mediaCheckDone ? (
               <button
                 onClick={startMediaCheck}
                 className="px-8 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white text-lg font-semibold rounded-xl transition-all transform hover:scale-105 shadow-lg shadow-cyan-500/25"
@@ -1496,173 +1597,424 @@ Round: ${round}
   const timerSecs = elapsedSeconds % 60;
   const timerDisplay = `${timerMinutes.toString().padStart(2, '0')}:${timerSecs.toString().padStart(2, '0')}`;
   const timerUrgent = elapsedSeconds >= wrapUpAt;
+  const totalQuestions = round === 2 ? 6 : 8;
 
-  return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Exit button - fixed top left */}
-      <button
-        onClick={() => setShowExitModal(true)}
-        className="fixed top-4 left-4 z-20 w-9 h-9 rounded-full bg-card/80 backdrop-blur-sm border border-border text-muted-foreground hover:text-foreground hover:bg-card transition-all flex items-center justify-center"
-        title="Exit Interview"
-      >
-        <X className="w-5 h-5" />
-      </button>
-
-      {/* Exit Confirmation Modal */}
-      {showExitModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-card border border-border rounded-2xl p-8 max-w-sm w-full mx-4 shadow-2xl">
-            <h2 className="text-xl font-bold text-foreground mb-3">Exit Interview?</h2>
-            <p className="text-muted-foreground mb-6">
-              Are you sure you want to exit the interview without completing it? Your progress will be lost.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowExitModal(false)}
-                className="flex-1 px-4 py-3 rounded-lg bg-muted text-foreground font-medium hover:bg-muted/80 transition-all"
-              >
-                Continue Interview
-              </button>
-              <button
-                onClick={() => {
-                  setShowExitModal(false);
-                  endInterview();
-                }}
-                className="flex-1 px-4 py-3 rounded-lg bg-red-500 text-white font-medium hover:bg-red-600 transition-all"
-              >
-                Exit
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Timer - fixed top right */}
-      <div className="fixed top-4 right-4 z-20">
-        <div className={`flex items-center gap-2 px-4 py-2 rounded-lg backdrop-blur-sm border ${
-          timerUrgent
-            ? 'bg-red-500/20 border-red-500/40 text-red-400'
-            : 'bg-card/80 border-border text-muted-foreground'
-        }`}>
-          <Clock className="w-4 h-4" />
-          <span className={`font-mono text-lg font-semibold ${timerUrgent ? 'animate-pulse' : ''}`}>
-            {timerDisplay}
-          </span>
+  // Shared exit modal JSX
+  const ExitModal = () => showExitModal ? (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+      <div className="bg-[#111827] border border-white/10 rounded-2xl p-8 max-w-sm w-full mx-4 shadow-2xl">
+        <h2 className="text-xl font-bold text-white mb-3">Exit Interview?</h2>
+        <p className="text-white/50 mb-6 text-sm leading-relaxed">
+          Are you sure you want to exit without completing your interview? Your progress will not be saved.
+        </p>
+        <div className="flex gap-3">
+          <button
+            onClick={() => setShowExitModal(false)}
+            className="flex-1 px-4 py-3 rounded-xl bg-white/10 text-white font-medium hover:bg-white/15 transition-all text-sm"
+          >
+            Continue
+          </button>
+          <button
+            onClick={() => { setShowExitModal(false); endInterview(); }}
+            className="flex-1 px-4 py-3 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 transition-all text-sm"
+          >
+            Exit
+          </button>
         </div>
       </div>
+    </div>
+  ) : null;
 
-      {/* Main Interview Area */}
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="relative w-full max-w-2xl">
-          {/* Pulsing Circle Avatar */}
-          <div className="flex flex-col items-center justify-center">
-            <div className={`relative w-48 h-48 mb-8 ${isSpeaking ? 'animate-pulse' : ''}`}>
-              {/* Outer glow rings when speaking */}
-              {isSpeaking && (
-                <>
-                  <div className="absolute inset-0 bg-cyan-500/20 rounded-full animate-ping" style={{ animationDuration: '1.5s' }} />
-                  <div className="absolute inset-2 bg-cyan-500/30 rounded-full animate-ping" style={{ animationDuration: '1.2s' }} />
-                </>
+  // Error toast
+  const ErrorToast = () => error ? (
+    <div className="fixed top-4 right-4 z-50 bg-red-600/95 text-white px-5 py-3 rounded-xl shadow-xl flex items-center gap-3 text-sm">
+      <AlertCircle className="w-4 h-4 shrink-0" />
+      <span>{error}</span>
+      <button onClick={() => setError(null)} className="ml-2 text-red-200 hover:text-white">✕</button>
+    </div>
+  ) : null;
+
+  // ── ROUND 1: Wayne layout ──────────────────────────────────────────────────
+  if (round === 1) {
+    return (
+      <div className="min-h-screen flex flex-col" style={{ background: '#080B14' }}>
+        <style>{`
+          @keyframes wavePulse {
+            0% { transform: scaleY(0.4); opacity: 0.5; }
+            100% { transform: scaleY(1); opacity: 1; }
+          }
+          @keyframes breatheGlow {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
+            50% { box-shadow: 0 0 0 12px rgba(99, 102, 241, 0); }
+          }
+        `}</style>
+
+        <ExitModal />
+        <ErrorToast />
+
+        {/* Top Header */}
+        <header className="flex items-center justify-between px-6 py-3 border-b border-white/10 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center shrink-0">
+              <span className="text-white text-xs font-bold">SH</span>
+            </div>
+            <span className="text-white font-semibold text-sm hidden sm:block">SynchroHire</span>
+            <span className="text-white/20 mx-1 hidden sm:block">|</span>
+            <span className="text-white/60 text-sm">Round 1 — Personality Interview</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/10 bg-white/5">
+              <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+              <span className="text-white/70 text-xs font-medium">LIVE</span>
+            </div>
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border ${timerUrgent ? 'border-red-500/40 bg-red-500/10' : 'border-white/10 bg-white/5'}`}>
+              <Clock className={`w-3.5 h-3.5 ${timerUrgent ? 'text-red-400' : 'text-white/50'}`} />
+              <span className={`font-mono text-xs font-semibold ${timerUrgent ? 'text-red-400' : 'text-white'}`}>{timerDisplay}</span>
+            </div>
+            <button
+              onClick={() => setShowExitModal(true)}
+              className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-full transition-all"
+            >
+              End Interview
+            </button>
+          </div>
+        </header>
+
+        {/* Main: Avatar + Subtitle */}
+        <div className="flex-1 flex flex-col items-center justify-center px-8 py-6 min-h-0">
+          {/* Avatar */}
+          <div className="relative mb-5" style={{ animation: isSpeaking ? 'breatheGlow 1.5s ease-in-out infinite' : undefined }}>
+            <div className={`absolute -inset-1.5 rounded-full transition-all duration-500 ${
+              isSpeaking
+                ? 'ring-2 ring-indigo-500 ring-offset-4 ring-offset-[#080B14] shadow-[0_0_30px_rgba(99,102,241,0.4)]'
+                : 'ring-1 ring-white/10 ring-offset-4 ring-offset-[#080B14]'
+            }`} />
+            <div className="relative w-44 h-44 rounded-full overflow-hidden bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/serena.png"
+                alt="Serena"
+                className="absolute inset-0 w-full h-full object-cover"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+              <span className="text-6xl font-bold text-white/20 select-none relative z-0">S</span>
+            </div>
+          </div>
+
+          {/* Name + Speaking status */}
+          <h2 className="text-2xl font-bold text-white mb-2">{interviewerName}</h2>
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium mb-8 transition-all ${
+            isSpeaking
+              ? 'bg-indigo-600/20 border-indigo-500/30 text-indigo-300'
+              : isListening
+                ? 'bg-emerald-600/20 border-emerald-500/30 text-emerald-400'
+                : 'bg-white/5 border-white/10 text-white/40'
+          }`}>
+            <Mic className="w-3 h-3" />
+            <span>{isSpeaking ? 'Speaking' : isListening ? 'Listening...' : 'Waiting'}</span>
+          </div>
+
+          {/* Subtitle / Transcript card */}
+          <div className="max-w-2xl w-full rounded-2xl border border-white/10 bg-white/5 px-8 py-6 text-center min-h-[5rem] flex items-center justify-center">
+            {isSpeaking && subtitle ? (
+              <p className="text-white text-lg font-medium leading-relaxed">&ldquo;{subtitle}&rdquo;</p>
+            ) : !isSpeaking && transcript ? (
+              <p className="text-indigo-300 text-lg italic leading-relaxed">&ldquo;{transcript}&rdquo;</p>
+            ) : !isSpeaking && isListening ? (
+              <p className="text-white/30 text-base">Listening for your response...</p>
+            ) : (
+              <p className="text-white/20 text-base">Interview in progress</p>
+            )}
+          </div>
+        </div>
+
+        {/* Bottom Controls */}
+        <div className="shrink-0 border-t border-white/10">
+          <div className="flex items-stretch gap-4 px-6 py-4">
+
+            {/* Left: User camera */}
+            <div className="w-48 shrink-0">
+              {isCameraOn ? (
+                <div className="relative rounded-xl overflow-hidden bg-black h-full min-h-[6rem] max-h-[7rem]">
+                  <video ref={userVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                  <div className="absolute bottom-1.5 left-2 flex items-center gap-1 text-white/70 text-xs bg-black/50 rounded px-1.5 py-0.5">
+                    <Video className="w-3 h-3" />
+                    <span>Your Camera</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-xl bg-white/5 border border-white/10 h-full min-h-[6rem] max-h-[7rem] flex items-center justify-center">
+                  <CameraOff className="w-6 h-6 text-white/20" />
+                </div>
               )}
-              
-              {/* Main circle */}
-              <div className={`absolute inset-4 rounded-full flex items-center justify-center transition-all duration-300 ${
-                isSpeaking 
-                  ? 'bg-gradient-to-br from-cyan-400 to-blue-600 shadow-lg shadow-cyan-500/50' 
-                  : 'bg-gradient-to-br from-muted to-muted/80'
-              }`}>
-                <Volume2 className={`w-16 h-16 transition-colors ${isSpeaking ? 'text-white' : 'text-muted-foreground'}`} />
+            </div>
+
+            {/* Center: Done Speaking + meta */}
+            <div className="flex-1 flex flex-col items-center justify-center gap-3">
+              {!isSpeaking ? (
+                <div className="relative flex items-center">
+                  <button
+                    onClick={() => sendToAI(transcript)}
+                    disabled={!transcript.trim()}
+                    className={`px-8 py-3.5 rounded-full font-semibold text-base flex items-center gap-2.5 transition-all ${
+                      transcript.trim()
+                        ? `bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20${showDoneHint ? ' ring-2 ring-emerald-300 ring-offset-2 ring-offset-[#080B14]' : ''}`
+                        : 'bg-white/5 text-white/20 cursor-not-allowed border border-white/10'
+                    }`}
+                  >
+                    <MicOff className="w-4 h-4" />
+                    Done Speaking
+                  </button>
+                  {showDoneHint && transcript.trim() && (
+                    <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 whitespace-nowrap z-10">
+                      <div className="relative bg-emerald-500 text-white text-xs font-medium px-3 py-2 rounded-lg shadow-lg">
+                        <div className="absolute right-full top-1/2 -translate-y-1/2 border-y-[5px] border-r-[6px] border-y-transparent border-r-emerald-500" />
+                        Finished? Click to continue.
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <button
+                  onClick={stopSpeaking}
+                  className="px-8 py-3.5 rounded-full font-semibold text-base flex items-center gap-2.5 bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-600/30 transition-all"
+                >
+                  <Volume2 className="w-4 h-4 animate-pulse" />
+                  Interviewer Speaking...
+                </button>
+              )}
+              <div className="flex items-center gap-3 text-xs text-white/40">
+                <span className="flex items-center gap-1.5">
+                  <span className={`w-1.5 h-1.5 rounded-full ${isMicOn ? 'bg-emerald-500' : 'bg-red-400'}`} />
+                  {isMicOn ? 'Mic Active' : 'Mic Off'}
+                </span>
               </div>
             </div>
 
-            {/* Interviewer Name */}
-            <h2 className="text-2xl font-bold text-foreground mb-2">{interviewerName}</h2>
-            <p className="text-muted-foreground text-sm mb-8">
-              {round === 2 ? 'Technical Interviewer' : 'Talent Scout'}
-            </p>
-          </div>
+            {/* Right: Live Transcript */}
+            <div className="w-72 shrink-0">
+              <div className="h-full min-h-[6rem] max-h-[7rem] bg-white/5 border border-white/10 rounded-xl p-3 flex flex-col">
+                <div className="flex items-center justify-between mb-2 shrink-0">
+                  <span className="text-white/40 text-xs font-semibold uppercase tracking-wider">Live Transcript</span>
+                  <div className="flex items-center gap-1 text-red-400 text-xs">
+                    <span className="w-1.5 h-1.5 bg-red-400 rounded-full animate-pulse" />
+                    <span>Recording</span>
+                  </div>
+                </div>
+                <div className="overflow-y-auto flex-1 space-y-1">
+                  {conversationDisplay.length === 0 ? (
+                    <p className="text-white/20 text-xs">Transcript will appear here...</p>
+                  ) : (
+                    conversationDisplay.slice(-4).map((entry, i) => (
+                      <p key={i} className="text-xs leading-relaxed">
+                        <span className={`font-medium ${entry.role === 'interviewer' ? 'text-indigo-400' : 'text-emerald-400'}`}>
+                          {entry.speaker}:
+                        </span>
+                        <span className="text-white/40 ml-1">
+                          {entry.text.length > 70 ? entry.text.substring(0, 70) + '…' : entry.text}
+                        </span>
+                      </p>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
 
+          </div>
         </div>
       </div>
+    );
+  }
 
-      {/* User Camera (fixed, bottom right above subtitle + control bars) */}
-      {isCameraOn && (
-        <div className="fixed bottom-[16rem] right-6 w-36 h-28 rounded-lg overflow-hidden border-2 border-border shadow-xl z-10">
-          <video
-            ref={userVideoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full h-full object-cover"
+  // ── ROUND 2: Atlas split-panel layout ─────────────────────────────────────
+  return (
+    <div className="min-h-screen flex overflow-hidden" style={{ background: '#0A0E1A' }}>
+      <style>{`
+        @keyframes wavePulse {
+          0% { transform: scaleY(0.3); opacity: 0.4; }
+          100% { transform: scaleY(1); opacity: 1; }
+        }
+      `}</style>
+
+      <ExitModal />
+      <ErrorToast />
+
+      {/* Left Panel — Atlas Avatar */}
+      <div className="relative flex-1 flex flex-col overflow-hidden" style={{ background: '#080B14' }}>
+        {/* Top overlay */}
+        <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-5 py-3 bg-gradient-to-b from-black/80 to-transparent">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 bg-indigo-600 rounded-full flex items-center justify-center shrink-0">
+              <span className="text-white text-xs font-bold">SH</span>
+            </div>
+            <span className="text-white text-sm font-semibold">SynchroHire</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 bg-black/50 backdrop-blur-sm border border-white/10 rounded-full px-3 py-1">
+              <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+              <span className="text-white/80 text-xs font-medium">RECORDING</span>
+            </div>
+            <div className={`flex items-center gap-1.5 bg-black/50 backdrop-blur-sm border rounded-full px-3 py-1 ${timerUrgent ? 'border-red-500/40' : 'border-white/10'}`}>
+              <Clock className={`w-3 h-3 ${timerUrgent ? 'text-red-400' : 'text-white/50'}`} />
+              <span className={`font-mono text-xs font-semibold ${timerUrgent ? 'text-red-400' : 'text-white'}`}>{timerDisplay}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Atlas portrait area */}
+        <div className="flex-1 relative bg-gradient-to-br from-slate-900 via-[#0d1525] to-slate-900 flex items-center justify-center">
+          <span className="text-[12rem] font-bold text-white/5 select-none">N</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/nova.png"
+            alt="Nova"
+            className="absolute inset-0 w-full h-full object-cover object-top"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
           />
         </div>
-      )}
 
-      {/* Subtitle Area */}
-      <div className="min-h-24 max-h-48 bg-card/80 backdrop-blur-sm border-t border-border flex items-end justify-center px-8 py-4 overflow-y-auto">
-        <div className="max-w-3xl w-full text-center">
-          {isSpeaking && subtitle && (
-            <p className="text-foreground text-base font-medium leading-relaxed">
-              {subtitle}
+        {/* Bottom speech bubble overlay */}
+        <div className="absolute bottom-0 left-0 right-0 z-10 p-5 bg-gradient-to-t from-black/90 via-black/50 to-transparent">
+          <div className="bg-[#0D1425]/95 backdrop-blur-sm rounded-2xl p-4 border border-white/10">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-6 h-6 bg-indigo-600 rounded-full flex items-center justify-center shrink-0">
+                <span className="text-white text-xs font-bold">N</span>
+              </div>
+              <span className="text-indigo-400 text-xs font-semibold uppercase tracking-widest">Nova</span>
+            </div>
+            <p className="text-white text-base font-medium leading-relaxed mb-3">
+              {isSpeaking && subtitle
+                ? subtitle
+                : !isSpeaking && transcript
+                  ? `You: ${transcript}`
+                  : !isSpeaking && isListening
+                    ? 'Listening for your response...'
+                    : 'Interview in progress...'}
             </p>
-          )}
-          {!isSpeaking && transcript && (
-            <p className="text-cyan-400 text-base italic leading-relaxed">
-              &ldquo;{transcript}&rdquo;
-            </p>
-          )}
-          {!isSpeaking && !transcript && isListening && (
-            <p className="text-muted-foreground text-lg">
-              Please begin speaking...
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Control Bar */}
-      <div className="h-24 bg-card border-t border-border flex items-center justify-center gap-6">
-        {/* Done Speaking Button */}
-        {!isSpeaking && (
-          <div className="relative flex items-center">
-            <button
-              onClick={() => sendToAI(transcript)}
-              disabled={!transcript.trim()}
-              className={`px-6 h-14 rounded-full text-white font-semibold flex items-center justify-center gap-2 transition-all ${
-                transcript.trim()
-                  ? `bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-500/25${showDoneHint ? ' animate-breathe-glow' : ''}`
-                  : 'bg-muted opacity-50 cursor-not-allowed'
-              }`}
-              title="Send your response"
-            >
-              Done Speaking
-            </button>
-            {/* Silence nudge — appears after 5s of silence, anchored to the right of the button */}
-            {showDoneHint && transcript.trim() && (
-              <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 whitespace-nowrap animate-in fade-in duration-300 z-10">
-                <div className="relative bg-emerald-500 text-white text-sm font-medium px-4 py-2.5 rounded-lg shadow-lg shadow-emerald-500/30">
-                  {/* Left-pointing caret connecting tooltip to button */}
-                  <div className="absolute right-full top-1/2 -translate-y-1/2 w-0 h-0 border-y-[6px] border-r-[7px] border-y-transparent border-r-emerald-500" />
-                  All finished? Click here to continue.
-                </div>
+            {/* Waveform */}
+            {isSpeaking && (
+              <div className="flex items-end gap-0.5 h-5">
+                {[4, 10, 16, 8, 14, 20, 12, 18, 8, 14, 20, 16, 10, 18, 12, 8, 16, 12, 8, 4].map((h, i) => (
+                  <div
+                    key={i}
+                    className="w-0.5 bg-indigo-400/70 rounded-full"
+                    style={{
+                      height: `${h}px`,
+                      animation: `wavePulse 0.7s ${i * 35}ms ease-in-out infinite alternate`,
+                    }}
+                  />
+                ))}
               </div>
             )}
           </div>
-        )}
-
+        </div>
       </div>
 
-      {/* Error Toast */}
-      {error && (
-        <div className="fixed top-4 right-4 bg-red-500/90 text-white px-6 py-3 rounded-lg shadow-lg">
-          {error}
-          <button 
-            onClick={() => setError(null)}
-            className="ml-4 hover:text-red-200"
-          >
-            ✕
-          </button>
+      {/* Right Sidebar */}
+      <div className="w-80 shrink-0 flex flex-col border-l border-white/10 bg-[#0A0E1A]">
+        {/* Interview info */}
+        <div className="px-5 pt-5 pb-4 border-b border-white/10">
+          <h1 className="text-2xl font-bold text-white mb-0.5">Round 2</h1>
+          <p className="text-white/50 text-sm">Technical Interview</p>
         </div>
-      )}
+
+        {/* User camera */}
+        <div className="px-4 py-4 border-b border-white/10">
+          {isCameraOn ? (
+            <div className="relative rounded-xl overflow-hidden aspect-video bg-black">
+              <video ref={userVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+              <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/50 rounded px-2 py-0.5">
+                <User className="w-3 h-3 text-white/70" />
+                <span className="text-white/70 text-xs">You</span>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-xl aspect-video bg-white/5 border border-white/10 flex items-center justify-center">
+              <CameraOff className="w-8 h-8 text-white/20" />
+            </div>
+          )}
+        </div>
+
+        {/* Status indicators */}
+        <div className="px-4 py-3 border-b border-white/10">
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { label: 'Mic Active', active: isMicOn },
+              { label: 'Cam Active', active: isCameraOn },
+              { label: 'Connection', active: true },
+            ].map((item) => (
+              <div key={item.label} className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-2.5">
+                <span className={`w-2 h-2 rounded-full shrink-0 ${item.active ? 'bg-emerald-500' : 'bg-red-400'}`} />
+                <span className="text-white/60 text-xs">{item.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Warning */}
+        <div className="px-4 py-3">
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2.5 flex items-start gap-2">
+            <span className="text-amber-400 text-sm shrink-0">⚠</span>
+            <p className="text-amber-400/80 text-xs leading-relaxed">
+              Desktop only — Windows &amp; macOS required for full interview functionality.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex-1" />
+
+        {/* Control bar */}
+        <div className="px-4 py-4 border-t border-white/10">
+          {/* Done Speaking / Speaking state */}
+          <div className="mb-3">
+            {!isSpeaking ? (
+              <div className="relative flex items-center">
+                <button
+                  onClick={() => sendToAI(transcript)}
+                  disabled={!transcript.trim()}
+                  className={`w-full py-3 rounded-full font-semibold text-sm flex items-center justify-center gap-2 transition-all ${
+                    transcript.trim()
+                      ? `bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20${showDoneHint ? ' ring-2 ring-emerald-300' : ''}`
+                      : 'bg-white/5 border border-white/10 text-white/20 cursor-not-allowed'
+                  }`}
+                >
+                  <MicOff className="w-4 h-4" />
+                  Done Speaking
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={stopSpeaking}
+                className="w-full py-3 rounded-full font-semibold text-sm flex items-center justify-center gap-2 bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-600/30 transition-all"
+              >
+                <Volume2 className="w-4 h-4 animate-pulse" />
+                Nova is Speaking...
+              </button>
+            )}
+          </div>
+
+          {/* Mic + End Call */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleMic}
+              className={`w-11 h-11 rounded-full flex items-center justify-center border transition-all shrink-0 ${
+                isMicOn
+                  ? 'bg-teal-600/20 border-teal-500/30 text-teal-400 hover:bg-teal-600/30'
+                  : 'bg-white/5 border-white/10 text-white/40 hover:bg-white/10'
+              }`}
+              title={isMicOn ? 'Mute' : 'Unmute'}
+            >
+              {isMicOn ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+            </button>
+            <button
+              onClick={() => setShowExitModal(true)}
+              className="flex-1 py-2.5 bg-red-600/80 hover:bg-red-600 text-white text-sm font-semibold rounded-full transition-all"
+            >
+              End Call
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

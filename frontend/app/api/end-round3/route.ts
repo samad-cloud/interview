@@ -8,8 +8,8 @@ const MIN_INTERVIEWER_TURNS = 2;
 function isIncomplete(transcript: string): boolean {
   if (!transcript || transcript === INCOMPLETE_TRANSCRIPT) return true;
   // Count how many times the interviewer spoke — fewer than 2 means the interview barely started
-  const atlasCount = (transcript.match(/\nAtlas:/g) || []).length;
-  return atlasCount < MIN_INTERVIEWER_TURNS;
+  const veraCount = (transcript.match(/\nVera:/g) || []).length;
+  return veraCount < MIN_INTERVIEWER_TURNS;
 }
 
 export async function POST(request: Request) {

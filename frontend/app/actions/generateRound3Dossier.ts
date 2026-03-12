@@ -15,6 +15,7 @@ const Round3DossierSchema = z.object({
   })).describe('Ordered list of areas to probe deeply in Round 3, prioritised by importance'),
   interviewerBrief: z.string().describe('A 2-3 sentence brief for the Round 3 interviewer summarising the candidate profile and what Round 3 should focus on'),
   redFlags: z.array(z.string()).describe('Any inconsistencies, contradictions, or concerns spotted across R1 and R2 that must be addressed'),
+  round2KeyAnswers: z.array(z.string()).min(2).max(4).describe('2-4 specific technical positions or claims the candidate made in Round 2, stated verbatim enough for the Round 3 interviewer to challenge them directly during adversarial pushback. E.g. "Candidate claimed they always use Redis for session storage because it is faster than the database."'),
 });
 
 export type Round3Dossier = z.infer<typeof Round3DossierSchema>;
@@ -91,7 +92,9 @@ Identify the 4-8 most important areas to probe in Round 3. Focus on:
 6. Any soft skill claims (leadership, ownership, entrepreneurship) that need real evidence
 
 Round 3 is the FINAL vetting round. The avatar interviewer should leave no stone unturned.
-Order probe areas from most to least critical.`,
+Order probe areas from most to least critical.
+
+Also extract round2KeyAnswers: identify 2–4 specific technical positions or claims the candidate stated in Round 2, written verbatim enough that the Round 3 interviewer can challenge them directly. These will be used for adversarial pushback — they must be specific, not generic. Example: "Candidate said they prefer microservices over monoliths in all cases because they are easier to scale."`,
     });
 
     // Store the dossier on the candidate record
