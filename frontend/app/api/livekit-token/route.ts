@@ -2,11 +2,12 @@ import { NextResponse } from 'next/server';
 import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
 import { createClient } from '@supabase/supabase-js';
 
+const MAX_CONCURRENT_ROUND2 = 4;
 const MAX_CONCURRENT_ROUND3 = 4;
 
 export async function POST(request: Request) {
   try {
-    const { candidateId, candidateName, roomName, systemPrompt } = await request.json();
+    const { candidateId, candidateName, roomName, systemPrompt, round } = await request.json();
 
     if (!candidateId || !roomName) {
       return NextResponse.json({ error: 'Missing candidateId or roomName' }, { status: 400 });
@@ -20,21 +21,42 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'LiveKit not configured' }, { status: 500 });
     }
 
-    // Check concurrent Round 3 capacity
+    // Check concurrent avatar interview capacity (Round 2 and Round 3 share the same limit)
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     if (supabaseUrl && supabaseKey) {
       const supabase = createClient(supabaseUrl, supabaseKey);
-      const { count } = await supabase
-        .from('candidates')
-        .select('id', { count: 'exact', head: true })
-        .eq('round_3_status', 'IN_PROGRESS');
 
-      if ((count ?? 0) >= MAX_CONCURRENT_ROUND3) {
-        return NextResponse.json(
-          { error: 'All interview slots are currently in use. Please try again in a few minutes.' },
-          { status: 429 }
-        );
+      if (round === 2) {
+        const { count } = await supabase
+          .from('candidates')
+          .select('id', { count: 'exact', head: true })
+          .eq('round_2_avatar_status', 'IN_PROGRESS');
+
+        if ((count ?? 0) >= MAX_CONCURRENT_ROUND2) {
+          return NextResponse.json(
+            { error: 'All interview slots are currently in use. Please try again in a few minutes.' },
+            { status: 429 }
+          );
+        }
+
+        // Mark slot as in-use
+        await supabase
+          .from('candidates')
+          .update({ round_2_avatar_status: 'IN_PROGRESS' })
+          .eq('id', candidateId);
+      } else {
+        const { count } = await supabase
+          .from('candidates')
+          .select('id', { count: 'exact', head: true })
+          .eq('round_3_status', 'IN_PROGRESS');
+
+        if ((count ?? 0) >= MAX_CONCURRENT_ROUND3) {
+          return NextResponse.json(
+            { error: 'All interview slots are currently in use. Please try again in a few minutes.' },
+            { status: 429 }
+          );
+        }
       }
     }
 

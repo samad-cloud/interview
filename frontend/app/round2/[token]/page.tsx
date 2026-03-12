@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
-import VoiceAvatar from '@/components/VoiceAvatar';
+import AvatarInterviewRound2 from '@/components/AvatarInterviewRound2';
 import { Loader2, AlertCircle, CheckCircle, Lock, Monitor } from 'lucide-react';
 
 interface CandidateData {
@@ -16,6 +16,7 @@ interface CandidateData {
   current_stage: string | null;
   round_1_dossier: string | string[] | null;
   round_2_rating: number | null;
+  rating: number | null;
 }
 
 // Detect mobile devices — survives Chrome's "Request Desktop Site" mode.
@@ -61,7 +62,7 @@ export default function Round2Page() {
 
           const { data, error: supabaseError } = await supabase
             .from('candidates')
-            .select('id, full_name, job_id, job_description, resume_text, status, current_stage, round_1_dossier, round_2_rating')
+            .select('id, full_name, job_id, job_description, resume_text, status, current_stage, round_1_dossier, round_2_rating, rating')
             .eq('interview_token', token)
             .single();
 
@@ -242,17 +243,17 @@ export default function Round2Page() {
     }
   }
 
-  // Success - Render Round 2 Voice Interview with Nova persona
+  // Success - Render Round 2 Avatar Interview with Nova
   return (
-    <VoiceAvatar
+    <AvatarInterviewRound2
       candidateId={String(candidate.id)}
       candidateName={candidate.full_name}
       jobTitle={jobTitle}
       jobDescription={candidate.job_description || 'Software Engineer at Printerpix'}
       resumeText={candidate.resume_text || 'No resume provided'}
-      round={2}
       dossier={parsedDossier}
       r2Rubric={r2Rubric}
+      round1Score={candidate.rating}
     />
   );
 }

@@ -103,12 +103,13 @@ export async function POST(request: Request) {
       });
     }
 
-    // Save Round 2 transcript to database
+    // Save Round 2 transcript to database and release avatar slot
     const { error: updateError } = await supabase
       .from('candidates')
       .update({
         round_2_transcript: transcriptText,
         round_2_completed_at: new Date().toISOString(),
+        round_2_avatar_status: 'COMPLETED',
       })
       .eq('id', candidateId);
 
