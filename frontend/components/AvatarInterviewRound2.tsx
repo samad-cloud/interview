@@ -632,8 +632,7 @@ ${candidateName} is the candidate. They answer. You probe.`;
         errMsg.includes('Failed to fetch') ||
         errMsg.includes('ERR_NAME_NOT_RESOLVED') ||
         errMsg.includes('NetworkError') ||
-        errMsg.includes('network') ||
-        err instanceof TypeError;
+        errMsg.includes('network');
 
       if (isNetworkError) {
         setStage('connection-error');
