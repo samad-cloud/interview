@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase-browser';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Building2, Mail, Video, BarChart2, Briefcase } from 'lucide-react';
+import CompanyTab from '@/components/settings/CompanyTab';
+import EmailCommsTab from '@/components/settings/EmailCommsTab';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -69,10 +71,10 @@ export default function SettingsPage() {
         </TabsList>
 
         <TabsContent value="company">
-          <div className="py-8 text-muted-foreground text-sm">Company settings coming soon</div>
+          <CompanyTab />
         </TabsContent>
         <TabsContent value="email">
-          <div className="py-8 text-muted-foreground text-sm">Email &amp; Comms settings coming soon</div>
+          <EmailCommsTab />
         </TabsContent>
         <TabsContent value="interviews">
           <div className="py-8 text-muted-foreground text-sm">Interviews settings coming soon</div>
