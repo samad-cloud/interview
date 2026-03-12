@@ -7,6 +7,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Building2, Mail, Video, BarChart2, Briefcase } from 'lucide-react';
 import CompanyTab from '@/components/settings/CompanyTab';
 import EmailCommsTab from '@/components/settings/EmailCommsTab';
+import { InterviewsTab } from '@/components/settings/InterviewsTab';
+import { ScoringTab } from '@/components/settings/ScoringTab';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -77,10 +79,10 @@ export default function SettingsPage() {
           <EmailCommsTab />
         </TabsContent>
         <TabsContent value="interviews">
-          <div className="py-8 text-muted-foreground text-sm">Interviews settings coming soon</div>
+          <InterviewsTab />
         </TabsContent>
         <TabsContent value="scoring">
-          <div className="py-8 text-muted-foreground text-sm">Scoring settings coming soon</div>
+          <ScoringTab />
         </TabsContent>
         <TabsContent value="job-boards">
           <div className="py-8 text-muted-foreground text-sm">Job Boards settings coming soon</div>
