@@ -99,7 +99,7 @@ Plans:
   5. Scoring tab shows four hiring bar preset cards (Growth / Standard / High Bar / Elite) as selectable cards and per-round threshold number inputs.
   6. Job Boards tab shows connection cards for LinkedIn, Indeed, Glassdoor, and Bayt.com with enable toggles; no OAuth flow is triggered.
   7. No field value persists after a page refresh (UI shell only — SETT-09 is satisfied by design).
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 
 Plans:
 - [ ] 04-01-PLAN.md — Create /settings route, page shell, and five-tab navigation component
@@ -138,7 +138,7 @@ Plans:
 | 1. Dashboard Rebuild | 3/3 | Complete | 2026-03-11 |
 | 2. Candidate Panel Slide-Over | 4/4 | Complete | 2026-03-11 |
 | 3. Create Job Wizard | 4/6 | In Progress|  |
-| 4. Settings Panel | 4/5 | In Progress|  |
+| 4. Settings Panel | 5/5 | Complete   | 2026-03-12 |
 | 5. Jobs Page Refresh | 0/2 | Not started | - |
 
 ---

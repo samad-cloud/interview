@@ -39,13 +39,13 @@
 ### Settings Panel
 
 - [x] **SETT-01**: New /settings page accessible from sidebar with 5 tabs: Company, Email & Comms, Interviews, Scoring, Job Boards
-- [ ] **SETT-02**: Company tab shows logo upload, brand colour picker, company name, about, industry, website, HQ, company size fields
-- [ ] **SETT-03**: Email & Comms tab shows Gmail connection status, sender display name, and 4 email template editors (Interview Invite / Follow-up / Rejection / Shortlist)
-- [ ] **SETT-04**: Email template editor shows subject, heading, body, footer fields with {{variable}} placeholder pills displayed below each field
-- [ ] **SETT-05**: Email & Comms tab shows automated send rules with toggles (auto-send on pass, follow-up reminder, auto-reject)
-- [ ] **SETT-06**: Interviews tab shows default round count selector and per-round defaults (theme, duration, voice, avatar)
-- [ ] **SETT-07**: Scoring tab shows hiring bar preset cards (Growth / Standard / High Bar / Elite) and per-round custom threshold inputs
-- [ ] **SETT-08**: Job Boards tab shows LinkedIn, Indeed, Glassdoor, Bayt.com connection cards with enable toggles
+- [x] **SETT-02**: Company tab shows logo upload, brand colour picker, company name, about, industry, website, HQ, company size fields
+- [x] **SETT-03**: Email & Comms tab shows Gmail connection status, sender display name, and 4 email template editors (Interview Invite / Follow-up / Rejection / Shortlist)
+- [x] **SETT-04**: Email template editor shows subject, heading, body, footer fields with {{variable}} placeholder pills displayed below each field
+- [x] **SETT-05**: Email & Comms tab shows automated send rules with toggles (auto-send on pass, follow-up reminder, auto-reject)
+- [x] **SETT-06**: Interviews tab shows default round count selector and per-round defaults (theme, duration, voice, avatar)
+- [x] **SETT-07**: Scoring tab shows hiring bar preset cards (Growth / Standard / High Bar / Elite) and per-round custom threshold inputs
+- [x] **SETT-08**: Job Boards tab shows LinkedIn, Indeed, Glassdoor, Bayt.com connection cards with enable toggles
 - [x] **SETT-09**: All settings tabs are UI-only in v2.0 (no backend persistence — values do not save to database)
 
 ### Jobs Page
@@ -107,13 +107,13 @@
 | JOB-08 | Phase 3 | Complete |
 | JOB-09 | Phase 3 | Complete |
 | SETT-01 | Phase 4 | Complete |
-| SETT-02 | Phase 4 | Pending |
-| SETT-03 | Phase 4 | Pending |
-| SETT-04 | Phase 4 | Pending |
-| SETT-05 | Phase 4 | Pending |
-| SETT-06 | Phase 4 | Pending |
-| SETT-07 | Phase 4 | Pending |
-| SETT-08 | Phase 4 | Pending |
+| SETT-02 | Phase 4 | Complete |
+| SETT-03 | Phase 4 | Complete |
+| SETT-04 | Phase 4 | Complete |
+| SETT-05 | Phase 4 | Complete |
+| SETT-06 | Phase 4 | Complete |
+| SETT-07 | Phase 4 | Complete |
+| SETT-08 | Phase 4 | Complete |
 | SETT-09 | Phase 4 | Complete |
 | JOBS-01 | Phase 5 | Pending |
 | JOBS-02 | Phase 5 | Pending |
