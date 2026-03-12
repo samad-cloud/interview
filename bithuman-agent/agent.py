@@ -16,7 +16,7 @@ from livekit.agents import (
     Agent,
     AgentSession,
     JobContext,
-    RoomOutputOptions,
+    RoomInputOptions,
     WorkerOptions,
     WorkerType,
     cli,
@@ -82,7 +82,7 @@ async def entrypoint(ctx: JobContext):
     session = AgentSession(
         stt=deepgram.STT(model="nova-2", language="en-US"),
         llm=google.LLM(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             api_key=os.getenv("GEMINI_API_KEY"),
         ),
         tts=deepgram.TTS(
@@ -97,7 +97,7 @@ async def entrypoint(ctx: JobContext):
     await session.start(
         agent=Agent(instructions=system_prompt),
         room=ctx.room,
-        room_output_options=RoomOutputOptions(audio_enabled=False),
+        room_options=RoomInputOptions(audio_enabled=False),
     )
 
     # Trigger opening greeting immediately — don't wait for candidate to speak
