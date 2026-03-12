@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
-import VoiceAvatar from '@/components/VoiceAvatar';
+import VoiceInterviewRound1 from '@/components/VoiceInterviewRound1';
 import { Loader2, AlertCircle, CheckCircle, Monitor } from 'lucide-react';
 
 interface CandidateData {
@@ -193,9 +193,8 @@ export default function VoiceInterviewPage() {
     );
   }
 
-  // Go directly to VoiceAvatar (camera/mic check is handled inside)
   return (
-    <VoiceAvatar
+    <VoiceInterviewRound1
       candidateId={String(candidate.id)}
       candidateName={candidate.full_name}
       jobTitle={jobTitle}
