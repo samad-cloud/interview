@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Stitch UI Implementation
 status: in_progress
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-03-12T06:02:30.319Z"
+stopped_at: Completed 04-04-PLAN.md
+last_updated: "2026-03-12T06:03:18.631Z"
 last_activity: 2026-03-11 — 03-05 generateScreeningQuestions server action, StepScreening with edit/remove/add controls wired at step 5
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 18
-  completed_plans: 16
+  completed_plans: 17
   percent: 100
 ---
 
@@ -39,8 +39,8 @@ Phase: 03-create-job-wizard
 Plan: 5 of 6 (complete)
 Status: Phase 3 active — 03-05 StepScreening complete; step 6 pending (03-06)
 Last activity: 2026-03-11 — 03-05 generateScreeningQuestions server action, StepScreening with edit/remove/add controls wired at step 5
-Last session: 2026-03-12T06:02:11.325Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-03-12T06:03:09.609Z
+Stopped at: Completed 04-04-PLAN.md
 
 ## Project Reference
 
@@ -114,3 +114,6 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 - [Phase 04-settings-panel]: Settings nav item added after AI Prompts in navItems array
 - [Phase 04-settings-panel]: Auth guard uses useEffect + getSession redirect (same pattern as dashboard)
 - [Phase 04-settings-panel]: Brand colour swatch uses style={{ backgroundColor: brandColor }} — never dynamic Tailwind interpolation
+- [Phase 04-settings-panel]: All four email template states held in a single useState object keyed by TemplateKey — prevents state loss on template tab switch
+- [Phase 04-settings-panel]: InterviewsTab uses roundNumber field (not round) to match RoundConfig interface
+- [Phase 04-settings-panel]: ScoringTab thresholds array syncs length to roundCount via extend-with-70 or trim
