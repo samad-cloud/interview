@@ -21,9 +21,9 @@ decisions:
   - Platform colour initial rendered via style={{ backgroundColor }} to avoid Tailwind v4 purge
   - page.tsx already had CompanyTab, EmailCommsTab, InterviewsTab, ScoringTab wired from prior plan runs
 metrics:
-  duration: "~10 minutes"
-  completed: "2026-03-12T06:04:05Z"
-  tasks_completed: 2
+  duration: "~15 minutes"
+  completed: "2026-03-12T06:30:00Z"
+  tasks_completed: 3
   files_created: 1
   files_modified: 1
 requirements: [SETT-08, SETT-09]
@@ -50,6 +50,7 @@ requirements: [SETT-08, SETT-09]
 |------|-------------|--------|-------|
 | 1 | Create JobBoardsTab component | 33796ab | frontend/components/settings/JobBoardsTab.tsx |
 | 2 | Wire JobBoardsTab into settings page | (already committed in prior run) | frontend/app/settings/page.tsx |
+| 3 | Human verify complete /settings page | approved | — |
 
 ## Verification
 
@@ -69,9 +70,9 @@ requirements: [SETT-08, SETT-09]
 - **Fix:** Created only the missing JobBoardsTab.tsx and added the one remaining JobBoardsTab import/render to page.tsx (which was already committed alongside the edit).
 - **Impact:** No rework — plan executed correctly with the existing state.
 
-## Checkpoint
+## Human Verification
 
-Task 3 is a `checkpoint:human-verify` — stopping for human verification of the complete /settings page with all five tabs.
+Task 3 (`checkpoint:human-verify`) — human approved all five tabs of the complete /settings page.
 
 ## Self-Check: PASSED
 
