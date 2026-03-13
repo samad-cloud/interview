@@ -4,7 +4,7 @@ Also sends reminder emails to candidates who haven't completed their interview a
 
 import os
 import base64
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from email.mime.text import MIMEText
 from urllib.parse import quote
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -17,6 +17,8 @@ MIN_SCORE = 50
 INTERVIEW_BASE_URL = "https://printerpix-recruitment.vercel.app/interview"
 ROUND2_BASE_URL = "https://printerpix-recruitment.vercel.app/round2"
 TALLY_FORM_ID = os.environ.get("TALLY_FORM_ID", "")
+# Delay before sending interview invite after CV passes grading (simulates human review)
+INVITE_DELAY_HOURS = 1
 # Minimum hours between consecutive reminders sent to the same candidate
 REMINDER_MIN_GAP_HOURS = 5
 # Start sending reminders this many hours after the invite was sent
@@ -541,13 +543,15 @@ def fetch_email_templates(supabase) -> dict:
 
 def fetch_top_candidates(supabase):
     """Fetch graded candidates with score >= MIN_SCORE, joining jobs.location for Dubai detection.
-    Only fetches candidates with created_at set (excludes old/legacy candidates)."""
+    Only fetches candidates received at least INVITE_DELAY_HOURS ago (simulates human CV review)."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=INVITE_DELAY_HOURS)).isoformat()
     result = (
         supabase.table("candidates")
         .select("id, email, full_name, jd_match_score, interview_token, job_id, jobs(title, location)")
         .eq("status", "GRADED")
         .gte("jd_match_score", MIN_SCORE)
         .not_.is_("created_at", "null")
+        .lte("created_at", cutoff)  # At least INVITE_DELAY_HOURS since application received
         .execute()
     )
     return result.data
