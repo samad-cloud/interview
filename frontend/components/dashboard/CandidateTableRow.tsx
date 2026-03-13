@@ -10,6 +10,7 @@ export interface CandidateRow {
   full_name: string;
   email: string;
   job_title?: string;
+  jd_match_score: number | null;
   rating: number | null;
   round_2_rating: number | null;
   status: string;
@@ -120,6 +121,11 @@ export function CandidateTableRow({ candidate, onView, onInvite, onReject }: Can
       {/* Applied date */}
       <TableCell className="py-2.5 text-[12px] text-[#6B7280] whitespace-nowrap">
         {displayDate}
+      </TableCell>
+
+      {/* CV Score */}
+      <TableCell className="py-2.5">
+        <ScoreBar score={candidate.jd_match_score} />
       </TableCell>
 
       {/* R1 Score */}

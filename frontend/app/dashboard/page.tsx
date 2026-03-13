@@ -1483,6 +1483,7 @@ export default function DashboardPage() {
                       <TableHead className="pl-4 text-[11px] font-medium text-[#6B7280] uppercase tracking-wider">Candidate</TableHead>
                       <TableHead className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wider">Role</TableHead>
                       <TableHead className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wider">Applied</TableHead>
+                      <TableHead className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wider">CV</TableHead>
                       <TableHead className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wider">R1 Score</TableHead>
                       <TableHead className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wider">R2 Score</TableHead>
                       <TableHead className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wider">Stage</TableHead>
