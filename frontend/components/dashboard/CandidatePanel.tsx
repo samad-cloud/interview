@@ -67,6 +67,7 @@ interface CandidatePanelProps {
   onInviteR3: (id: number) => void;
   onReject: (candidate: PanelCandidate) => void;
   onSaveNote: (id: number, noteText: string) => void;
+  onReset: (id: number) => void;
 }
 
 // ── Avatar helpers (copied from CandidateTableRow.tsx — not imported to avoid coupling) ──
@@ -266,6 +267,7 @@ export function CandidatePanel({
   onInviteR3,
   onReject,
   onSaveNote,
+  onReset,
 }: CandidatePanelProps) {
   const [activeRecording, setActiveRecording] = useState<'r1' | 'r2' | 'r3' | null>(null);
   const [r1Open, setR1Open] = useState(false);
@@ -570,6 +572,24 @@ export function CandidatePanel({
           >
             {showNote ? 'Hide Note' : 'Add Note'}
           </Button>
+
+          {/* Reset Round 1 — only shown if candidate has completed R1 */}
+          {candidate.rating !== null && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                if (window.confirm(`Reset ${candidate.full_name}'s Round 1 interview? This clears their score and transcript so they can retake it.`)) {
+                  onReset(candidate.id);
+                  onClose();
+                }
+              }}
+              className="h-[34px] text-[12px] border-[#374151] text-[#6B7280] hover:bg-[#1E293B] ml-auto"
+              title="Clear Round 1 score and transcript so candidate can retake"
+            >
+              Reset R1
+            </Button>
+          )}
         </div>
       </div>
     </>

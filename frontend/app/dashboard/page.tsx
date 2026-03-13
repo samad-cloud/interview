@@ -747,6 +747,27 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const handleResetInterview = useCallback(async (candidateId: number) => {
+    const { error } = await supabase.from('candidates').update({
+      rating: null,
+      interview_transcript: null,
+      full_verdict: null,
+      round_1_full_dossier: null,
+      round_1_dossier: null,
+      status: 'INVITE_SENT',
+    }).eq('id', candidateId);
+    if (!error) {
+      setCandidates(prev => prev.map(c =>
+        c.id === candidateId
+          ? { ...c, rating: null, interview_transcript: null, full_verdict: null, round_1_full_dossier: null, round_1_dossier: null, status: 'INVITE_SENT' }
+          : c
+      ));
+      setToastModal({ title: 'Interview Reset', description: 'Round 1 cleared — candidate can retake their interview.', variant: 'success' });
+    } else {
+      setToastModal({ title: 'Reset Failed', description: 'Could not reset the interview. Please try again.', variant: 'error' });
+    }
+  }, []);
+
   const handleInviteRound2 = async (candidateId: number) => {
     setSendingInvite(candidateId);
     const result = await inviteToRound2(candidateId);
@@ -1572,6 +1593,7 @@ export default function DashboardPage() {
         onInviteR3={(id) => handleInviteRound3(id)}
         onReject={(c) => handleRejectClick(c as Parameters<typeof handleRejectClick>[0])}
         onSaveNote={(id, text) => { setNoteText(text); handleSaveNote(id); }}
+        onReset={(id) => handleResetInterview(id)}
       />
 
       {/* Unified Bulk Action Modal: confirm → progress → done */}
