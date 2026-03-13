@@ -173,7 +173,7 @@ DUBAI_EMAIL_HTML = """<!DOCTYPE html>
 </html>"""
 
 # Direct interview invite (non-Dubai, also used for Dubai candidates who pass Tally)
-INVITE_EMAIL_SUBJECT = f"You're Invited to an Interview with {COMPANY_NAME}"
+INVITE_EMAIL_SUBJECT_TEMPLATE = "You're Invited - AI Interview for {job_title} at {company_name}"
 
 INVITE_EMAIL_HTML = """<!DOCTYPE html>
 <html>
@@ -595,7 +595,7 @@ def send_dubai_questionnaire(gmail_service, email: str, full_name: str, intervie
     gmail_service.users().messages().send(userId="me", body=message).execute()
 
 
-def send_interview_invite(gmail_service, email: str, full_name: str, interview_token: str, template: str = ""):
+def send_interview_invite(gmail_service, email: str, full_name: str, interview_token: str, job_title: str = "Open Position", template: str = ""):
     """Send direct interview invite with secure token link."""
     first_name = full_name.split()[0] if full_name else "there"
     interview_link = f"{INTERVIEW_BASE_URL}/{interview_token}"
@@ -605,7 +605,8 @@ def send_interview_invite(gmail_service, email: str, full_name: str, interview_t
         "interview_link": interview_link,
         "company_name": COMPANY_NAME,
     })
-    message = create_email(email, INVITE_EMAIL_SUBJECT, body, html=True)
+    subject = INVITE_EMAIL_SUBJECT_TEMPLATE.format(job_title=job_title, company_name=COMPANY_NAME)
+    message = create_email(email, subject, body, html=True)
     gmail_service.users().messages().send(userId="me", body=message).execute()
 
 
@@ -843,8 +844,10 @@ def run_mailer() -> tuple[int, int, int, int]:
                 failed += 1
                 continue
 
+            dubai_job = candidate.get("jobs") or {}
+            dubai_job_title = dubai_job.get("title", "Open Position") if isinstance(dubai_job, dict) else "Open Position"
             log("INFO", f"Sending interview invite to eligible Dubai candidate {email}")
-            send_interview_invite(gmail_service, email, full_name, interview_token, template=tmpl_invite)
+            send_interview_invite(gmail_service, email, full_name, interview_token, job_title=dubai_job_title, template=tmpl_invite)
             update_candidate_status(supabase, candidate_id, "INVITE_SENT")
             log("SUCCESS", f"Interview invite sent to {email}")
             invites_sent += 1
@@ -883,8 +886,10 @@ def run_mailer() -> tuple[int, int, int, int]:
             #     log("SUCCESS", f"Dubai eligibility form sent to {email}")
             #     dubai_sent += 1
             # else:
+            job = candidate.get("jobs") or {}
+            job_title = job.get("title", "Open Position") if isinstance(job, dict) else "Open Position"
             log("INFO", f"Sending interview invite to {email} (score: {score})")
-            send_interview_invite(gmail_service, email, full_name, interview_token, template=tmpl_invite)
+            send_interview_invite(gmail_service, email, full_name, interview_token, job_title=job_title, template=tmpl_invite)
             update_candidate_status(supabase, candidate_id, "INVITE_SENT")
             log("SUCCESS", f"Interview invite sent to {email}")
             invites_sent += 1
