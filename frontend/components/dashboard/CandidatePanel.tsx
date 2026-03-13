@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, ChevronRight } from 'lucide-react';
+import { X, ChevronRight, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import VideoPlayer from '@/components/VideoPlayer';
 
@@ -57,6 +57,7 @@ interface PanelCandidate {
   final_verdict: string | null;
   round_1_completed_at: string | null;
   round_2_completed_at: string | null;
+  resume_url: string | null;
 }
 
 interface CandidatePanelProps {
@@ -354,6 +355,20 @@ export function CandidatePanel({
               </div>
             </div>
           </div>
+          {/* Right: CV download + close */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {candidate.resume_url && (
+              <a
+                href={candidate.resume_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                download
+                title="Download CV"
+                className="w-8 h-8 rounded-md flex items-center justify-center text-[#94A3B8] hover:text-white hover:bg-[#1E293B] transition-colors"
+              >
+                <Download className="w-4 h-4" />
+              </a>
+            )}
           {/* Close button */}
           <button
             onClick={onClose}
@@ -362,6 +377,7 @@ export function CandidatePanel({
           >
             <X className="w-4 h-4" />
           </button>
+          </div>
         </div>
 
         {/* Body — flex-1 overflow-y-auto */}
