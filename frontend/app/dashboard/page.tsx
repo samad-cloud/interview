@@ -133,7 +133,7 @@ interface Round3FullVerdict {
   finalRecommendation: string;
 }
 
-type SortColumn = 'created_at' | 'jd_match_score' | 'combined_score' | 'round_1_completed_at' | 'round_2_completed_at';
+type SortColumn = 'created_at' | 'jd_match_score' | 'combined_score' | 'rating' | 'round_2_rating' | 'round_1_completed_at' | 'round_2_completed_at';
 type SortDirection = 'asc' | 'desc';
 
 interface Candidate {
@@ -1482,10 +1482,24 @@ export default function DashboardPage() {
                     <TableRow className="border-b border-[#1E293B] hover:bg-transparent">
                       <TableHead className="pl-4 text-[11px] font-medium text-[#6B7280] uppercase tracking-wider">Candidate</TableHead>
                       <TableHead className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wider">Role</TableHead>
-                      <TableHead className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wider">Applied</TableHead>
-                      <TableHead className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wider">CV</TableHead>
-                      <TableHead className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wider">R1 Score</TableHead>
-                      <TableHead className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wider">R2 Score</TableHead>
+                      <TableHead className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wider cursor-pointer select-none hover:text-[#94A3B8]" onClick={() => toggleSort('created_at')}>
+                        <div className="flex items-center gap-1">Applied <SortIcon column="created_at" /></div>
+                      </TableHead>
+                      <TableHead className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wider cursor-pointer select-none hover:text-[#94A3B8]" onClick={() => toggleSort('jd_match_score')}>
+                        <div className="flex items-center gap-1">CV <SortIcon column="jd_match_score" /></div>
+                      </TableHead>
+                      <TableHead className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wider cursor-pointer select-none hover:text-[#94A3B8]" onClick={() => toggleSort('rating')}>
+                        <div className="flex items-center gap-1">R1 Score <SortIcon column="rating" /></div>
+                      </TableHead>
+                      <TableHead className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wider cursor-pointer select-none hover:text-[#94A3B8]" onClick={() => toggleSort('round_2_rating')}>
+                        <div className="flex items-center gap-1">R2 Score <SortIcon column="round_2_rating" /></div>
+                      </TableHead>
+                      <TableHead className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wider cursor-pointer select-none hover:text-[#94A3B8]" onClick={() => toggleSort('round_1_completed_at')}>
+                        <div className="flex items-center gap-1">R1 Date <SortIcon column="round_1_completed_at" /></div>
+                      </TableHead>
+                      <TableHead className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wider cursor-pointer select-none hover:text-[#94A3B8]" onClick={() => toggleSort('round_2_completed_at')}>
+                        <div className="flex items-center gap-1">R2 Date <SortIcon column="round_2_completed_at" /></div>
+                      </TableHead>
                       <TableHead className="text-[11px] font-medium text-[#6B7280] uppercase tracking-wider">Stage</TableHead>
                       <TableHead className="w-24" />
                     </TableRow>

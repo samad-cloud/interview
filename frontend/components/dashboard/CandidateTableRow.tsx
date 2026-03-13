@@ -16,6 +16,8 @@ export interface CandidateRow {
   status: string;
   applied_at: string | null;
   created_at: string | null;
+  round_1_completed_at: string | null;
+  round_2_completed_at: string | null;
 }
 
 interface CandidateTableRowProps {
@@ -138,6 +140,16 @@ export function CandidateTableRow({ candidate, onView, onInvite, onReject }: Can
         <ScoreBar score={candidate.round_2_rating} />
       </TableCell>
 
+      {/* R1 Date */}
+      <TableCell className="py-2.5 text-[12px] text-[#6B7280] whitespace-nowrap">
+        {formatDate(candidate.round_1_completed_at)}
+      </TableCell>
+
+      {/* R2 Date */}
+      <TableCell className="py-2.5 text-[12px] text-[#6B7280] whitespace-nowrap">
+        {formatDate(candidate.round_2_completed_at)}
+      </TableCell>
+
       {/* Stage badge */}
       <TableCell className="py-2.5">
         <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${badge.colorClass}`}>
@@ -145,9 +157,9 @@ export function CandidateTableRow({ candidate, onView, onInvite, onReject }: Can
         </span>
       </TableCell>
 
-      {/* Hover actions — fixed width, no layout shift */}
+      {/* Actions — always visible */}
       <TableCell className="py-2.5 w-24 pr-3">
-        <div className="flex items-center gap-1 opacity-0 group-hover/row:opacity-100 transition-opacity duration-100">
+        <div className="flex items-center gap-1">
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
