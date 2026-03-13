@@ -22,7 +22,7 @@ const screeningSchema: ResponseSchema = {
     resume_text: { type: SchemaType.STRING, description: 'Full extracted resume text' },
     score: { type: SchemaType.INTEGER, description: 'Match score 0-100' },
     reasoning: { type: SchemaType.STRING, description: 'One sentence explanation of score' },
-    status: { type: SchemaType.STRING, format: 'enum', enum: ['RECOMMENDED', 'REJECT'], description: 'RECOMMENDED if score >= 70, otherwise REJECT' },
+    status: { type: SchemaType.STRING, format: 'enum', enum: ['RECOMMENDED', 'REJECT'], description: 'RECOMMENDED if score >= 50, otherwise REJECT' },
   },
   required: ['name', 'email', 'resume_text', 'score', 'reasoning', 'status'],
 };
@@ -92,7 +92,7 @@ TASKS:
    - 40-59: Partial match (missing key requirements)
    - 0-39: Poor match (significantly underqualified)
 5. Write a 1-sentence reasoning explaining the score.
-6. Set status: "RECOMMENDED" if score >= 70, otherwise "REJECT".
+6. Set status: "RECOMMENDED" if score >= 50, otherwise "REJECT".
 
 CONTEXT: We are looking for 'Go-Getters' and high achievers. Be strict.`;
 
@@ -137,8 +137,8 @@ CONTEXT: We are looking for 'Go-Getters' and high achievers. Be strict.`;
     }
 
     // Determine status based on score
-    const status = parsed.score >= 70 ? 'RECOMMENDED' : 'REJECT';
-    const dbStatus = parsed.score >= 70 ? 'GRADED' : 'CV_REJECTED';
+    const status = parsed.score >= 50 ? 'RECOMMENDED' : 'REJECT';
+    const dbStatus = parsed.score >= 50 ? 'GRADED' : 'CV_REJECTED';
 
     // Save to database
     const { error: insertError } = await supabase.from('candidates').insert({
