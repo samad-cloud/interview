@@ -7,6 +7,7 @@ import base64
 from datetime import datetime, timezone
 from email.mime.text import MIMEText
 from urllib.parse import quote
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from utils import get_supabase_client, get_gmail_service, log
 
@@ -16,7 +17,54 @@ MIN_SCORE = 50
 INTERVIEW_BASE_URL = "https://printerpix-recruitment.vercel.app/interview"
 ROUND2_BASE_URL = "https://printerpix-recruitment.vercel.app/round2"
 TALLY_FORM_ID = os.environ.get("TALLY_FORM_ID", "")
-REMINDER_AFTER_DAYS = 3
+# Minimum hours between consecutive reminders sent to the same candidate
+REMINDER_MIN_GAP_HOURS = 5
+# Start sending reminders this many hours after the invite was sent
+REMINDER_START_HOURS = 24
+# Candidate's local business hours window for sending reminders
+REMINDER_LOCAL_START_HOUR = 8   # 8 AM local
+REMINDER_LOCAL_END_HOUR = 18    # 6 PM local
+
+# Map location keywords (lowercased) → IANA timezone name
+_LOCATION_TO_TZ: list[tuple[str, str]] = [
+    ("dubai", "Asia/Dubai"),
+    ("uae", "Asia/Dubai"),
+    ("abu dhabi", "Asia/Dubai"),
+    ("sharjah", "Asia/Dubai"),
+    ("london", "Europe/London"),
+    ("uk", "Europe/London"),
+    ("united kingdom", "Europe/London"),
+    ("manchester", "Europe/London"),
+    ("birmingham", "Europe/London"),
+    ("new york", "America/New_York"),
+    ("california", "America/Los_Angeles"),
+    ("chicago", "America/Chicago"),
+    ("toronto", "America/Toronto"),
+    ("india", "Asia/Kolkata"),
+    ("singapore", "Asia/Singapore"),
+    ("australia", "Australia/Sydney"),
+]
+
+
+def get_timezone_for_location(location: str) -> str:
+    """Return an IANA timezone name for a job location string. Falls back to UTC."""
+    if not location:
+        return "UTC"
+    loc = location.lower()
+    for keyword, tz in _LOCATION_TO_TZ:
+        if keyword in loc:
+            return tz
+    return "UTC"
+
+
+def is_local_business_hours(location: str) -> bool:
+    """Return True if the current time in the candidate's location is within business hours."""
+    tz_name = get_timezone_for_location(location)
+    try:
+        local_now = datetime.now(ZoneInfo(tz_name))
+    except ZoneInfoNotFoundError:
+        local_now = datetime.now(timezone.utc)
+    return REMINDER_LOCAL_START_HOUR <= local_now.hour < REMINDER_LOCAL_END_HOUR
 
 # Dubai eligibility email (HTML with Tally CTA button)
 DUBAI_EMAIL_SUBJECT = f"Your Application to {COMPANY_NAME}: Let's Explore a Fit"
@@ -576,34 +624,39 @@ def fetch_form_completed_candidates(supabase):
 
 
 def fetch_candidates_needing_reminder(supabase):
-    """Fetch candidates who were sent an interview invite 3+ days ago but haven't completed it.
-    Only returns candidates who haven't already received a reminder and whose job is still active."""
+    """Fetch candidates who need a reminder: INVITE_SENT or ROUND_2_INVITED, job active,
+    invite sent 24+ hours ago, and last reminder was 5+ hours ago (or never sent)."""
     result = (
         supabase.table("candidates")
-        .select("id, email, full_name, interview_token, status, invite_sent_at, current_stage, job_id, jobs(is_active)")
+        .select("id, email, full_name, interview_token, status, invite_sent_at, reminder_sent_at, current_stage, job_id, jobs(is_active, location)")
         .in_("status", ["INVITE_SENT", "ROUND_2_INVITED"])
         .not_.is_("invite_sent_at", "null")
-        .is_("reminder_sent_at", "null")
         .not_.is_("created_at", "null")
         .execute()
     )
-    # Filter to only those where invite_sent_at is 3+ days ago and job is active
     now = datetime.now(timezone.utc)
     eligible = []
     for c in result.data:
-        # Skip candidates whose job is no longer active
         job = c.get("jobs")
         if not job or not job.get("is_active"):
             continue
 
-        sent_at = c.get("invite_sent_at")
-        if not sent_at:
+        # Must be at least REMINDER_START_HOURS since invite was sent
+        invite_sent_at = c.get("invite_sent_at")
+        if not invite_sent_at:
             continue
-        # Parse the ISO timestamp
-        sent_dt = datetime.fromisoformat(sent_at.replace("Z", "+00:00"))
-        days_elapsed = (now - sent_dt).days
-        if days_elapsed >= REMINDER_AFTER_DAYS:
-            eligible.append(c)
+        invite_dt = datetime.fromisoformat(invite_sent_at.replace("Z", "+00:00"))
+        if (now - invite_dt).total_seconds() / 3600 < REMINDER_START_HOURS:
+            continue
+
+        # Must be at least REMINDER_MIN_GAP_HOURS since last reminder
+        reminder_sent_at = c.get("reminder_sent_at")
+        if reminder_sent_at:
+            last_reminder_dt = datetime.fromisoformat(reminder_sent_at.replace("Z", "+00:00"))
+            if (now - last_reminder_dt).total_seconds() / 3600 < REMINDER_MIN_GAP_HOURS:
+                continue
+
+        eligible.append(c)
     return eligible
 
 
@@ -623,14 +676,15 @@ def send_reminder_email(gmail_service, email: str, full_name: str, interview_lin
 
 
 def run_reminders(supabase, gmail_service, template: str = "") -> int:
-    """Send reminder emails to candidates who haven't completed their interview after 3 days.
-    Returns the number of reminders sent."""
+    """Send reminder emails twice daily (morning + afternoon) within the candidate's local
+    business hours. Returns the number of reminders sent this run."""
     candidates = fetch_candidates_needing_reminder(supabase)
     if not candidates:
         log("INFO", "No candidates need reminders")
         return 0
 
-    log("INFO", f"Found {len(candidates)} candidate(s) needing reminders (sending max 1 per run)")
+    log("INFO", f"Found {len(candidates)} candidate(s) eligible for reminders")
+    sent = 0
 
     for candidate in candidates:
         try:
@@ -644,29 +698,34 @@ def run_reminders(supabase, gmail_service, template: str = "") -> int:
                 log("WARN", f"No interview_token for {email}, skipping reminder")
                 continue
 
-            # Use the correct link based on whether this is Round 1 or Round 2
-            if status == "ROUND_2_INVITED":
-                interview_link = f"{ROUND2_BASE_URL}/{interview_token}"
-            else:
-                interview_link = f"{INTERVIEW_BASE_URL}/{interview_token}"
+            # Only send if it's currently business hours in the candidate's location
+            job = candidate.get("jobs") or {}
+            location = job.get("location") or ""
+            if not is_local_business_hours(location):
+                log("INFO", f"Skipping reminder for {email} — outside business hours in '{location or 'unknown'}'")
+                continue
 
+            interview_link = (
+                f"{ROUND2_BASE_URL}/{interview_token}"
+                if status == "ROUND_2_INVITED"
+                else f"{INTERVIEW_BASE_URL}/{interview_token}"
+            )
             is_round_2 = status == "ROUND_2_INVITED"
-            log("INFO", f"Sending reminder to {email} (status: {status})")
+
+            log("INFO", f"Sending reminder to {email} (status: {status}, location: {location or 'unknown'})")
             send_reminder_email(gmail_service, email, full_name, interview_link, is_round_2=is_round_2, template=template)
 
-            # Mark reminder as sent
             supabase.table("candidates").update({
                 "reminder_sent_at": datetime.now(timezone.utc).isoformat()
             }).eq("id", candidate_id).execute()
 
             log("SUCCESS", f"Reminder sent to {email}")
-            # Rate limit: only send 1 reminder per run to avoid spam filters
-            return 1
+            sent += 1
 
         except Exception as e:
             log("ERROR", f"Failed to send reminder to {candidate.get('email', 'unknown')}: {e}")
 
-    return 0
+    return sent
 
 
 def fetch_round_2_approved_candidates(supabase):
@@ -753,14 +812,15 @@ def run_mailer() -> tuple[int, int, int, int]:
     tmpl_invite = templates.get("email_round1_invite", "")
     tmpl_round2 = templates.get("email_round2_invite", "")
     tmpl_reminder = templates.get("email_reminder", "")
-    tmpl_dubai = templates.get("email_dubai_form", "")
+    # tmpl_dubai = templates.get("email_dubai_form", "")  # Eligibility form disabled
 
     dubai_sent, invites_sent, failed = 0, 0, 0
 
-    # --- Phase 1: Send interview invites to Dubai candidates who passed Tally form ---
+    # --- Phase 1: Send interview invites to candidates who previously passed the Tally form ---
+    # (Eligibility form is now disabled for new candidates; this drains any existing FORM_COMPLETED queue)
     form_completed = fetch_form_completed_candidates(supabase)
     if form_completed:
-        log("INFO", f"Found {len(form_completed)} Dubai candidate(s) who passed eligibility form")
+        log("INFO", f"Found {len(form_completed)} candidate(s) in FORM_COMPLETED state — sending interview invites")
 
     for candidate in form_completed:
         try:
@@ -801,22 +861,24 @@ def run_mailer() -> tuple[int, int, int, int]:
                 failed += 1
                 continue
 
-            if is_dubai_role(candidate):
-                # Dubai role → Send Tally eligibility form
-                job = candidate.get("jobs")
-                job_title = job.get("title", "Open Position") if job else "Open Position"
-                log("INFO", f"Dubai role detected for {email} (score: {score})")
-                send_dubai_questionnaire(gmail_service, email, full_name, interview_token, job_title, template=tmpl_dubai)
-                update_candidate_status(supabase, candidate_id, "QUESTIONNAIRE_SENT")
-                log("SUCCESS", f"Dubai eligibility form sent to {email}")
-                dubai_sent += 1
-            else:
-                # Non-Dubai role → Send interview link directly
-                log("INFO", f"Non-Dubai role for {email} (score: {score}) - sending interview invite")
-                send_interview_invite(gmail_service, email, full_name, interview_token, template=tmpl_invite)
-                update_candidate_status(supabase, candidate_id, "INVITE_SENT")
-                log("SUCCESS", f"Interview invite sent to {email}")
-                invites_sent += 1
+            # --- Eligibility form temporarily disabled ---
+            # All candidates receive the interview invite directly regardless of location.
+            # To re-enable Dubai form routing, uncomment the block below and remove this block.
+            #
+            # if is_dubai_role(candidate):
+            #     job = candidate.get("jobs")
+            #     job_title = job.get("title", "Open Position") if job else "Open Position"
+            #     log("INFO", f"Dubai role detected for {email} (score: {score})")
+            #     send_dubai_questionnaire(gmail_service, email, full_name, interview_token, job_title, template=tmpl_dubai)
+            #     update_candidate_status(supabase, candidate_id, "QUESTIONNAIRE_SENT")
+            #     log("SUCCESS", f"Dubai eligibility form sent to {email}")
+            #     dubai_sent += 1
+            # else:
+            log("INFO", f"Sending interview invite to {email} (score: {score})")
+            send_interview_invite(gmail_service, email, full_name, interview_token, template=tmpl_invite)
+            update_candidate_status(supabase, candidate_id, "INVITE_SENT")
+            log("SUCCESS", f"Interview invite sent to {email}")
+            invites_sent += 1
 
         except Exception as e:
             log("ERROR", f"Failed to process {candidate.get('email', 'unknown')}: {e}")
