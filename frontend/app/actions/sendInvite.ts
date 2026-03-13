@@ -200,7 +200,7 @@ export async function sendInterviewInvite(candidateId: number): Promise<SendInvi
 
         const rawMessage = createEmail(
           candidate.email,
-          `You're Invited - AI Interview for ${jobTitle} at ${COMPANY_NAME}`,
+          `You're Invited to an Interview with ${COMPANY_NAME}`,
           htmlBody
         );
 
@@ -307,7 +307,7 @@ export async function inviteToRound2(candidateId: number): Promise<SendInviteRes
 
         const rawMessage = createEmail(
           candidate.email,
-          `Great news about your ${COMPANY_NAME} application`,
+          `Congratulations! You've been shortlisted for the ${jobTitle} role`,
           htmlBody
         );
 

@@ -63,6 +63,7 @@ interface CandidatePanelProps {
   candidate: PanelCandidate | null;
   open: boolean;
   onClose: () => void;
+  onInviteR1: (id: number) => void;
   onInviteR2: (id: number) => void;
   onInviteR3: (id: number) => void;
   onReject: (candidate: PanelCandidate) => void;
@@ -263,6 +264,7 @@ export function CandidatePanel({
   candidate,
   open,
   onClose,
+  onInviteR1,
   onInviteR2,
   onInviteR3,
   onReject,
@@ -532,16 +534,23 @@ export function CandidatePanel({
 
         {/* Footer — pinned action bar with Invite/Reject/Add Note */}
         <div className="px-5 py-3 border-t border-[#1E293B] flex gap-2 flex-shrink-0 flex-wrap">
-          {/* Primary action: context-aware invite button based on candidate stage */}
+          {/* Primary action: context-aware invite button — shown for all candidates including rejected */}
           {(() => {
-            const isRejected = ['REJECTED', 'CV_REJECTED', 'REJECTED_VISA'].includes(candidate.status);
             const r1Done = candidate.rating !== null;
             const r2Invited = ['ROUND_2_INVITED', 'ROUND_2_APPROVED'].includes(candidate.status);
             const r2Done = candidate.round_2_rating !== null;
             const r3Done = candidate.round_3_rating !== null;
 
-            if (isRejected || !r1Done) return null;              // Rejected or R1 not done — no invite button
-            if (!r2Done && !r2Invited) return (                  // R1 done, not yet invited to R2
+            if (!r1Done) return (                                // R1 not done — invite to R1
+              <Button
+                size="sm"
+                onClick={() => { onInviteR1(candidate.id); onClose(); }}
+                className="h-[34px] text-[12px] bg-[#6366F1] hover:bg-[#4F46E5] text-white"
+              >
+                Invite to R1
+              </Button>
+            );
+            if (!r2Done && !r2Invited) return (                  // R1 done, not yet in R2
               <Button
                 size="sm"
                 onClick={() => { onInviteR2(candidate.id); onClose(); }}

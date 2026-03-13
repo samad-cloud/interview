@@ -171,7 +171,13 @@ export function CandidateTableRow({ candidate, onView, onInvite, onReject }: Can
                   <Send className="w-3 h-3" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent>Invite</TooltipContent>
+              <TooltipContent>
+                {candidate.round_2_rating !== null
+                  ? 'Invite to R3'
+                  : candidate.rating !== null
+                  ? 'Invite to R2'
+                  : 'Invite to R1'}
+              </TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>

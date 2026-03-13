@@ -1590,6 +1590,7 @@ export default function DashboardPage() {
         candidate={selectedCandidate}
         open={!!selectedCandidate}
         onClose={() => setSelectedCandidate(null)}
+        onInviteR1={(id) => handleSendInvite(id)}
         onInviteR2={(id) => handleInviteRound2(id)}
         onInviteR3={(id) => handleInviteRound3(id)}
         onReject={(c) => handleRejectClick(c as Parameters<typeof handleRejectClick>[0])}
