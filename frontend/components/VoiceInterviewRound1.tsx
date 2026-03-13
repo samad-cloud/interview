@@ -503,10 +503,23 @@ ${dossierText ? `=== ADDITIONAL FOCUS AREAS ===\n${dossierText}` : ''}`;
     }
   }, [stopMediaCheck, addToConversation, playBlob, startListening, firstName, jobTitle]);
 
+  // ── Done Speaking nudge: pulse + tooltip after 5s of unsubmitted transcript ─
+  const [showDoneSpeakingHint, setShowDoneSpeakingHint] = useState(false);
+
+  useEffect(() => {
+    if (isListening && !isSpeaking && transcript.trim()) {
+      const timer = setTimeout(() => setShowDoneSpeakingHint(true), 5000);
+      return () => clearTimeout(timer);
+    } else {
+      setShowDoneSpeakingHint(false);
+    }
+  }, [isListening, isSpeaking, transcript]);
+
   // ── Done Speaking button ──────────────────────────────────────────────────
   const handleDoneSpeaking = useCallback(() => {
     const text = finalTranscriptRef.current.trim();
     if (!text || isSpeakingRef.current) return;
+    setShowDoneSpeakingHint(false);
     sendToAI(text);
   }, [sendToAI]);
 
@@ -771,17 +784,27 @@ ${dossierText ? `=== ADDITIONAL FOCUS AREAS ===\n${dossierText}` : ''}`;
 
             {/* Done Speaking button */}
             <div className="px-5 pb-5 pt-3 border-t border-white/10">
-              <button
-                onClick={handleDoneSpeaking}
-                disabled={!isListening || isSpeaking || !transcript.trim()}
-                className={`w-full py-3.5 rounded-xl text-base font-semibold transition-all ${
-                  isListening && !isSpeaking && transcript.trim()
-                    ? 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/30'
-                    : 'bg-white/5 text-white/20 cursor-not-allowed'
-                }`}
-              >
-                {isSpeaking ? 'Serena is speaking...' : isListening ? 'Done Speaking' : 'Waiting...'}
-              </button>
+              <div className="relative">
+                {showDoneSpeakingHint && (
+                  <div className="absolute -top-12 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none z-10">
+                    <div className="bg-emerald-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap shadow-lg">
+                      Done speaking? Click here ↓
+                    </div>
+                    <div className="w-2 h-2 bg-emerald-500 rotate-45 -mt-1" />
+                  </div>
+                )}
+                <button
+                  onClick={handleDoneSpeaking}
+                  disabled={!isListening || isSpeaking || !transcript.trim()}
+                  className={`w-full py-3.5 rounded-xl text-base font-semibold transition-all ${
+                    isListening && !isSpeaking && transcript.trim()
+                      ? `bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/30 ${showDoneSpeakingHint ? 'animate-pulse' : ''}`
+                      : 'bg-white/5 text-white/20 cursor-not-allowed'
+                  }`}
+                >
+                  {isSpeaking ? 'Serena is speaking...' : isListening ? 'Done Speaking' : 'Waiting...'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
