@@ -4,6 +4,35 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Mic, CameraOff, Loader2, AlertCircle, Clock, Monitor } from 'lucide-react';
 import Image from 'next/image';
 
+// ── IDB chunk helpers (recording) ─────────────────────────────────────────────
+const IDB_NAME  = 'voice-r1-recording-chunks';
+const IDB_STORE = 'chunks';
+
+function idbOpen(): Promise<IDBDatabase> {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE, { autoIncrement: true });
+    req.onsuccess = () => res(req.result);
+    req.onerror   = () => rej(req.error);
+  });
+}
+function idbSaveChunk(db: IDBDatabase, chunk: Blob): Promise<void> {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).add(chunk);
+    tx.oncomplete = () => res();
+    tx.onerror    = () => rej(tx.error);
+  });
+}
+function idbClearChunks(db: IDBDatabase): Promise<void> {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).clear();
+    tx.oncomplete = () => res();
+    tx.onerror    = () => rej(tx.error);
+  });
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Stage = 'setup' | 'starting' | 'active' | 'analyzing' | 'ended' | 'connection-error';
 
@@ -70,6 +99,15 @@ export default function VoiceInterviewRound1({
   const checkStreamRef  = useRef<MediaStream | null>(null);  // camera+mic from media check
   const micStreamRef    = useRef<MediaStream | null>(null);  // mic stream, kept open for interview
   const screenStreamRef = useRef<MediaStream | null>(null);
+  // Recording
+  const audioCtxRef      = useRef<AudioContext | null>(null);
+  const recordingDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
+  const recorderRef      = useRef<MediaRecorder | null>(null);
+  const chunkDBRef       = useRef<IDBDatabase | null>(null);
+  const chunkIndexRef    = useRef(0);
+  const pendingUploadsRef = useRef<Promise<void>[]>([]);
+  const isRecordingRef   = useRef(false);
+  const recordingMimeRef = useRef('video/webm');
 
   // Deepgram STT
   const deepgramSocketRef   = useRef<WebSocket | null>(null);
@@ -133,10 +171,17 @@ You MUST include [END_INTERVIEW] at the very end.
 
 ${dossierText ? `=== ADDITIONAL FOCUS AREAS ===\n${dossierText}` : ''}`;
 
-  // ── TTS: play a blob ─────────────────────────────────────────────────────
+  // ── TTS: play a blob (routes TTS audio through AudioContext for recording) ─
   const playBlob = useCallback(async (blob: Blob) => {
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
+    if (audioCtxRef.current && recordingDestRef.current) {
+      try {
+        const src = audioCtxRef.current.createMediaElementSource(audio);
+        src.connect(recordingDestRef.current);
+        src.connect(audioCtxRef.current.destination);
+      } catch { /* ignore — AudioContext may not be running yet */ }
+    }
     await new Promise<void>((resolve) => {
       audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
       audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
@@ -338,15 +383,59 @@ ${dossierText ? `=== ADDITIONAL FOCUS AREAS ===\n${dossierText}` : ''}`;
       });
     } catch { /* non-fatal */ }
 
+    // Stop recording and finalize
+    const totalChunks = chunkIndexRef.current;
+    if (recorderRef.current && isRecordingRef.current) {
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(resolve, 5000);
+        recorderRef.current!.addEventListener('stop', () => { clearTimeout(timeout); resolve(); }, { once: true });
+        recorderRef.current!.stop();
+      });
+      isRecordingRef.current = false;
+    }
+
     // Stop all streams
     micStreamRef.current?.getTracks().forEach(t => t.stop());
     micStreamRef.current = null;
     screenStreamRef.current?.getTracks().forEach(t => t.stop());
     screenStreamRef.current = null;
 
+    audioCtxRef.current?.close();
+    audioCtxRef.current = null;
+    recordingDestRef.current = null;
+
+    // Upload & finalize recording
+    if (totalChunks > 0) {
+      try {
+        setUploadProgress(10);
+        await Promise.allSettled(pendingUploadsRef.current);
+        setUploadProgress(50);
+
+        await fetch('/api/finalize-recording', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            candidateId,
+            round: 1,
+            totalChunks,
+            mimeType: recordingMimeRef.current,
+          }),
+        });
+        setUploadProgress(100);
+      } catch (err) {
+        console.warn('[VoiceR1] Recording finalize failed (non-fatal):', err);
+        setUploadProgress(100);
+      }
+    }
+
+    if (chunkDBRef.current) {
+      idbClearChunks(chunkDBRef.current).catch(() => {});
+      chunkDBRef.current = null;
+    }
+
     stageRef.current = 'ended';
     setStage('ended');
-    setUploadProgress(100);
+    if (totalChunks === 0) setUploadProgress(100);
   }, [candidateId, candidateName, jobTitle, stopListening]);
 
   // Keep endInterviewRef stable
@@ -428,6 +517,26 @@ ${dossierText ? `=== ADDITIONAL FOCUS AREAS ===\n${dossierText}` : ''}`;
     analyserRef.current = null;
   }, []);
 
+  // ── Camera preview: attach stream once mediaCheckDone renders the <video> ─
+  useEffect(() => {
+    if (mediaCheckDone && checkVideoRef.current && checkStreamRef.current) {
+      checkVideoRef.current.srcObject = checkStreamRef.current;
+    }
+  }, [mediaCheckDone]);
+
+  // ── Upload recording chunk to server ─────────────────────────────────────
+  const uploadChunk = (idx: number, chunk: Blob): Promise<void> => {
+    const fd = new FormData();
+    fd.append('candidateId', candidateId);
+    fd.append('chunkIndex', String(idx));
+    fd.append('round', '1');
+    fd.append('mimeType', recordingMimeRef.current);
+    fd.append('chunk', chunk, `chunk_${idx}.webm`);
+    return fetch('/api/save-recording-chunk', { method: 'POST', body: fd })
+      .then(() => {})
+      .catch(() => {});
+  };
+
   // ── Screen share ──────────────────────────────────────────────────────────
   const requestScreenShare = useCallback(async () => {
     setScreenError(null);
@@ -467,6 +576,55 @@ ${dossierText ? `=== ADDITIONAL FOCUS AREAS ===\n${dossierText}` : ''}`;
 
       setStage('active');
       stageRef.current = 'active';
+
+      // ── Start recording: screen video + mic + TTS audio ───────────────────
+      try {
+        const audioCtx = new AudioContext();
+        audioCtxRef.current = audioCtx;
+        const dest = audioCtx.createMediaStreamDestination();
+        recordingDestRef.current = dest;
+
+        // Route mic through AudioContext destination
+        const micSource = audioCtx.createMediaStreamSource(micStream);
+        micSource.connect(dest);
+
+        // Also add screen audio if present
+        const screenAudioTracks = screenStreamRef.current?.getAudioTracks() ?? [];
+        if (screenAudioTracks.length > 0) {
+          const sysSource = audioCtx.createMediaStreamSource(new MediaStream(screenAudioTracks));
+          sysSource.connect(dest);
+        }
+
+        // Build combined stream: screen video + mixed audio
+        const videoTracks = screenStreamRef.current?.getVideoTracks() ?? [];
+        const recordingStream = new MediaStream([...videoTracks, ...dest.stream.getAudioTracks()]);
+
+        const db = await idbOpen();
+        await idbClearChunks(db);
+        chunkDBRef.current = db;
+        chunkIndexRef.current = 0;
+        pendingUploadsRef.current = [];
+
+        const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
+          .find(t => MediaRecorder.isTypeSupported(t)) ?? 'video/webm';
+        recordingMimeRef.current = mimeType;
+
+        const recorder = new MediaRecorder(recordingStream, { mimeType });
+        recorder.ondataavailable = async (e) => {
+          if (e.data?.size > 0) {
+            const idx = chunkIndexRef.current++;
+            if (chunkDBRef.current) {
+              try { await idbSaveChunk(chunkDBRef.current, e.data); } catch { /* ignore */ }
+            }
+            pendingUploadsRef.current.push(uploadChunk(idx, e.data));
+          }
+        };
+        recorderRef.current = recorder;
+        recorder.start(30_000); // 30s chunks
+        isRecordingRef.current = true;
+      } catch (recErr) {
+        console.warn('[VoiceR1] Recording setup failed (non-fatal):', recErr);
+      }
 
       // Play welcome TTS (pre-fetched on mount — instant or near-instant)
       const welcomeText = `Hi ${firstName}, great to meet you! I'm Serena, your interviewer for the ${jobTitle} role at Printerpix. It's completely normal to feel a few butterflies — this is a new experience for most people. Today we'll focus on concrete examples from your experience. Take your time, think out loud if it helps, and ask me to repeat anything. Before we jump in, could you confirm that you can hear me clearly? Once you reply, please click the green Done Speaking button.`;
