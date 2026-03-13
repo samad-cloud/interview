@@ -347,7 +347,7 @@ REMINDER_EMAIL_HTML = """<!DOCTYPE html>
               </p>
 
               <p style="margin:0 0 28px; color:#374151; font-size:15px; line-height:1.7;">
-                To keep your application moving forward, we'd appreciate if you could complete this within the next 2&ndash;3 days. We're reviewing candidates on a rolling basis and would love to include you in our upcoming review cycle.
+                We are moving into the final selection phase early next week. To ensure your application is included in this review cycle, please complete the interview by Sunday evening.
               </p>
 
               <p style="margin:0 0 28px; color:#374151; font-size:15px; line-height:1.7;">
