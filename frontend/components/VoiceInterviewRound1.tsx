@@ -465,11 +465,6 @@ ${dossierText ? `=== ADDITIONAL FOCUS AREAS ===\n${dossierText}` : ''}`;
         : await navigator.mediaDevices.getUserMedia({ audio: true });
       micStreamRef.current = micStream;
 
-      // Attach camera to active video element
-      if (camVideoRef.current && checkStreamRef.current) {
-        camVideoRef.current.srcObject = checkStreamRef.current;
-      }
-
       setStage('active');
       stageRef.current = 'active';
 
@@ -502,6 +497,13 @@ ${dossierText ? `=== ADDITIONAL FOCUS AREAS ===\n${dossierText}` : ''}`;
       stageRef.current = 'setup';
     }
   }, [stopMediaCheck, addToConversation, playBlob, startListening, firstName, jobTitle]);
+
+  // ── Attach camera stream once active stage has rendered ──────────────────
+  useEffect(() => {
+    if (stage === 'active' && camVideoRef.current && checkStreamRef.current) {
+      camVideoRef.current.srcObject = checkStreamRef.current;
+    }
+  }, [stage]);
 
   // ── Done Speaking nudge: pulse + tooltip after 5s of unsubmitted transcript ─
   const [showDoneSpeakingHint, setShowDoneSpeakingHint] = useState(false);
