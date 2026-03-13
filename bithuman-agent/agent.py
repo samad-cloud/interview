@@ -105,7 +105,7 @@ async def entrypoint(ctx: JobContext):
         f"Hello {first_name}, thank you for joining us for the final stage. "
         f"I've reviewed your previous conversations, and today we're going to go much deeper. "
         f"Let's begin — give me a brief overview of your background.",
-        allow_interruptions=True,
+        allow_interruptions=False,
     )
 
     # ── Session lifecycle management ─────────────────────────────────────────
