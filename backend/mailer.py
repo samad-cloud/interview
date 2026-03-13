@@ -23,6 +23,8 @@ INVITE_DELAY_HOURS = 1
 REMINDER_MIN_GAP_HOURS = 5
 # Start sending reminders this many hours after the invite was sent
 REMINDER_START_HOURS = 24
+# Maximum reminders to send in a single mailer run (prevents spam filter triggers)
+MAX_REMINDERS_PER_RUN = 10
 # Candidate's local business hours window for sending reminders
 REMINDER_LOCAL_START_HOUR = 8   # 8 AM local
 REMINDER_LOCAL_END_HOUR = 18    # 6 PM local
@@ -687,10 +689,13 @@ def run_reminders(supabase, gmail_service, template: str = "") -> int:
         log("INFO", "No candidates need reminders")
         return 0
 
-    log("INFO", f"Found {len(candidates)} candidate(s) eligible for reminders")
+    log("INFO", f"Found {len(candidates)} candidate(s) eligible for reminders (cap: {MAX_REMINDERS_PER_RUN}/run)")
     sent = 0
 
     for candidate in candidates:
+        if sent >= MAX_REMINDERS_PER_RUN:
+            log("INFO", f"Reminder cap reached ({MAX_REMINDERS_PER_RUN}/run) — deferring remaining to next run")
+            break
         try:
             email = candidate["email"]
             full_name = candidate.get("full_name", "Candidate")
