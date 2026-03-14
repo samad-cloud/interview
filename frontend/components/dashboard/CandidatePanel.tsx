@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, ChevronRight, Download } from 'lucide-react';
+import { X, ChevronRight, Download, Loader2, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import VideoPlayer from '@/components/VideoPlayer';
 
@@ -70,6 +70,8 @@ interface CandidatePanelProps {
   onReject: (candidate: PanelCandidate) => void;
   onSaveNote: (id: number, noteText: string) => void;
   onReset: (id: number) => void;
+  onStitch?: (round: 1 | 2 | 3) => void;
+  stitchingRound?: 1 | 2 | 3 | null;
 }
 
 // ── Avatar helpers (copied from CandidateTableRow.tsx — not imported to avoid coupling) ──
@@ -189,31 +191,69 @@ function RecordingCard({
   videoUrl,
   activeRecording,
   onToggle,
+  onStitch,
+  stitching,
 }: {
   roundLabel: string;
   roundKey: 'r1' | 'r2' | 'r3';
   videoUrl: string | null;
   activeRecording: 'r1' | 'r2' | 'r3' | null;
   onToggle: (key: 'r1' | 'r2' | 'r3') => void;
+  onStitch?: () => void;
+  stitching?: boolean;
 }) {
   const isActive = activeRecording === roundKey;
   if (!videoUrl) return null;
   return (
-    <button
-      onClick={() => onToggle(roundKey)}
-      className="bg-[#1A2332] border border-[#1E293B] rounded-[10px] p-3 flex items-center gap-2.5 text-left w-full transition-colors hover:border-[#6366F1]/50"
-      style={{ borderColor: isActive ? 'rgba(99,102,241,0.5)' : undefined }}
-    >
-      <div className="w-8 h-8 rounded-lg bg-[#6366F1]/10 flex items-center justify-center flex-shrink-0">
-        <svg className="w-4 h-4" style={{ color: '#6366F1' }} fill="currentColor" viewBox="0 0 20 20">
-          <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
-        </svg>
+    <div className="flex items-center gap-2">
+      <button
+        onClick={() => onToggle(roundKey)}
+        className="bg-[#1A2332] border border-[#1E293B] rounded-[10px] p-3 flex items-center gap-2.5 text-left flex-1 transition-colors hover:border-[#6366F1]/50"
+        style={{ borderColor: isActive ? 'rgba(99,102,241,0.5)' : undefined }}
+      >
+        <div className="w-8 h-8 rounded-lg bg-[#6366F1]/10 flex items-center justify-center flex-shrink-0">
+          <svg className="w-4 h-4" style={{ color: '#6366F1' }} fill="currentColor" viewBox="0 0 20 20">
+            <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
+          </svg>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-[12px] font-semibold text-[#F9FAFB]">{roundLabel}</p>
+          <p className="text-[11px] text-[#6B7280]">{isActive ? 'Click to hide' : 'Click to play'}</p>
+        </div>
+      </button>
+      {onStitch && (
+        <button
+          onClick={onStitch}
+          disabled={stitching}
+          title="Rebuild recording from chunks"
+          className="bg-[#1A2332] border border-[#1E293B] rounded-[10px] p-2.5 flex-shrink-0 hover:border-yellow-500/50 transition-colors disabled:opacity-50"
+        >
+          {stitching ? <Loader2 className="w-4 h-4 animate-spin text-yellow-400" /> : <Wrench className="w-4 h-4 text-yellow-400" />}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── StitchCard — shown when a round completed but recording was never assembled ──
+function StitchCard({ roundLabel, onStitch, stitching }: { roundLabel: string; onStitch: () => void; stitching: boolean }) {
+  return (
+    <div className="bg-[#1A2332] border border-yellow-500/20 rounded-[10px] p-3 flex items-center gap-2.5">
+      <div className="w-8 h-8 rounded-lg bg-yellow-500/10 flex items-center justify-center flex-shrink-0">
+        <Wrench className="w-4 h-4 text-yellow-400" />
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-[12px] font-semibold text-[#F9FAFB]">{roundLabel}</p>
-        <p className="text-[11px] text-[#6B7280]">{isActive ? 'Click to hide' : 'Click to play'}</p>
+        <p className="text-[11px] text-yellow-400/70">Recording not assembled</p>
       </div>
-    </button>
+      <button
+        onClick={onStitch}
+        disabled={stitching}
+        className="text-[11px] font-medium text-yellow-400 hover:text-yellow-300 disabled:opacity-50 flex items-center gap-1 flex-shrink-0 border border-yellow-500/30 rounded-md px-2.5 py-1 hover:border-yellow-500/60 transition-colors"
+      >
+        {stitching ? <><Loader2 className="w-3 h-3 animate-spin mr-1" />Stitching…</> : 'Stitch Now'}
+      </button>
+    </div>
   );
 }
 
@@ -271,6 +311,8 @@ export function CandidatePanel({
   onReject,
   onSaveNote,
   onReset,
+  onStitch,
+  stitchingRound,
 }: CandidatePanelProps) {
   const [activeRecording, setActiveRecording] = useState<'r1' | 'r2' | 'r3' | null>(null);
   const [r1Open, setR1Open] = useState(false);
@@ -436,33 +478,62 @@ export function CandidatePanel({
           })()}
 
           {/* Recordings section */}
-          {(candidate.video_url || candidate.round_2_video_url || candidate.round_3_recording_url) && (
+          {(candidate.video_url || candidate.round_2_video_url || candidate.round_3_recording_url ||
+            candidate.interview_transcript || candidate.round_2_transcript || candidate.round_3_transcript) && (
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280] mb-2">Recordings</p>
               <div className="flex flex-col gap-2">
-                <RecordingCard
-                  roundLabel="Round 1 — Personality"
-                  roundKey="r1"
-                  videoUrl={candidate.video_url}
-                  activeRecording={activeRecording}
-                  onToggle={(key) => setActiveRecording(prev => prev === key ? null : key)}
-                />
-                <RecordingCard
-                  roundLabel="Round 2 — Technical"
-                  roundKey="r2"
-                  videoUrl={candidate.round_2_video_url}
-                  activeRecording={activeRecording}
-                  onToggle={(key) => setActiveRecording(prev => prev === key ? null : key)}
-                />
-                {candidate.round_3_recording_url && (
+                {candidate.video_url ? (
+                  <RecordingCard
+                    roundLabel="Round 1 — Personality"
+                    roundKey="r1"
+                    videoUrl={candidate.video_url}
+                    activeRecording={activeRecording}
+                    onToggle={(key) => setActiveRecording(prev => prev === key ? null : key)}
+                    onStitch={onStitch ? () => onStitch(1) : undefined}
+                    stitching={stitchingRound === 1}
+                  />
+                ) : candidate.interview_transcript && onStitch ? (
+                  <StitchCard
+                    roundLabel="Round 1 — Personality"
+                    onStitch={() => onStitch(1)}
+                    stitching={stitchingRound === 1}
+                  />
+                ) : null}
+                {candidate.round_2_video_url ? (
+                  <RecordingCard
+                    roundLabel="Round 2 — Technical"
+                    roundKey="r2"
+                    videoUrl={candidate.round_2_video_url}
+                    activeRecording={activeRecording}
+                    onToggle={(key) => setActiveRecording(prev => prev === key ? null : key)}
+                    onStitch={onStitch ? () => onStitch(2) : undefined}
+                    stitching={stitchingRound === 2}
+                  />
+                ) : candidate.round_2_transcript && onStitch ? (
+                  <StitchCard
+                    roundLabel="Round 2 — Technical"
+                    onStitch={() => onStitch(2)}
+                    stitching={stitchingRound === 2}
+                  />
+                ) : null}
+                {candidate.round_3_recording_url ? (
                   <RecordingCard
                     roundLabel="Round 3 — Deep Dive"
                     roundKey="r3"
                     videoUrl={candidate.round_3_recording_url}
                     activeRecording={activeRecording}
                     onToggle={(key) => setActiveRecording(prev => prev === key ? null : key)}
+                    onStitch={onStitch ? () => onStitch(3) : undefined}
+                    stitching={stitchingRound === 3}
                   />
-                )}
+                ) : candidate.round_3_transcript && onStitch ? (
+                  <StitchCard
+                    roundLabel="Round 3 — Deep Dive"
+                    onStitch={() => onStitch(3)}
+                    stitching={stitchingRound === 3}
+                  />
+                ) : null}
                 {/* Inline player — renders below cards when a recording is active */}
                 {activeRecording && (
                   <VideoPlayer

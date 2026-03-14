@@ -1610,6 +1610,8 @@ export default function DashboardPage() {
         onReject={(c) => handleRejectClick(c as Parameters<typeof handleRejectClick>[0])}
         onSaveNote={(id, text) => { setNoteText(text); handleSaveNote(id); }}
         onReset={(id) => handleResetInterview(id)}
+        onStitch={handleStitchRecording}
+        stitchingRound={stitchingRound}
       />
 
       {/* Unified Bulk Action Modal: confirm → progress → done */}

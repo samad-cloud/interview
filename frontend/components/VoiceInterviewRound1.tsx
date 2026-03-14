@@ -417,7 +417,7 @@ ${dossierText ? `=== ADDITIONAL FOCUS AREAS ===\n${dossierText}` : ''}`;
           body: JSON.stringify({
             candidateId,
             round: 1,
-            totalChunks,
+            chunkCount: totalChunks,
             mimeType: recordingMimeRef.current,
           }),
         });
