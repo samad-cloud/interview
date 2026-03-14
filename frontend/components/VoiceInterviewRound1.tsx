@@ -643,7 +643,10 @@ ${dossierText ? `=== ADDITIONAL FOCUS AREAS ===\n${dossierText}` : ''}`;
               .find(t => MediaRecorder.isTypeSupported(t)) ?? 'audio/webm');
         recordingMimeRef.current = mimeType;
 
-        const recorder = new MediaRecorder(recordingStream, { mimeType });
+        // 500kbps × 10s ≈ 625KB/chunk — stays well under Vercel's 4.5MB body limit.
+        const recorderOptions: MediaRecorderOptions = { mimeType };
+        if (videoTracks.length > 0) recorderOptions.videoBitsPerSecond = 500_000;
+        const recorder = new MediaRecorder(recordingStream, recorderOptions);
         recorder.ondataavailable = async (e) => {
           if (e.data?.size > 0) {
             const idx = chunkIndexRef.current++;
@@ -654,7 +657,7 @@ ${dossierText ? `=== ADDITIONAL FOCUS AREAS ===\n${dossierText}` : ''}`;
           }
         };
         recorderRef.current = recorder;
-        recorder.start(30_000); // 30s chunks
+        recorder.start(10_000); // 10s chunks
         isRecordingRef.current = true;
       } catch (recErr) {
         console.warn('[VoiceR1] Recording setup failed (non-fatal):', recErr);

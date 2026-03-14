@@ -519,7 +519,9 @@ ${candidateName} is the candidate. They answer. You probe.`;
       const { token, url } = tokenData;
 
       // 5. Start recording only after token is confirmed
-      const recorder = new MediaRecorder(recordingStream, { mimeType, videoBitsPerSecond: 1_000_000 });
+      // 500kbps × 10s ≈ 625KB/chunk — stays well under Vercel's 4.5MB body limit.
+      // Previous 1Mbps × 30s ≈ 4.2MB/chunk caused silent 413 rejections on most chunks.
+      const recorder = new MediaRecorder(recordingStream, { mimeType, videoBitsPerSecond: 500_000 });
       recorder.ondataavailable = async (e) => {
         if (e.data?.size > 0) {
           const idx = chunkIndexRef.current++;
@@ -530,7 +532,7 @@ ${candidateName} is the candidate. They answer. You probe.`;
         }
       };
       recorderRef.current = recorder;
-      recorder.start(30_000);
+      recorder.start(10_000);
       isRecordingRef.current = true;
 
       // 6. Connect to LiveKit room
