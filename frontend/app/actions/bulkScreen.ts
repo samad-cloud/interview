@@ -89,12 +89,12 @@ TASKS:
 4. Calculate a Match Score (0-100) based strictly on how well they match the job requirements.
    - 80-100: Exceptional match (has all required skills + experience level)
    - 60-79: Good match (has most requirements)
-   - 40-59: Partial match (missing key requirements)
-   - 0-39: Poor match (significantly underqualified)
+   - 50-59: Partial match but relevant background — worth interviewing
+   - 0-49: Poor match (significantly underqualified or irrelevant background)
 5. Write a 1-sentence reasoning explaining the score.
-6. Set status: "RECOMMENDED" if score >= 50, otherwise "REJECT".
+6. Set status: "RECOMMENDED" if score >= 50, otherwise "REJECT". Score 50+ means proceed, not perfection.
 
-CONTEXT: We are looking for 'Go-Getters' and high achievers. Be strict.`;
+CONTEXT: We are looking for 'Go-Getters' and high achievers. Pass anyone with relevant experience (score >= 50).`;
 
     const result = await model.generateContent([
       {
