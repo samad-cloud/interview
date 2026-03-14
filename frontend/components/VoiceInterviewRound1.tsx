@@ -605,8 +605,13 @@ ${dossierText ? `=== ADDITIONAL FOCUS AREAS ===\n${dossierText}` : ''}`;
         chunkIndexRef.current = 0;
         pendingUploadsRef.current = [];
 
-        const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
-          .find(t => MediaRecorder.isTypeSupported(t)) ?? 'video/webm';
+        // Pick mimeType based on whether video tracks are available.
+        // Using a video/* mimeType with an audio-only stream produces 0-byte chunks.
+        const mimeType = videoTracks.length > 0
+          ? (['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
+              .find(t => MediaRecorder.isTypeSupported(t)) ?? 'video/webm')
+          : (['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+              .find(t => MediaRecorder.isTypeSupported(t)) ?? 'audio/webm');
         recordingMimeRef.current = mimeType;
 
         const recorder = new MediaRecorder(recordingStream, { mimeType });
