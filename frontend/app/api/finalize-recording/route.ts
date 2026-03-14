@@ -50,45 +50,65 @@ export async function POST(req: NextRequest) {
 
     console.log(`[Recording] Finalize started — candidate ${candidateId} (Round ${round}), expecting ${chunkCount} chunks`);
 
-    // Download all chunks from Supabase in parallel
-    const downloadResults = await Promise.all(
-      Array.from({ length: chunkCount }, async (_, i) => {
-        const path = `chunks/${folder}/${candidateId}/chunk_${i}.webm`;
-        const { data, error } = await supabase.storage
-          .from('interview-recordings')
-          .download(path);
+    // Download chunks in sequential batches to avoid holding all blobs in memory at once.
+    // Each chunk's ArrayBuffer is written into the assembled buffer immediately and released,
+    // keeping peak RAM close to (total video size + one batch of blobs) rather than 3× total.
+    const BATCH_SIZE = 10;
+    const chunkSizes: number[] = [];
+    // First pass: download sequentially in batches, accumulate per-chunk sizes
+    const chunkBuffers: (ArrayBuffer | null)[] = new Array(chunkCount).fill(null);
+    let downloadedCount = 0;
 
-        if (error) {
-          const reason = error.message || JSON.stringify(error);
-          console.warn(`[Recording] Chunk ${i} download failed — candidate ${candidateId}: ${reason}`);
-          return null;
+    for (let batchStart = 0; batchStart < chunkCount; batchStart += BATCH_SIZE) {
+      const batchEnd = Math.min(batchStart + BATCH_SIZE, chunkCount);
+      const batchResults = await Promise.all(
+        Array.from({ length: batchEnd - batchStart }, async (_, j) => {
+          const i = batchStart + j;
+          const path = `chunks/${folder}/${candidateId}/chunk_${i}.webm`;
+          const { data, error } = await supabase.storage
+            .from('interview-recordings')
+            .download(path);
+          if (error || !data) {
+            const reason = error ? (error.message || JSON.stringify(error)) : 'no data';
+            console.warn(`[Recording] Chunk ${i} download failed — candidate ${candidateId}: ${reason}`);
+            return { index: i, buffer: null };
+          }
+          const buffer = await data.arrayBuffer();
+          return { index: i, buffer };
+        })
+      );
+      for (const r of batchResults) {
+        if (r.buffer) {
+          chunkBuffers[r.index] = r.buffer;
+          downloadedCount++;
         }
-        return { index: i, blob: data };
-      })
-    );
+      }
+    }
 
-    const valid = downloadResults.filter((r): r is { index: number; blob: Blob } => r !== null);
-    console.log(`[Recording] Downloaded ${valid.length}/${chunkCount} chunks — candidate ${candidateId} (Round ${round})`);
+    const validCount = chunkBuffers.filter(b => b !== null).length;
+    console.log(`[Recording] Downloaded ${validCount}/${chunkCount} chunks — candidate ${candidateId} (Round ${round})`);
 
-    if (valid.length === 0) {
+    if (validCount === 0) {
       console.error(`[Recording] No chunks available — candidate ${candidateId} (Round ${round})`);
       return NextResponse.json({ success: false, error: 'No chunks found in storage' });
     }
 
-    // Sort by chunk index and concatenate into a single buffer
-    valid.sort((a, b) => a.index - b.index);
-    const buffers = await Promise.all(valid.map(r => r.blob.arrayBuffer()));
-    const totalBytes = buffers.reduce((sum, b) => sum + b.byteLength, 0);
+    // Calculate total size then assemble, releasing each chunk buffer immediately after copying
+    const totalBytes = chunkBuffers.reduce((sum, b) => sum + (b ? b.byteLength : 0), 0);
     const assembled = new Uint8Array(totalBytes);
     let offset = 0;
-    for (const buf of buffers) {
-      assembled.set(new Uint8Array(buf), offset);
-      offset += buf.byteLength;
+    for (let i = 0; i < chunkBuffers.length; i++) {
+      const buf = chunkBuffers[i];
+      if (buf) {
+        assembled.set(new Uint8Array(buf), offset);
+        offset += buf.byteLength;
+        chunkBuffers[i] = null; // release reference — allow GC before next chunk
+      }
     }
 
     const sizeMB = (totalBytes / 1024 / 1024).toFixed(2);
     const uploadStart = Date.now();
-    console.log(`[Recording] Assembled ${sizeMB}MB from ${valid.length} chunks — candidate ${candidateId}, uploading final file`);
+    console.log(`[Recording] Assembled ${sizeMB}MB from ${validCount} chunks — candidate ${candidateId}, uploading final file`);
 
     // Upload the assembled final file
     const timestamp = Date.now();
@@ -130,7 +150,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: dbError.message });
     }
 
-    console.log(`[Recording] Finalized — candidate ${candidateId} (Round ${round}), ${sizeMB}MB, ${valid.length}/${chunkCount} chunks, url: ${publicUrl}`);
+    console.log(`[Recording] Finalized — candidate ${candidateId} (Round ${round}), ${sizeMB}MB, ${validCount}/${chunkCount} chunks, url: ${publicUrl}`);
     return NextResponse.json({ success: true, url: publicUrl });
 
   } catch (err) {
