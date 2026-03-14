@@ -545,8 +545,11 @@ ${dossierText ? `=== ADDITIONAL FOCUS AREAS ===\n${dossierText}` : ''}`;
         video: { displaySurface: 'monitor' } as MediaTrackConstraints,
         audio: true,
       });
-      // End interview if candidate stops screen share
+      // End interview if candidate stops screen share mid-session
       stream.getVideoTracks()[0].addEventListener('ended', () => {
+        if (stageRef.current === 'active') {
+          alert('Screen sharing was stopped. Your interview has been submitted.');
+        }
         endInterviewRef.current?.();
       });
       screenStreamRef.current = stream;
