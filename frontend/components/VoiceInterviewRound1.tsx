@@ -533,6 +533,7 @@ ${dossierText ? `=== ADDITIONAL FOCUS AREAS ===\n${dossierText}` : ''}`;
     } catch {
       setCameraError(true);
       setMicError(true);
+      setMediaCheckDone(true);
     }
   }, []);
 
@@ -817,12 +818,12 @@ ${dossierText ? `=== ADDITIONAL FOCUS AREAS ===\n${dossierText}` : ''}`;
 
             {/* Action buttons */}
             <div className="flex flex-col items-center gap-3">
-              {!mediaCheckDone ? (
+              {(!mediaCheckDone || cameraError || micError) ? (
                 <button
                   onClick={startMediaCheck}
                   className="px-8 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white text-lg font-semibold rounded-xl transition-all transform hover:scale-105 shadow-lg shadow-cyan-500/25"
                 >
-                  Check Camera &amp; Mic
+                  {(cameraError || micError) ? 'Retry Camera & Mic Check' : 'Check Camera & Mic'}
                 </button>
               ) : !screenShared ? (
                 <button
