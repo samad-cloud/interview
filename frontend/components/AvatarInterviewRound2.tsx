@@ -588,7 +588,10 @@ ${candidateName} is the candidate. They answer. You probe.`;
           setLastAgentText(text.replace('[END_INTERVIEW]', '').trim());
         }
 
-        if (isFinal) {
+        // Agent speech: always add (TTS output is inherently final, lk.transcription_final is not set by the SDK).
+        // Candidate speech: only add final STT segments (isFinal=true), skip interim segments.
+        const shouldAppend = isAgent || isFinal;
+        if (shouldAppend) {
           transcriptRef.current += `\n${speaker}:\n${text}\n`;
           if (isAgent) {
             setAgentTurnCount(n => n + 1);
