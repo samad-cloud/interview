@@ -27,6 +27,14 @@ export async function POST(request: Request) {
     if (supabaseUrl && supabaseKey) {
       const supabase = createClient(supabaseUrl, supabaseKey);
 
+      // Auto-clear stale IN_PROGRESS slots older than 2 hours
+      const staleThreshold = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      await supabase
+        .from('candidates')
+        .update({ round_2_avatar_status: 'STALE' })
+        .eq('round_2_avatar_status', 'IN_PROGRESS')
+        .lt('round_2_avatar_status_updated_at', staleThreshold);
+
       if (round === 2) {
         const { count } = await supabase
           .from('candidates')
@@ -43,7 +51,7 @@ export async function POST(request: Request) {
         // Mark slot as in-use
         await supabase
           .from('candidates')
-          .update({ round_2_avatar_status: 'IN_PROGRESS' })
+          .update({ round_2_avatar_status: 'IN_PROGRESS', round_2_avatar_status_updated_at: new Date().toISOString() })
           .eq('id', candidateId);
       } else {
         const { count } = await supabase
