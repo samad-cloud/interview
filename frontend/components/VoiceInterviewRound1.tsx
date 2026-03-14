@@ -441,6 +441,32 @@ ${dossierText ? `=== ADDITIONAL FOCUS AREAS ===\n${dossierText}` : ''}`;
   // Keep endInterviewRef stable
   useEffect(() => { endInterviewRef.current = endInterview; }, [endInterview]);
 
+  // ── Abort interview (screen share stopped — no scoring, candidate can retake) ──
+  const abortInterview = useCallback(async () => {
+    if (stageRef.current === 'analyzing' || stageRef.current === 'ended') return;
+    stageRef.current = 'ended';
+    setStage('ended');
+
+    speakCancelRef.current = true;
+    stopListening();
+    if (timerRef.current) clearInterval(timerRef.current);
+
+    // Stop recording without uploading/finalizing (partial data is useless)
+    if (recorderRef.current && isRecordingRef.current) {
+      recorderRef.current.stop();
+      isRecordingRef.current = false;
+    }
+    micStreamRef.current?.getTracks().forEach(t => t.stop());
+    micStreamRef.current = null;
+    audioCtxRef.current?.close();
+    audioCtxRef.current = null;
+    recordingDestRef.current = null;
+
+    // Reload after short delay so the candidate can retake from the same link
+    setTimeout(() => window.location.reload(), 2500);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stopListening]);
+
   // ── Timer ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (stage !== 'active') return;
@@ -545,12 +571,12 @@ ${dossierText ? `=== ADDITIONAL FOCUS AREAS ===\n${dossierText}` : ''}`;
         video: { displaySurface: 'monitor' } as MediaTrackConstraints,
         audio: true,
       });
-      // End interview if candidate stops screen share mid-session
+      // Abort interview if candidate stops screen share mid-session (no scoring — can retake)
       stream.getVideoTracks()[0].addEventListener('ended', () => {
         if (stageRef.current === 'active') {
-          alert('Screen sharing was stopped. Your interview has been submitted.');
+          alert('Screen sharing was stopped. Your interview was not submitted — the page will reload so you can retake it.');
+          abortInterview();
         }
-        endInterviewRef.current?.();
       });
       screenStreamRef.current = stream;
       setScreenShared(true);
