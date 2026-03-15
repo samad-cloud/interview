@@ -299,8 +299,8 @@ export default function VideoPlayer({ src, title, className }: VideoPlayerProps)
     const video = videoRef.current;
     if (!video || !isFinite(video.duration)) return;
     setDuration(video.duration);
-    // If we triggered the probe seek, reset playhead to the beginning
-    if (video.currentTime > 0 && currentTime === 0) {
+    // If we triggered the probe seek (currentTime set to 1e101), reset playhead to start
+    if (video.currentTime > 1e10) {
       video.currentTime = 0;
     }
   };

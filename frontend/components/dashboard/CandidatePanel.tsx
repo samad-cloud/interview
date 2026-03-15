@@ -537,6 +537,11 @@ export function CandidatePanel({
                 {/* Inline player — renders below cards when a recording is active */}
                 {activeRecording && (
                   <VideoPlayer
+                    key={
+                      activeRecording === 'r1' ? candidate.video_url! :
+                      activeRecording === 'r2' ? candidate.round_2_video_url! :
+                      candidate.round_3_recording_url!
+                    }
                     src={
                       activeRecording === 'r1' ? candidate.video_url! :
                       activeRecording === 'r2' ? candidate.round_2_video_url! :
