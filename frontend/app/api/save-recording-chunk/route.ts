@@ -106,6 +106,10 @@ export async function POST(req: NextRequest) {
 
         state.pendingBytes += chunkBuffer.byteLength;
 
+        const pendingMB   = (state.pendingBytes / 1024 / 1024).toFixed(2);
+        const thresholdMB = (MIN_PART_BYTES   / 1024 / 1024).toFixed(0);
+        console.log(`[Recording] Multipart state — candidate ${candidateId} (Round ${round}): chunk ${chunkIndex}, parts completed: ${state.parts.length}, pending: ${pendingMB}MB / ${thresholdMB}MB threshold, uploadId: ${state.uploadId.slice(0, 8)}...`);
+
         // Flush a part once we've accumulated ≥ 5 MB
         if (state.pendingBytes >= MIN_PART_BYTES) {
           // Download all pending chunks (pendingFrom..chunkIndex-1) from storage and combine with current
