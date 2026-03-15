@@ -265,7 +265,7 @@ export async function POST(req: NextRequest) {
     }
 
     const sizeMB = (totalBytes / 1024 / 1024).toFixed(2);
-    console.log(`[Recording] Finalized — candidate ${candidateId} (Round ${round}), ~${sizeMB} MB pending, ${validCount} pending chunks, url: ${publicUrl}`);
+    console.log(`[Recording] Finalized — candidate ${candidateId} (Round ${round}), final part: ~${sizeMB} MB (${validCount} chunks), url: ${publicUrl}`);
     return NextResponse.json({ success: true, url: publicUrl });
 
   } catch (err) {
