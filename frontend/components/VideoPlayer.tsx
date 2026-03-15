@@ -287,22 +287,15 @@ export default function VideoPlayer({ src, title, className }: VideoPlayerProps)
     if (!video) return;
     if (isFinite(video.duration)) {
       setDuration(video.duration);
-    } else {
-      // WebM files recorded with MediaRecorder don't store duration in the header.
-      // Seeking to an absurdly large value forces the browser to scan to the real end
-      // and fire a durationchange event with the actual duration, then we reset.
-      video.currentTime = 1e101;
     }
+    // If duration is Infinity (WebM without seekable index), we leave it at 0
+    // and let it update naturally as the browser buffers — no full-file probe.
   };
 
   const handleDurationChange = () => {
     const video = videoRef.current;
     if (!video || !isFinite(video.duration)) return;
     setDuration(video.duration);
-    // If we triggered the probe seek (currentTime set to 1e101), reset playhead to start
-    if (video.currentTime > 1e10) {
-      video.currentTime = 0;
-    }
   };
 
   const handleProgress = () => {
@@ -335,7 +328,7 @@ export default function VideoPlayer({ src, title, className }: VideoPlayerProps)
         <video
           ref={videoRef}
           src={src}
-          preload="metadata"
+          preload="none"
           className="w-full h-full object-contain"
           onPlay={() => setIsPlaying(true)}
           onPause={() => setIsPlaying(false)}
@@ -469,7 +462,7 @@ export default function VideoPlayer({ src, title, className }: VideoPlayerProps)
                 className="hover:text-pink-400 transition-colors tabular-nums"
                 title="Click to jump to timestamp"
               >
-                {formatTime(currentTime)} / {duration && isFinite(duration) ? formatTime(duration) : '--:--'}
+                {formatTime(currentTime)} / {duration > 0 && isFinite(duration) ? formatTime(duration) : '--:--'}
               </button>
             )}
           </div>
